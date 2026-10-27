@@ -20,7 +20,7 @@ import type {
 import { checkNesting, validRelationTypes } from '@archguide/core';
 import type { Id, Op } from '@archguide/core';
 import { catalog } from '../lib/catalog';
-import { toAnnotationNodes, toFlowEdges, toFlowNodes } from '../lib/flow';
+import { decisionsByElement, toAnnotationNodes, toFlowEdges, toFlowNodes } from '../lib/flow';
 import { annIdOf } from '../lib/annotations';
 import { annotationNodeTypes } from './AnnotationNodes';
 import { findingKey, findingsOf, issuesByItem } from '../lib/findings';
@@ -87,6 +87,7 @@ export function Canvas() {
       issues,
       highlightIds,
       compare,
+      decisions: decisionsByElement(project),
     });
     const notes = toAnnotationNodes(project, view, {
       selectedId: selectedAnnotation,

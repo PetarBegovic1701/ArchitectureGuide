@@ -40,6 +40,8 @@ export type ShapeNodeData = {
   highlighted: boolean;
   /** New or changed since the snapshot the canvas is compared with. */
   diff?: DiffMark;
+  /** Accepted or proposed decisions linked to the element. */
+  decisionIds?: Id[];
 };
 
 export type DiffMark = 'added' | 'changed';
@@ -67,6 +69,7 @@ export interface FlowOptions {
   issues?: ReadonlyMap<Id, Issue>;
   highlightIds?: ReadonlySet<Id>;
   compare?: { added: ReadonlySet<Id>; changed: ReadonlySet<Id> } | null;
+  decisions?: ReadonlyMap<Id, Id[]>;
 }
 
 /**
@@ -126,6 +129,7 @@ export function toFlowNodes(p: Project, view: View, options: FlowOptions = {}): 
           ...withIssue(options.issues?.get(el.id)),
           highlighted: options.highlightIds?.has(el.id) ?? false,
           ...diffMark(options, el.id),
+          ...(options.decisions?.get(el.id) ? { decisionIds: options.decisions.get(el.id)! } : {}),
         },
       };
     });
@@ -249,4 +253,14 @@ export function toAnnotationNodes(
     }
   }
   return out;
+}
+
+/** Element ID → accepted or proposed decisions that link to it. */
+export function decisionsByElement(p: Project): Map<Id, Id[]> {
+  const map = new Map<Id, Id[]>();
+  for (const d of p.decisions) {
+    if (d.status !== 'accepted' && d.status !== 'proposed') continue;
+    for (const id of d.linkedIds) map.set(id, [...(map.get(id) ?? []), d.id]);
+  }
+  return map;
 }

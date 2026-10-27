@@ -106,6 +106,23 @@ function ShapeNodeImpl({ data, selected }: NodeProps<ShapeFlowNode>) {
         </>
       )}
       {data.issue && <IssueBadge id={data.elementId} issue={data.issue} />}
+      {data.decisionIds && (
+        <button
+          type="button"
+          className="ag-badge nodrag absolute -bottom-2 -left-2 z-10 rounded px-1 text-[9px] font-bold text-white shadow"
+          style={{ background: 'var(--ag-domain)' }}
+          title={`Decisions: ${data.decisionIds.join(', ')}`}
+          aria-label={`${data.decisionIds.length} decision(s): ${data.decisionIds.join(', ')}`}
+          data-testid={`adr-${data.elementId}`}
+          onClick={() =>
+            useUi
+              .getState()
+              .set({ inspectorTab: 'decisions', openDecisionId: data.decisionIds![0]! })
+          }
+        >
+          ADR{data.decisionIds.length > 1 ? ` ${data.decisionIds.length}` : ''}
+        </button>
+      )}
       {data.diff && (
         <>
           <div

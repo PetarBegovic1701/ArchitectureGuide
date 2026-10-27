@@ -24,6 +24,8 @@ export interface Toast {
   actions?: ToastAction[];
 }
 
+export type InspectorTab = 'properties' | 'learn' | 'notes' | 'decisions';
+
 export interface CompareState {
   snapshotName: string;
   createdAt: string;
@@ -51,7 +53,10 @@ interface UiState {
   problemsOpen: boolean;
 
   // Session state.
-  inspectorTab: 'properties' | 'learn';
+  inspectorTab: InspectorTab;
+  openNoteId: Id | null;
+  noteEditing: boolean;
+  openDecisionId: Id | null;
   learnTarget: LearnTarget;
   toasts: Toast[];
   editingId: Id | null;
@@ -83,7 +88,7 @@ interface UiState {
   setTheme(theme: Theme): void;
   preferType(pairKey: string, type: string): void;
   openLearn(target: LearnTarget): void;
-  setInspectorTab(tab: 'properties' | 'learn'): void;
+  setInspectorTab(tab: InspectorTab): void;
   toast(toast: Omit<Toast, 'id'>): void;
   dismiss(id: number): void;
   set(partial: Partial<UiState>): void;
@@ -117,6 +122,9 @@ export const useUi = create<UiState>()(
       preferredTypes: {},
       problemsOpen: true,
       inspectorTab: 'properties',
+      openNoteId: null,
+      noteEditing: false,
+      openDecisionId: null,
       learnTarget: { kind: 'selection' },
       toasts: [],
       editingId: null,

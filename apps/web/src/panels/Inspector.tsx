@@ -17,6 +17,7 @@ import type { Alignment } from '../lib/align';
 import { useProject } from '../store/project';
 import { useUi } from '../store/ui';
 import { LearnPanel } from './LearnPanel';
+import { DecisionsTab, NotesTab } from './Notes';
 import { FindingRow, useFindings } from './Problems';
 import { findingKey, findingsFor } from '../lib/findings';
 import { CommitInput, PropertyForm, Row, inputClass } from './PropertyForm';
@@ -33,7 +34,7 @@ export function Inspector() {
       aria-label="Inspector"
     >
       <div className="flex border-b border-[var(--ag-border)] text-sm" role="tablist">
-        {(['properties', 'learn'] as const).map((t) => (
+        {(['properties', 'learn', 'notes', 'decisions'] as const).map((t) => (
           <button
             key={t}
             role="tab"
@@ -47,7 +48,10 @@ export function Inspector() {
         ))}
       </div>
       <div className="flex-1 overflow-y-auto p-3" role="tabpanel">
-        {tab === 'properties' ? <PropertiesTab /> : <LearnPanel />}
+        {tab === 'properties' && <PropertiesTab />}
+        {tab === 'learn' && <LearnPanel />}
+        {tab === 'notes' && <NotesTab />}
+        {tab === 'decisions' && <DecisionsTab />}
       </div>
     </aside>
   );
