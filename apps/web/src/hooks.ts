@@ -64,6 +64,11 @@ export function useShortcuts(): void {
         useUi.getState().set({ commandOpen: true });
         return;
       }
+      if (mod && key === 'e') {
+        e.preventDefault();
+        useUi.getState().set({ dialog: 'export' });
+        return;
+      }
       if (isTyping(e.target)) return;
       if (mod && key === 'z' && !e.shiftKey) {
         e.preventDefault();

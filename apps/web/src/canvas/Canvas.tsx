@@ -17,6 +17,7 @@ import type {
   OnConnectEnd,
   OnSelectionChangeParams,
 } from '@xyflow/react';
+import { toPng, toSvg } from 'html-to-image';
 import { checkNesting, validRelationTypes } from '@archguide/core';
 import type { Id, Op } from '@archguide/core';
 import { catalog } from '../lib/catalog';
@@ -74,10 +75,16 @@ export function Canvas() {
   const showResolved = useUi((s) => s.showResolvedComments);
   const findings = project ? findingsOf(project) : NO_FINDINGS;
   const issues = useMemo(() => issuesByItem(findings, level), [findings, level]);
+  const tourState = useUi((s) => s.tour);
   const highlightIds = useMemo(() => {
     const f = activeFinding ? findings.find((x) => findingKey(x) === activeFinding) : undefined;
-    return new Set<Id>(f ? [...f.targetIds, ...f.relatedIds] : []);
-  }, [findings, activeFinding]);
+    const step =
+      tourState && project?.tours.find((t) => t.id === tourState.id)?.steps[tourState.step];
+    return new Set<Id>([
+      ...(f ? [...f.targetIds, ...f.relatedIds] : []),
+      ...(step ? [...step.elementIds, ...step.relationIds] : []),
+    ]);
+  }, [findings, activeFinding, tourState, project]);
   const derivedNodes = useMemo((): CanvasNode[] => {
     if (!project || !view) return [];
     const shapes = toFlowNodes(project, view, {
@@ -135,6 +142,30 @@ export function Canvas() {
       return box
         ? flow.screenToFlowPosition({ x: box.left + box.width / 2, y: box.top + box.height / 2 })
         : { x: 0, y: 0 };
+    };
+    // Fits the whole diagram, captures the canvas (without minimap and controls), and
+    // restores the view. The arrowhead definitions live outside React Flow's viewport, so
+    // the whole canvas is captured, not only the viewport.
+    canvasApi.exportImage = async (format) => {
+      const el = wrapper.current;
+      if (!el) throw new Error('The canvas is not ready.');
+      const before = flow.getViewport();
+      await flow.fitView({ padding: 0.08, duration: 0 });
+      await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+      const options = {
+        backgroundColor:
+          getComputedStyle(document.body).getPropertyValue('--ag-bg').trim() || '#ffffff',
+        pixelRatio: 2,
+        filter: (node: HTMLElement) =>
+          !node.classList?.contains('react-flow__minimap') &&
+          !node.classList?.contains('react-flow__controls') &&
+          !node.classList?.contains('react-flow__attribution'),
+      };
+      try {
+        return format === 'png' ? await toPng(el, options) : await toSvg(el, options);
+      } finally {
+        void flow.setViewport(before);
+      }
     };
     canvasApi.focus = (ids) =>
       void flow.fitView({ nodes: ids.map((id) => ({ id })), duration: 300, maxZoom: 1.2 });

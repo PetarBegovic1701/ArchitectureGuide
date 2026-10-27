@@ -80,8 +80,12 @@ interface UiState {
   /** The comment whose thread is open. */
   openComment: Id | null;
   showResolvedComments: boolean;
+  /** The tour being played and its current step. */
+  tour: { id: Id; step: number } | null;
+  /** The tour open in the tour editor. */
+  editingTour: Id | null;
   /** Open dialog in the editor, if any. */
-  dialog: 'templates' | 'save-template' | 'snapshots' | null;
+  dialog: 'templates' | 'save-template' | 'snapshots' | 'export' | 'tour-editor' | null;
 
   setLevel(level: Level): void;
   setPaletteMode(mode: 'basic' | 'full'): void;
@@ -139,6 +143,8 @@ export const useUi = create<UiState>()(
       dialog: null,
       compare: null,
       selectedAnnotation: null,
+      tour: null,
+      editingTour: null,
       editingAnnotation: null,
       openComment: null,
       showResolvedComments: false,

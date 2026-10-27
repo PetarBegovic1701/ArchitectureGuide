@@ -21,6 +21,7 @@ import {
 } from '../actions';
 import { useProject } from '../store/project';
 import { useUi } from '../store/ui';
+import { draftAndEditTour, playTour } from './Tours';
 
 /** Toasts with actions such as "Reverse it" and "Why?" (§10.4). */
 export function Toasts() {
@@ -155,10 +156,23 @@ export function CommandPalette() {
         label: `Theme: ${t}`,
         run: () => ui.setTheme(t),
       })),
-      ...(project ? [{ id: 'export', label: 'Export JSON', run: () => exportJson(project) }] : []),
+      {
+        id: 'export',
+        label: 'Export… (agent Markdown, Mermaid, image …)',
+        run: () => ui.set({ dialog: 'export' }),
+      },
+      ...(project
+        ? [{ id: 'export-json', label: 'Export JSON', run: () => exportJson(project) }]
+        : []),
       { id: 'templates', label: 'Insert template…', run: () => ui.set({ dialog: 'templates' }) },
       { id: 'snapshots', label: 'Snapshots…', run: () => ui.set({ dialog: 'snapshots' }) },
       { id: 'tidy', label: 'Tidy up (automatic layout)', run: () => void tidyUp() },
+      ...(project?.tours ?? []).map((t) => ({
+        id: `tour-${t.id}`,
+        label: `Play tour: ${t.title}`,
+        run: () => playTour(t.id),
+      })),
+      { id: 'draft-tour', label: 'Draft a tour from the diagram', run: draftAndEditTour },
       { id: 'sticky', label: 'Add sticky note', run: addSticky },
       { id: 'region', label: 'Add region around the selection', run: addRegion },
       { id: 'callout', label: 'Add callout to the selection', run: () => addAnchored('callout') },

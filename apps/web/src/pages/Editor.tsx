@@ -6,6 +6,7 @@ import {
   Command,
   Download,
   LayoutTemplate,
+  Map as MapIcon,
   StickyNote,
   Wand2,
   Moon,
@@ -21,12 +22,13 @@ import { Palette } from '../panels/Palette';
 import { ProblemsButton, ProblemsPanel, SuppressDialog } from '../panels/Problems';
 import { SaveTemplateDialog, TemplatePicker } from '../panels/Templates';
 import { CompareBanner, SnapshotsDialog } from '../panels/Snapshots';
+import { ExportDialog } from '../panels/ExportDialog';
+import { TourEditor, TourPlayer, draftAndEditTour, playTour } from '../panels/Tours';
 import {
   addAnchored,
   addRegion,
   addSticky,
   dispatch,
-  exportJson,
   redo,
   stampTemplate,
   tidyUp,
@@ -55,7 +57,9 @@ export function Editor({ projectId }: { projectId: string }) {
     return () => {
       cancelled = true;
       useProject.getState().unload();
-      useUi.getState().set({ compare: null, dialog: null, activeFinding: null });
+      useUi
+        .getState()
+        .set({ compare: null, dialog: null, activeFinding: null, tour: null, editingTour: null });
     };
   }, [projectId]);
 
@@ -90,6 +94,8 @@ function EditorLoaded() {
               <Canvas />
               <Legend />
               <CompareBanner />
+              <TourPlayer />
+              <TourEditor />
             </main>
             <ProblemsPanel />
           </div>
@@ -120,6 +126,7 @@ function EditorDialogs() {
     );
   if (dialog === 'save-template') return <SaveTemplateDialog onClose={close} />;
   if (dialog === 'snapshots') return <SnapshotsDialog onClose={close} />;
+  if (dialog === 'export') return <ExportDialog onClose={close} />;
   return null;
 }
 
@@ -200,6 +207,18 @@ function TopBar({ status }: { status: SaveStatus }) {
         <History size={14} aria-hidden /> Snapshots
       </button>
       <Menu
+        label="Tours"
+        icon={<MapIcon size={14} aria-hidden />}
+        items={[
+          ...project.tours.map((t) => ({ label: `Play: ${t.title}`, run: () => playTour(t.id) })),
+          ...project.tours.map((t) => ({
+            label: `Edit: ${t.title}`,
+            run: () => useUi.getState().set({ editingTour: t.id, tour: null }),
+          })),
+          { label: 'Draft a tour from the diagram', run: draftAndEditTour },
+        ]}
+      />
+      <Menu
         label="Annotate"
         icon={<StickyNote size={14} aria-hidden />}
         items={[
@@ -248,9 +267,9 @@ function TopBar({ status }: { status: SaveStatus }) {
         <button
           type="button"
           className={iconButton}
-          onClick={() => exportJson(project)}
-          aria-label="Export JSON"
-          title="Export JSON"
+          onClick={() => useUi.getState().set({ dialog: 'export' })}
+          aria-label="Export"
+          title="Export: agent Markdown, Mermaid, DBML, image … (Ctrl+E)"
         >
           <Download size={16} />
         </button>

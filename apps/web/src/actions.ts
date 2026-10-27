@@ -52,6 +52,8 @@ export const canvasApi: {
   center?: () => Point;
   focus?: (ids: Id[]) => void;
   reveal?: (id: Id) => void;
+  /** The whole diagram as a PNG or SVG data URL. */
+  exportImage?: (format: 'png' | 'svg') => Promise<string>;
 } = {};
 
 const project = () => useProject.getState();
