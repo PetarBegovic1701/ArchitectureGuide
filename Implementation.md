@@ -1037,36 +1037,38 @@ interface Rule {
   id: string;                         // "AP-003", "RNP-001"
   title: string;
   severity: 'error' | 'warning' | 'info';
-  pack: string;
-  replaces?: string[];                // when this rule's pack is on, the listed rules are off
-  scope: 'model' | 'analysis';        // analysis = needs analyzer facts (CLI/MCP/CI, or UI after a scan)
+  packs: string[];                    // runs when any of these packs is on
+  replaces?: string[];                // when this rule runs, the listed rules do not
   rationale: string;                  // Markdown, shown in UI and docs
-  references?: string[];
-  check(ctx: RuleContext): Finding[];
-  quickFixes?: (f: Finding, ctx: RuleContext) => QuickFix[];
+  learnId?: string;                   // learning text behind the rule (§17)
+  check(ctx: RuleContext): RawFinding[];
 }
 
-interface RuleContext {
-  graph: GraphQuery;
-  project: Project;
-  catalog: Catalog;
-  settings: ProjectSettings;
-  analysis?: AnalysisResult;          // §19
-}
+interface RuleContext { graph: GraphQuery; project: Project; settings: ProjectSettings }
 
-interface Finding {
-  ruleId: string;
-  severity: 'error' | 'warning' | 'info';
+interface RawFinding {                // what a check returns
+  targetIds: Id[];                    // subject; suppressions match on rule ID + these
+  relatedIds?: Id[];                  // also highlighted (other services, relations ...)
   message: string;
-  targetIds: Id[];                    // elements/relations to badge
-  evidence?: Provenance['evidence'];
-  suppressed?: { reason: string; decisionId?: Id };
+  fixes?: QuickFix[];
 }
 
-interface QuickFix { title: string; ops: Op[] }
+interface Finding {                   // what runRules returns
+  ruleId: string; title: string; severity: Severity; message: string;
+  targetIds: Id[];                    // sorted, unique
+  relatedIds: Id[];
+  fixes: QuickFix[];
+  learnId?: string;
+  suppressed?: Suppression;           // kept in the result, with the reason
+}
 
-runRules(ctx, { changeSetId?, only?: string[] }): Finding[]
+interface QuickFix { title: string; ops: ModelOp[] }
+
+runRules(project, catalog, { rules?, only?: string[] }): Finding[]   // most severe first
 ```
+
+Analysis-scope rules (they need analyzer facts, §19) get `ctx.analysis` and
+`evidence` in Phase 7.
 
 ### 11.2 GraphQuery
 
@@ -1095,11 +1097,14 @@ interface GraphQuery {
 
 ### 11.3 Execution
 
-- **UI:** rules run in `rules.worker.ts`, debounced 150 ms after the last op.
-  Results are keyed by target ID for badges.
+- **UI:** rules run on the main thread, once per project change (results are
+  cached by project object). Results are keyed by target ID for badges. A
+  `rules.worker.ts` with a 150 ms debounce is the next step when real models
+  get slower than the budget.
 - **Performance budget:** 500 elements / 1,000 relations → full run < 100 ms.
-  Rules declare the relation types they read. After an op, only the rules
-  that read the touched types run again.
+  Measured: well under the budget for the generic rules on that size (test in
+  `rules.test.ts`). Incremental runs (only rules that read the touched types)
+  are deferred until a full run is too slow.
 - **CLI / MCP / CI:** same `runRules`, plus `scope: 'analysis'` rules when
   analysis facts exist.
 
@@ -1200,6 +1205,38 @@ Every rule links to a learning text (rule text or topic, §17.4) from its "Why?"
   the Problems panel with the rationale, the evidence links, and the quick fixes.
 - Quick fix: a preview overlay (change-set style) before **Apply**. Apply is
   one undo step.
+
+### 11.9 Phase 2 implementation notes
+
+- **Generated reference:** `docs/RULES.md` (40 rules), from rule metadata by
+  `pnpm rules-doc`; CI fails when it is out of date.
+- **Defaults:** `createProject` starts with `DEFAULT_RULE_PACKS` (`core`,
+  `frontend`, `security`, `concurrency`, `api`, `event-driven`,
+  `microservices`). Architecture-style packs (`layered`, `hexagonal`, `fsd`)
+  come with templates in Phase 3, or from the Rules menu.
+- **Replacements:** RNP-001 → AP-001, RNP-006 → AP-004, RNP-007 → AP-013,
+  RNP-011 → AP-009, RNP-016 → AP-010.
+- **Deviations from §11.6:**
+  - RNP-007 does not count `calls` to external systems: almost every service
+    that calls a payment API would warn. `notifies` does not count either
+    (NOTIFY is sent on commit). An outbox is recognized by a written table
+    whose name contains "outbox".
+  - RNP-008 also reads element names, so "Reports controller" counts.
+  - RNP-021 also flags `processModel: cluster` (more processes do not help a
+    request stuck behind CPU work); only `worker-threads` passes.
+  - RNP-023 is in the `api` and `concurrency` packs.
+  - RNP-012 (server data in a client store) needs code facts to be reliable;
+    it moves to Phase 7 with the analysis-only rules RNP-003, 004, 017, 018.
+  - `pg.job-queue` got a `deadLetter` property, so AP-012 applies to it.
+- **UI deviations from §11.8:** quick fixes apply at once, as one undo step,
+  with an Undo button in the confirmation toast; the preview overlay comes
+  with change sets (Phase 8). Tooltips are the badge's native title. Edges
+  with findings take the severity color instead of a dashed overlay.
+  Suppressions cannot be linked to a decision from the UI yet (Phase 4).
+- **Levels:** beginners see info findings as "Tips" and rule IDs are hidden;
+  seniors get no info badges on the canvas and the Info group collapsed.
+- **Lessons:** `finding` checks get the findings of `runRules`; the
+  *Prevent lost updates* lesson requires RNP-019 and RNP-007 to be clear.
 
 ---
 
@@ -2611,19 +2648,21 @@ Estimates assume one full-time developer. They are rough.
 - Moved: finding badges → Phase 2 (they need the rules engine); align/distribute → Phase 3 (with auto-layout); Radix UI not needed so far (plain accessible elements)
 - **Done when:** a user builds the T1 diagram from scratch in < 2 minutes (Playwright scenario: about 9 s scripted), and a refused relation shows a message, a working fix and a "Why?" text. **Done.**
 
-### Phase 2: Rules engine (~2 weeks)
+### Phase 2: Rules engine (~2 weeks) — done
 
-- [ ] `core/graph` (GraphQuery, Tarjan SCC, paths, sync depth, lifting)
-- [ ] Rule API, packs, `replaces`, overrides, thresholds
-- [ ] Model-scope rules: AP-001…AP-018, RNP-001, 002, 005–011, 014, 016
-- [ ] Rules worker with incremental runs; findings store
-- [ ] Problems panel, badges, halos, edge overlays, tooltips
-- [ ] Quick fixes with preview; suppressions with reason
-- [ ] Concurrency, API and auth rules RNP-019 … RNP-027 (packs `concurrency`, `api`, `security`)
-- [ ] Finding badges on shapes and edges (moved from Phase 1)
-- [ ] "Why?" link from every finding to its learning text; `finding` checks wired into lessons
-- [ ] `docs/RULES.md` generated from rule metadata
-- **Done when:** every rule has positive and negative fixture tests and a docs entry; perf budget met.
+- [x] `core/graph` (GraphQuery: indexed lookups, subtree lifting, Tarjan SCC with a node map and relation filter, longest chain)
+- [x] Rule API, packs, `replaces`, overrides (`off` or a severity), thresholds, suppressions
+- [x] Model-scope rules: AP-001…AP-018, RNP-001, 002, 005–011, 013, 014, 015, 016 (RNP-012 → Phase 7, §11.9)
+- [x] Findings computed on the main thread, cached per project change (worker and incremental runs deferred, §11.3)
+- [x] Problems panel (grouped by severity, show suppressed, rule-pack menu), badges, halos, edge colors; counts in the top bar
+- [x] Quick fixes (one undo step; preview deferred to Phase 8); suppressions with a required reason
+- [x] Concurrency, API and auth rules RNP-019 … RNP-027 (packs `concurrency`, `api`, `security`)
+- [x] Finding badges on shapes and edges (moved from Phase 1)
+- [x] "Why?" from every finding to the rule's rationale and its learning text; `finding` checks wired into lessons
+- [x] Inspector: problems of the selection, and a Qualities section (sensitivity, criticality, scaling, slow)
+- [x] `docs/RULES.md` generated from rule metadata, checked in CI
+- [x] Tests: positive and negative fixtures for every model rule (50 tests), engine tests (packs, replaces, overrides, suppressions, ordering, performance), 2 Playwright scenarios (fix with undo, "Why?", suppress, unsuppress, rule packs)
+- **Done when:** every rule has positive and negative fixture tests and a docs entry; perf budget met. **Done.**
 
 ### Phase 3: Templates and projects (~2 weeks)
 

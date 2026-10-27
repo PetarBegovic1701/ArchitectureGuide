@@ -10,7 +10,9 @@
   "scripts": {
     "typecheck": "tsc -p tsconfig.json && tsc -p scripts/tsconfig.json",
     "content": "tsx scripts/build-content.ts",
-    "content:check": "tsx scripts/build-content.ts --check"
+    "content:check": "tsx scripts/build-content.ts --check",
+    "rules-doc": "tsx scripts/build-rules-doc.ts",
+    "rules-doc:check": "tsx scripts/build-rules-doc.ts --check"
   },
   "dependencies": {
     "@archguide/core": "workspace:*",

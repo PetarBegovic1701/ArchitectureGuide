@@ -23,6 +23,7 @@ jobs:
       - run: pnpm depcruise
       - run: pnpm schema:check
       - run: pnpm content:check
+      - run: pnpm rules-doc:check
       - run: pnpm build
 
   e2e:

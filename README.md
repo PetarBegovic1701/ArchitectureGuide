@@ -20,18 +20,20 @@ See [Implementation.md](Implementation.md) for the full design and the delivery 
 
 ## Status
 
-Phases 0 (foundations) and 1 (canvas) are done. Run `pnpm install && pnpm dev` and open
-http://localhost:5179: create a project or open the starter, drag shapes from the palette,
-connect them, and open the **Learn** tab.
+Phases 0 (foundations), 1 (canvas) and 2 (rules engine) are done. Run
+`pnpm install && pnpm dev` and open http://localhost:5179: create a project or open the
+starter, drag shapes from the palette, connect them, and open the **Learn** tab. The
+**Problems** panel lists anti-patterns in the design, with quick fixes and a "Why?"
+explanation for each. All rules: [docs/RULES.md](docs/RULES.md).
 
-| Package                                                                          | Content                                                                                                                                                                                                                                                    |
-| -------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [`apps/web`](apps/web)                                                           | The builder: React Flow canvas, palette, inspector with generated property forms, Learn tab with three levels, refusals with fixes and explanations, undo/redo, copy/paste, command palette, autosave in the browser, JSON import/export                   |
-| [`packages/core`](packages/core)                                                 | Zod schema of the project file, deterministic serialization, migrations, readable IDs, the concept catalog (shapes, categories, relation rules and properties), the op engine with undo, and the learning module (content schemas, parsers, lesson checks) |
-| [`packages/profiles/react-node-postgres`](packages/profiles/react-node-postgres) | React, Node.js and PostgreSQL concepts, profile relation types, the hard constraints, and learning content: [texts](packages/profiles/react-node-postgres/content/docs) and [lessons](packages/profiles/react-node-postgres/content/lessons)               |
-| [`schema/archguide.schema.json`](schema/archguide.schema.json)                   | JSON Schema of the project file, generated from the Zod schema                                                                                                                                                                                             |
+| Package                                                                          | Content                                                                                                                                                                                                                                                                                                                           |
+| -------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [`apps/web`](apps/web)                                                           | The builder: React Flow canvas, palette, inspector with generated property forms, Learn tab with three levels, refusals with fixes and explanations, Problems panel with finding badges, quick fixes and suppressions, undo/redo, copy/paste, command palette, autosave in the browser, JSON import/export                        |
+| [`packages/core`](packages/core)                                                 | Zod schema of the project file, deterministic serialization, migrations, readable IDs, the concept catalog (shapes, categories, relation rules and properties), the op engine with undo, graph queries and the rules engine with 18 generic anti-pattern rules, and the learning module (content schemas, parsers, lesson checks) |
+| [`packages/profiles/react-node-postgres`](packages/profiles/react-node-postgres) | React, Node.js and PostgreSQL concepts, profile relation types, the hard constraints, 22 stack rules (ownership, concurrency, API design, authentication), and learning content: [texts](packages/profiles/react-node-postgres/content/docs) and [lessons](packages/profiles/react-node-postgres/content/lessons)                 |
+| [`schema/archguide.schema.json`](schema/archguide.schema.json)                   | JSON Schema of the project file, generated from the Zod schema                                                                                                                                                                                                                                                                    |
 
-Next: Phase 2, the rules engine (anti-pattern findings on the canvas).
+Next: Phase 3, templates (built-in architecture patterns) and auto-layout.
 
 ## Development
 
@@ -48,6 +50,7 @@ pnpm format        # Prettier
 pnpm depcruise     # package boundaries (Implementation.md §4.2)
 pnpm schema        # regenerate schema/archguide.schema.json
 pnpm content       # compile learning texts and lessons after editing content/
+pnpm rules-doc     # regenerate docs/RULES.md after changing a rule
 pnpm build         # production build of the builder
 pnpm check         # everything CI runs (except e2e)
 ```
