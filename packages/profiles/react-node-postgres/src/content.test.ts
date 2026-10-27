@@ -1,11 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { applySolution, checkStep, createCatalog, startLesson } from '@archguide/core';
+import { applySolution, checkStep, createCatalog, runRules, startLesson } from '@archguide/core';
+import type { Project } from '@archguide/core';
 import { DOCS, LESSONS, PROFILE_ID, profile } from '.';
 
 const catalog = createCatalog([profile]);
 const docIds = new Set(DOCS.map((d) => d.id));
 const known = (id: string) =>
   docIds.has(id) || catalog.concepts.has(id) || catalog.relationTypes.has(id);
+/** Lesson checks see the same findings as the Problems panel. */
+const ctx = (project: Project) => ({ catalog, findings: runRules(project, catalog) });
 const LANGUAGES = new Set(['ts', 'tsx', 'js', 'sql', 'prisma', 'yaml', 'json', 'bash']);
 
 describe('learning texts', () => {
@@ -69,11 +72,11 @@ describe('lessons', () => {
       }
       expect(step.solution, `${step.id}: a step with a check needs a solution`).toBeDefined();
       expect(
-        checkStep(project, step, { catalog }).passed,
+        checkStep(project, step, ctx(project)).passed,
         `${step.id}: passes before the learner acts`,
       ).toBe(false);
       project = applySolution(project, step, catalog);
-      const after = checkStep(project, step, { catalog });
+      const after = checkStep(project, step, ctx(project));
       expect(after.failures, `${step.id}: solution does not satisfy the check`).toEqual([]);
     }
   });

@@ -1187,28 +1187,40 @@ export const LESSONS: Lesson[] = [
         "title": "Choose a concurrency strategy",
         "body": "Select the **writes** arrow from *StockRepository* to the *inventory* schema and set\n**Concurrency control** in the inspector:\n\n- **row-lock** — `SELECT ... FOR UPDATE`: the second request waits for the first.\n- **optimistic-version** — a `version` column: the second write fails and retries.\n- **serializable-retry** — `SERIALIZABLE` transactions with a retry loop.\n\nFor a hot counter like stock, the simplest correct code is one atomic statement:\n`UPDATE products SET stock = stock - $1 WHERE id = $2 AND stock >= $1`.\nPostgreSQL locks the row while it updates it, so pick **row-lock**.\n",
         "check": {
-          "hasRelation": {
-            "type": "writes",
-            "from": {
-              "id": "repo.stock"
+          "all": [
+            {
+              "hasRelation": {
+                "type": "writes",
+                "from": {
+                  "id": "repo.stock"
+                },
+                "to": {
+                  "id": "schema.inventory"
+                },
+                "where": {
+                  "properties.concurrencyControl": {
+                    "in": [
+                      "row-lock",
+                      "optimistic-version",
+                      "serializable-retry"
+                    ]
+                  }
+                }
+              },
+              "message": "Set a concurrency control on the writes relation from StockRepository to the inventory schema."
             },
-            "to": {
-              "id": "schema.inventory"
-            },
-            "where": {
-              "properties.concurrencyControl": {
-                "in": [
-                  "row-lock",
-                  "optimistic-version",
-                  "serializable-retry"
-                ]
-              }
+            {
+              "finding": {
+                "ruleId": "RNP-019",
+                "present": false
+              },
+              "message": "The Problems panel still shows a lost-update risk (RNP-019)."
             }
-          },
-          "message": "Set a concurrency control on the writes relation from StockRepository to the inventory schema."
+          ]
         },
         "hints": [
-          "The setting is in the inspector when the arrow (not a shape) is selected."
+          "The setting is in the inspector when the arrow (not a shape) is selected.",
+          "The Problems panel shows RNP-019 on this arrow until you pick a strategy. Its quick fixes set it for you."
         ],
         "success": "Now the diagram says how this write stays correct. An agent that implements it, and\nthe next developer who reads it, both see the decision instead of guessing.\n",
         "solution": [
@@ -1287,6 +1299,13 @@ export const LESSONS: Lesson[] = [
                 }
               },
               "message": "Add a background worker that processes the queue."
+            },
+            {
+              "finding": {
+                "ruleId": "RNP-007",
+                "present": false
+              },
+              "message": "The job is not added in the same transaction as the reservation (RNP-007)."
             }
           ]
         },

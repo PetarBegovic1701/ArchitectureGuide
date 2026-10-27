@@ -655,7 +655,12 @@ const POSTGRES: Concept[] = [
     idPrefix: 'jobs',
     allowedParents: ['top', 'group.*', 'pg.database', 'pg.schema'],
     propertySchema: z
-      .object({ lib: z.enum(['pg-boss', 'graphile-worker']), queues: z.array(z.string()) })
+      .object({
+        lib: z.enum(['pg-boss', 'graphile-worker']),
+        queues: z.array(z.string()),
+        /** Jobs that keep failing move to a dead-letter queue (pg-boss `deadLetter`). */
+        deadLetter: z.boolean(),
+      })
       .partial(),
     palette: { group: 'Events', order: 20, basic: true },
     docs: 'A durable job queue stored in Postgres tables (pg-boss, graphile-worker). Jobs can be added in the same transaction as your data.',
