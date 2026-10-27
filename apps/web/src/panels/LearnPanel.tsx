@@ -1,9 +1,11 @@
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import { RULE_PACKS } from '@archguide/core';
 import type { LearningDoc, Level } from '@archguide/core';
 import { catalog, conceptOf } from '../lib/catalog';
 import { docFor, relatedDocs, textAt } from '../lib/learn';
 import { elementById } from '../lib/model';
+import { RULES, SEVERITY_COLOR, severityLabel } from '../lib/findings';
 import { useProject } from '../store/project';
 import { useUi } from '../store/ui';
 
@@ -30,6 +32,9 @@ export function LearnPanel() {
 
   if (target.kind === 'doc') {
     return <Subject id={target.id} level={level} onOpen={open} back />;
+  }
+  if (target.kind === 'rule') {
+    return <RuleView id={target.id} level={level} onOpen={open} />;
   }
   if (target.kind === 'refusal') {
     const source = conceptOf(target.sourceKind);
@@ -64,6 +69,53 @@ export function LearnPanel() {
     <p className="text-sm text-[var(--ag-muted)]">
       Select a shape or an arrow to learn what it is, when to use it, and the common mistakes.
     </p>
+  );
+}
+
+/** Why a rule exists (its rationale), and the learning text behind it. */
+function RuleView({
+  id,
+  level,
+  onOpen,
+}: {
+  id: string;
+  level: Level;
+  onOpen: (id: string) => void;
+}) {
+  const rule = RULES.get(id);
+  if (!rule) return <p className="text-sm">Unknown rule {id}.</p>;
+  const packs = rule.packs.map((p) => RULE_PACKS.find((x) => x.id === p)?.name ?? p).join(', ');
+  return (
+    <article className="space-y-3" data-testid={`learn-rule-${id}`}>
+      <BackButton />
+      <div>
+        <div className="text-xs uppercase tracking-wide text-[var(--ag-muted)]">
+          <span style={{ color: SEVERITY_COLOR[rule.severity] }}>
+            {severityLabel(rule.severity, level, false)}
+          </span>{' '}
+          · {rule.id} · {packs}
+        </div>
+        <h3 className="text-sm font-semibold">{rule.title}</h3>
+      </div>
+      <Markdown>{rule.rationale}</Markdown>
+      {rule.replaces && level !== 'beginner' && (
+        <p className="text-xs text-[var(--ag-muted)]">
+          Replaces the generic rule {rule.replaces.join(', ')} for this stack.
+        </p>
+      )}
+      {rule.learnId && (
+        <div className="border-t border-[var(--ag-border)] pt-2">
+          <Subject id={rule.learnId} level={level} onOpen={onOpen} compact />
+          <button
+            type="button"
+            className="text-xs text-[var(--ag-accent)] hover:underline"
+            onClick={() => onOpen(rule.learnId!)}
+          >
+            Read the full text
+          </button>
+        </div>
+      )}
+    </article>
   );
 }
 

@@ -17,8 +17,39 @@ async function addFromPalette(page: Page, kind: string, name: string) {
   await input.press('Enter');
 }
 
+/**
+ * Waits until a shape is fully inside the canvas and has stopped moving: adding a shape
+ * pans the canvas to reveal it, a moment later.
+ */
+async function settled(page: Page, id: string) {
+  let last = '';
+  await expect
+    .poll(
+      async () => {
+        const box = await node(page, id).boundingBox();
+        const canvas = await page.getByTestId('canvas').boundingBox();
+        const key = JSON.stringify(box);
+        const still = key === last;
+        last = key;
+        return (
+          still &&
+          !!box &&
+          !!canvas &&
+          box.x >= canvas.x &&
+          box.y >= canvas.y &&
+          box.x + box.width <= canvas.x + canvas.width &&
+          box.y + box.height <= canvas.y + canvas.height
+        );
+      },
+      { intervals: [150] },
+    )
+    .toBe(true);
+}
+
 /** Drags from the source's right handle to the middle of the target shape. */
 async function connect(page: Page, sourceId: string, targetId: string) {
+  await settled(page, sourceId);
+  await settled(page, targetId);
   await node(page, sourceId).hover();
   const handle = await node(page, sourceId).locator('.react-flow__handle-right').boundingBox();
   const target = await node(page, targetId).boundingBox();

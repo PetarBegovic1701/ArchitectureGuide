@@ -6,9 +6,10 @@ import {
   serializeProject,
   validRelationTypes,
 } from '@archguide/core';
-import type { Id, Op, OpError, Project } from '@archguide/core';
+import type { Finding, Id, Op, OpError, Project, QuickFix } from '@archguide/core';
 import { catalog, conceptOf, defaultSize } from './lib/catalog';
 import { copySelection, pasteOps } from './lib/clipboard';
+import { findingKey, findingsOf, focusIds, quickFixOps } from './lib/findings';
 import {
   absolutePosition,
   activeView,
@@ -129,6 +130,8 @@ export function renameElement(id: Id, name: string): void {
     if (newId !== id) {
       ui().set({ freshIds: ui().freshIds.map((x) => (x === id ? newId : x)) });
       project().select({ elements: [newId], relations: [] });
+      // A reveal scheduled for the old ID finds nothing once it is renamed.
+      canvasApi.reveal?.(newId);
     }
   }
 }
@@ -239,6 +242,73 @@ export function paste(): void {
 export function duplicate(): void {
   copy();
   paste();
+}
+
+// --- findings ----------------------------------------------------------------------
+
+/** Selects what a finding is about, highlights it and brings it into view. */
+export function focusFinding(f: Finding): void {
+  const { project: p } = project();
+  if (!p) return;
+  const relationIds = new Set(p.model.relations.map((r) => r.id));
+  project().select({
+    elements: f.targetIds.filter((id) => !relationIds.has(id)),
+    relations: f.targetIds.filter((id) => relationIds.has(id)),
+  });
+  ui().set({ activeFinding: findingKey(f) });
+  canvasApi.focus?.(focusIds(p, f));
+}
+
+/** Applies a quick fix as one undo step. */
+export function applyQuickFix(f: Finding, fix: QuickFix): void {
+  const { project: p, viewId } = project();
+  if (!p) return;
+  const near = canvasApi.center?.() ?? { x: 0, y: 0 };
+  if (!dispatch(quickFixOps(p, activeView(p, viewId), fix, near), { label: `Fix: ${fix.title}` }))
+    return;
+  const after = project().project;
+  const open = after && findingsOf(after).some((x) => findingKey(x) === findingKey(f));
+  ui().toast({
+    tone: open ? 'info' : 'success',
+    message: open
+      ? `${fix.title}: done. ${f.ruleId} still reports a problem here.`
+      : `${fix.title}: done. ${f.ruleId} no longer reports it.`,
+    actions: [{ label: 'Undo', run: undo }],
+  });
+}
+
+export function suppressFinding(f: Finding, reason: string): void {
+  dispatch(
+    [
+      {
+        op: 'upsertSuppression',
+        suppression: {
+          ruleId: f.ruleId,
+          targetIds: f.targetIds,
+          reason: reason.trim(),
+          createdAt: new Date().toISOString(),
+        },
+      },
+    ],
+    { label: `Suppress ${f.ruleId}` },
+  );
+}
+
+export function unsuppressFinding(f: Finding): void {
+  dispatch([{ op: 'removeSuppression', ruleId: f.ruleId, targetIds: f.targetIds }], {
+    label: `Unsuppress ${f.ruleId}`,
+  });
+}
+
+export function setRulePack(pack: string, on: boolean): void {
+  const p = project().project;
+  if (!p) return;
+  const packs = new Set(p.settings.rulePacks);
+  if (on) packs.add(pack);
+  else packs.delete(pack);
+  dispatch([{ op: 'updateSettings', patch: { rulePacks: [...packs] } }], {
+    label: on ? `Turn on ${pack} rules` : `Turn off ${pack} rules`,
+  });
 }
 
 export function undo(): void {

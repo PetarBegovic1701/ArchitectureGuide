@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
-import type { Id, Level, RelationType } from '@archguide/core';
+import type { Finding, Id, Level, RelationType } from '@archguide/core';
 import type { ClipboardData } from '../lib/clipboard';
 
 export type Theme = 'system' | 'light' | 'dark';
@@ -9,6 +9,7 @@ export type Theme = 'system' | 'light' | 'dark';
 export type LearnTarget =
   | { kind: 'selection' }
   | { kind: 'doc'; id: string }
+  | { kind: 'rule'; id: string }
   | { kind: 'refusal'; sourceKind: string; targetKind: string; message: string };
 
 export interface ToastAction {
@@ -38,6 +39,7 @@ interface UiState {
   theme: Theme;
   /** Last relation type picked per "sourceKind→targetKind", offered first next time. */
   preferredTypes: Record<string, string>;
+  problemsOpen: boolean;
 
   // Session state.
   inspectorTab: 'properties' | 'learn';
@@ -50,6 +52,11 @@ interface UiState {
   picker: RelationPickerState | null;
   commandOpen: boolean;
   clipboard: ClipboardData | null;
+  /** Key of the finding whose elements are highlighted on the canvas. */
+  activeFinding: string | null;
+  /** The finding the suppress dialog is open for. */
+  suppressing: Finding | null;
+  showSuppressed: boolean;
 
   setLevel(level: Level): void;
   setPaletteMode(mode: 'basic' | 'full'): void;
@@ -88,6 +95,7 @@ export const useUi = create<UiState>()(
       paletteMode: 'basic',
       theme: 'system',
       preferredTypes: {},
+      problemsOpen: true,
       inspectorTab: 'properties',
       learnTarget: { kind: 'selection' },
       toasts: [],
@@ -97,6 +105,9 @@ export const useUi = create<UiState>()(
       picker: null,
       commandOpen: false,
       clipboard: null,
+      activeFinding: null,
+      suppressing: null,
+      showSuppressed: false,
 
       setLevel: (level) => set(level === 'beginner' ? { level, paletteMode: 'basic' } : { level }),
       setPaletteMode: (paletteMode) => set({ paletteMode }),
@@ -118,6 +129,7 @@ export const useUi = create<UiState>()(
         paletteMode: s.paletteMode,
         theme: s.theme,
         preferredTypes: s.preferredTypes,
+        problemsOpen: s.problemsOpen,
       }),
     },
   ),

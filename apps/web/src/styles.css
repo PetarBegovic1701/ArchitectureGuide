@@ -136,12 +136,30 @@ body {
   pointer-events: none !important;
 }
 .react-flow__node.ag-container .ag-container-header,
+.react-flow__node.ag-container .ag-badge,
 .react-flow__node.ag-container .react-flow__handle {
   pointer-events: all;
 }
 .ag-container-header {
   background: color-mix(in srgb, var(--ag-panel) 70%, transparent);
   cursor: grab;
+}
+
+/* The elements of the finding the user is looking at. */
+.ag-halo {
+  border: 3px solid;
+  opacity: 0.8;
+  animation: ag-pulse 1.6s ease-in-out infinite;
+}
+@keyframes ag-pulse {
+  50% {
+    opacity: 0.35;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ag-halo {
+    animation: none;
+  }
 }
 
 .ag-target-valid > .ag-shape {

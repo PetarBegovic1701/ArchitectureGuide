@@ -6,6 +6,7 @@ import { Canvas } from '../canvas/Canvas';
 import { Inspector } from '../panels/Inspector';
 import { CommandPalette, Legend, RelationPicker } from '../panels/Overlays';
 import { Palette } from '../panels/Palette';
+import { ProblemsButton, ProblemsPanel, SuppressDialog } from '../panels/Problems';
 import { dispatch, exportJson, redo, undo } from '../actions';
 import { useAutosave, useShortcuts } from '../hooks';
 import type { SaveStatus } from '../hooks';
@@ -57,15 +58,19 @@ function EditorLoaded() {
         <TopBar status={status} />
         <div className="flex min-h-0 flex-1">
           <Palette />
-          <main className="relative min-w-0 flex-1">
-            <Canvas />
-            <Legend />
-          </main>
+          <div className="flex min-w-0 flex-1 flex-col">
+            <main className="relative min-h-0 flex-1">
+              <Canvas />
+              <Legend />
+            </main>
+            <ProblemsPanel />
+          </div>
           <Inspector />
         </div>
       </div>
       <RelationPicker />
       <CommandPalette />
+      <SuppressDialog />
     </ReactFlowProvider>
   );
 }
@@ -128,6 +133,7 @@ function TopBar({ status }: { status: SaveStatus }) {
         </button>
       </div>
       <div className="ml-auto flex items-center gap-2">
+        <ProblemsButton />
         <div
           className="flex rounded border border-[var(--ag-border)] text-xs"
           role="group"

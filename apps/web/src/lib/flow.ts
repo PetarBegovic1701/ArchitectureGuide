@@ -2,6 +2,7 @@ import type { Edge, Node } from '@xyflow/react';
 import type { Id, LineStyle, Project, Relation, ShapeId, Status, View } from '@archguide/core';
 import { catalog, conceptOf, shapeFor } from './catalog';
 import { colorOf, elementById, isContainer, nodeSize } from './model';
+import type { Issue } from './findings';
 
 export type ShapeNodeData = {
   elementId: Id;
@@ -16,6 +17,10 @@ export type ShapeNodeData = {
   container: boolean;
   status: Status;
   editing: boolean;
+  /** Open findings about this element (worst severity first). */
+  issue?: Issue;
+  /** Part of the finding the user is looking at. */
+  highlighted: boolean;
 };
 
 export type RelationEdgeData = {
@@ -25,6 +30,8 @@ export type RelationEdgeData = {
   /** Position among relations between the same two elements, so parallel arrows do not overlap. */
   parallelIndex: number;
   parallelCount: number;
+  issue?: Issue;
+  highlighted: boolean;
 };
 
 export type ShapeFlowNode = Node<ShapeNodeData, 'shape'>;
@@ -35,6 +42,8 @@ export interface FlowOptions {
   editingId?: Id | null;
   /** While connecting: the source and the elements that may be targets. */
   connecting?: { sourceId: Id; validTargets: ReadonlySet<Id> } | null;
+  issues?: ReadonlyMap<Id, Issue>;
+  highlightIds?: ReadonlySet<Id>;
 }
 
 /**
@@ -91,6 +100,8 @@ export function toFlowNodes(p: Project, view: View, options: FlowOptions = {}): 
           container,
           status: el.status,
           editing: options.editingId === el.id,
+          ...withIssue(options.issues?.get(el.id)),
+          highlighted: options.highlightIds?.has(el.id) ?? false,
         },
       };
     });
@@ -121,7 +132,12 @@ export function toFlowEdges(p: Project, view: View, options: FlowOptions = {}): 
         line: type?.line ?? { width: 1.5, marker: 'arrow' },
         parallelIndex: group.indexOf(r),
         parallelCount: group.length,
+        ...withIssue(options.issues?.get(r.id)),
+        highlighted: options.highlightIds?.has(r.id) ?? false,
       },
     };
   });
 }
+
+/** Leaves `issue` out of the data when there is none. */
+const withIssue = (issue: Issue | undefined) => (issue ? { issue } : {});

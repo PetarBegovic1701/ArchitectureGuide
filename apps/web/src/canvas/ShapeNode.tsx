@@ -5,6 +5,7 @@ import type { ShapeFlowNode } from '../lib/flow';
 import { CONTAINER_HEADER } from '../lib/model';
 import { renameElement } from '../actions';
 import { useUi } from '../store/ui';
+import { SEVERITY_COLOR } from '../lib/findings';
 import { iconFor } from './icons';
 import { LABEL_BELOW, ShapeSvg } from './shapes';
 
@@ -42,6 +43,13 @@ function ShapeNodeImpl({ data, selected }: NodeProps<ShapeFlowNode>) {
         useUi.getState().set({ editingId: data.elementId });
       }}
     >
+      {data.highlighted && (
+        <div
+          className="ag-halo pointer-events-none absolute -inset-2 rounded-xl"
+          style={{ borderColor: SEVERITY_COLOR[data.issue?.severity ?? 'warning'] }}
+          aria-hidden
+        />
+      )}
       <ShapeSvg
         shape={data.shape}
         w={data.w}
@@ -95,10 +103,36 @@ function ShapeNodeImpl({ data, selected }: NodeProps<ShapeFlowNode>) {
           </div>
         </>
       )}
+      {data.issue && <IssueBadge id={data.elementId} issue={data.issue} />}
       {SIDES.map((s) => (
         <Handle key={s.id} id={s.id} type="source" position={s.position} className="ag-handle" />
       ))}
     </div>
+  );
+}
+
+/** Problem count in the top-right corner; a click opens the Problems panel. */
+function IssueBadge({
+  id,
+  issue,
+}: {
+  id: string;
+  issue: NonNullable<ShapeFlowNode['data']['issue']>;
+}) {
+  const word = issue.count === 1 ? 'problem' : 'problems';
+  return (
+    <button
+      type="button"
+      className="ag-badge nodrag absolute -right-2 -top-2 z-10 flex h-5 min-w-5 items-center justify-center rounded-full px-1 text-[10px] font-bold text-white shadow"
+      style={{ background: SEVERITY_COLOR[issue.severity] }}
+      data-testid={`badge-${id}`}
+      data-severity={issue.severity}
+      aria-label={`${issue.count} ${issue.severity === 'info' ? 'tip' : word}, open the Problems panel`}
+      title={`${issue.count} ${word}`}
+      onClick={() => useUi.getState().set({ problemsOpen: true })}
+    >
+      {issue.severity === 'info' ? 'i' : issue.count}
+    </button>
   );
 }
 

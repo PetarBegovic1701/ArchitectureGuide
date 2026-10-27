@@ -1,3 +1,4 @@
+import { DEFAULT_RULE_PACKS } from './rules/generic';
 import { SCHEMA_VERSION } from './schema';
 import type { Id, Project, ProjectSettings } from './schema';
 
@@ -13,6 +14,7 @@ export interface NewProjectInput {
   name: string;
   profile: string;
   description?: string;
+  /** Defaults to the packs every new project starts with (DEFAULT_RULE_PACKS). */
   rulePacks?: string[];
   /** ISO timestamp; defaults to now. */
   now?: string;
@@ -38,7 +40,7 @@ export function createProject(input: NewProjectInput): Project {
     changeSets: [],
     snapshots: [],
     settings: {
-      rulePacks: input.rulePacks ?? ['core'],
+      rulePacks: input.rulePacks ?? [...DEFAULT_RULE_PACKS],
       ruleOverrides: {},
       suppressions: [],
       thresholds: { ...DEFAULT_THRESHOLDS },

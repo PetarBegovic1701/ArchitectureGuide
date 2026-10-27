@@ -21,6 +21,7 @@ import { checkNesting, validRelationTypes } from '@archguide/core';
 import type { Id, Op } from '@archguide/core';
 import { catalog } from '../lib/catalog';
 import { toFlowEdges, toFlowNodes } from '../lib/flow';
+import { findingKey, findingsOf, issuesByItem } from '../lib/findings';
 import type { RelationFlowEdge, ShapeFlowNode } from '../lib/flow';
 import {
   activeView,
@@ -44,6 +45,7 @@ import { EdgeMarkers, RelationEdge } from './RelationEdge';
 import { ShapeNode } from './ShapeNode';
 
 const nodeTypes = { shape: ShapeNode };
+const NO_FINDINGS: never[] = [];
 const edgeTypes = { relation: RelationEdge };
 export const DRAG_MIME = 'application/archguide-kind';
 
@@ -62,14 +64,25 @@ export function Canvas() {
     () => new Set([...selection.elements, ...selection.relations]),
     [selection],
   );
+  const level = useUi((s) => s.level);
+  const activeFinding = useUi((s) => s.activeFinding);
+  const findings = project ? findingsOf(project) : NO_FINDINGS;
+  const issues = useMemo(() => issuesByItem(findings, level), [findings, level]);
+  const highlightIds = useMemo(() => {
+    const f = activeFinding ? findings.find((x) => findingKey(x) === activeFinding) : undefined;
+    return new Set<Id>(f ? [...f.targetIds, ...f.relatedIds] : []);
+  }, [findings, activeFinding]);
   const derivedNodes = useMemo(
     () =>
-      project && view ? toFlowNodes(project, view, { selectedIds, editingId, connecting }) : [],
-    [project, view, selectedIds, editingId, connecting],
+      project && view
+        ? toFlowNodes(project, view, { selectedIds, editingId, connecting, issues, highlightIds })
+        : [],
+    [project, view, selectedIds, editingId, connecting, issues, highlightIds],
   );
   const derivedEdges = useMemo(
-    () => (project && view ? toFlowEdges(project, view, { selectedIds }) : []),
-    [project, view, selectedIds],
+    () =>
+      project && view ? toFlowEdges(project, view, { selectedIds, issues, highlightIds }) : [],
+    [project, view, selectedIds, issues, highlightIds],
   );
 
   // Local copies, so dragging and selecting are smooth. The model changes once, on drag
@@ -90,15 +103,19 @@ export function Canvas() {
     canvasApi.focus = (ids) =>
       void flow.fitView({ nodes: ids.map((id) => ({ id })), duration: 300, maxZoom: 1.2 });
     // A new shape must be visible: if it landed outside the visible area, fit the whole
-    // diagram. Waits a moment so React Flow has rendered and measured the new node.
-    canvasApi.reveal = (id) =>
-      void setTimeout(() => {
+    // diagram. Retries each frame until React Flow has rendered and measured the shape.
+    canvasApi.reveal = (id) => {
+      let frames = 0;
+      const attempt = () => {
         const node = flow.getInternalNode(id);
         const box = wrapper.current?.getBoundingClientRect();
-        if (!node || !box) return;
+        const w = node?.measured.width;
+        const h = node?.measured.height;
+        if (!node || !box || !w || !h) {
+          if (++frames < 60) requestAnimationFrame(attempt);
+          return;
+        }
         const { x, y } = node.internals.positionAbsolute;
-        const w = node.measured.width ?? node.width ?? 0;
-        const h = node.measured.height ?? node.height ?? 0;
         const topLeft = flow.flowToScreenPosition({ x, y });
         const bottomRight = flow.flowToScreenPosition({ x: x + w, y: y + h });
         const visible =
@@ -107,7 +124,9 @@ export function Canvas() {
           bottomRight.x <= box.right &&
           bottomRight.y <= box.bottom;
         if (!visible) void flow.fitView({ padding: 0.2, maxZoom: 1, duration: 200 });
-      }, 60);
+      };
+      requestAnimationFrame(attempt);
+    };
   }, [flow]);
 
   // Removal goes through ops (deleteKeyCode is off), so every change here is view-local.
@@ -239,7 +258,7 @@ export function Canvas() {
           e.preventDefault();
           e.dataTransfer.dropEffect = 'copy';
         }}
-        onPaneClick={() => useUi.getState().set({ picker: null })}
+        onPaneClick={() => useUi.getState().set({ picker: null, activeFinding: null })}
         connectionMode={ConnectionMode.Loose}
         connectionRadius={40}
         snapToGrid

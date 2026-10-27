@@ -8,6 +8,7 @@ import {
 } from '@xyflow/react';
 import type { EdgeProps, InternalNode } from '@xyflow/react';
 import type { RelationFlowEdge } from '../lib/flow';
+import { SEVERITY_COLOR } from '../lib/findings';
 
 /**
  * A relation drawn between the borders of its two shapes ("floating" edge), so handles
@@ -40,7 +41,9 @@ function RelationEdgeImpl({ id, source, target, data, selected }: EdgeProps<Rela
     targetPosition: targetPos,
   });
   const { line, relation, typeName } = data;
-  const stroke = selected ? 'var(--ag-accent)' : 'var(--ag-edge)';
+  const issueColor = data.issue ? SEVERITY_COLOR[data.issue.severity] : undefined;
+  const stroke = selected ? 'var(--ag-accent)' : (issueColor ?? 'var(--ag-edge)');
+  const width = line.width + (selected ? 1 : 0) + (data.highlighted ? 2 : 0);
   const marker = MARKER_IDS[line.marker];
   const label = relation.label ? `${typeName}: ${relation.label}` : typeName;
 
@@ -52,7 +55,7 @@ function RelationEdgeImpl({ id, source, target, data, selected }: EdgeProps<Rela
         interactionWidth={16}
         style={{
           stroke,
-          strokeWidth: selected ? line.width + 1 : line.width,
+          strokeWidth: width,
           strokeDasharray: line.dash,
         }}
         {...(line.marker === 'diamond-tail'
@@ -66,12 +69,21 @@ function RelationEdgeImpl({ id, source, target, data, selected }: EdgeProps<Rela
           style={{
             transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)`,
             background: 'var(--ag-panel)',
-            borderColor: selected ? 'var(--ag-accent)' : 'var(--ag-border)',
+            borderColor: selected ? 'var(--ag-accent)' : (issueColor ?? 'var(--ag-border)'),
+            borderWidth: data.highlighted ? 2 : 1,
             color: 'var(--ag-muted)',
             zIndex: 1100,
           }}
           data-testid={`edge-label-${id}`}
+          {...(data.issue ? { 'data-severity': data.issue.severity } : {})}
         >
+          {data.issue && (
+            <span
+              className="mr-1 inline-block h-1.5 w-1.5 rounded-full align-middle"
+              style={{ background: issueColor }}
+              aria-label={`${data.issue.count} ${data.issue.count === 1 ? 'problem' : 'problems'}`}
+            />
+          )}
           {label}
         </div>
       </EdgeLabelRenderer>

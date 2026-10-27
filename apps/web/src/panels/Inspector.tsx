@@ -1,11 +1,13 @@
 import { IdSchema, validRelationTypes } from '@archguide/core';
-import type { Element, Layer, Relation, Status } from '@archguide/core';
+import type { Element, Id, Layer, Qualities, Relation, Status } from '@archguide/core';
 import { catalog, conceptOf } from '../lib/catalog';
 import { LAYERS, elementById, takenIds } from '../lib/model';
 import { dispatch } from '../actions';
 import { useProject } from '../store/project';
 import { useUi } from '../store/ui';
 import { LearnPanel } from './LearnPanel';
+import { FindingRow, useFindings } from './Problems';
+import { findingKey, findingsFor } from '../lib/findings';
 import { CommitInput, PropertyForm, Row, inputClass } from './PropertyForm';
 
 const STATUSES: Status[] = ['planned', 'existing', 'deprecated'];
@@ -58,9 +60,92 @@ function PropertiesTab() {
   }
   if (count > 1) return <p className="text-sm text-[var(--ag-muted)]">{count} items selected.</p>;
   const element = selection.elements[0] ? elementById(project, selection.elements[0]) : undefined;
-  if (element) return <ElementForm key={element.id} element={element} />;
+  if (element)
+    return (
+      <>
+        <SelectionProblems id={element.id} />
+        <ElementForm key={element.id} element={element} />
+      </>
+    );
   const relation = project.model.relations.find((r) => r.id === selection.relations[0]);
-  return relation ? <RelationForm key={relation.id} relation={relation} /> : null;
+  return relation ? (
+    <>
+      <SelectionProblems id={relation.id} />
+      <RelationForm key={relation.id} relation={relation} />
+    </>
+  ) : null;
+}
+
+/** Findings about the selected item, with their fixes, above its properties. */
+function SelectionProblems({ id }: { id: Id }) {
+  const project = useProject((s) => s.project)!;
+  const level = useUi((s) => s.level);
+  const findings = findingsFor(useFindings(), id).filter((f) => !f.suppressed);
+  if (findings.length === 0) return null;
+  return (
+    <section className="mb-3 space-y-1" aria-label="Problems with the selection">
+      <h3 className="text-xs font-semibold uppercase tracking-wide text-[var(--ag-muted)]">
+        Problems
+      </h3>
+      {findings.map((f) => (
+        <FindingRow key={findingKey(f)} finding={f} project={project} level={level} compact />
+      ))}
+    </section>
+  );
+}
+
+const QUALITY_OPTIONS = {
+  sensitivity: ['public', 'internal', 'pii', 'secret'],
+  criticality: ['low', 'medium', 'high'],
+  scaling: ['single', 'horizontal', 'serverless'],
+} as const;
+
+const QUALITY_HELP: Record<keyof typeof QUALITY_OPTIONS, string> = {
+  sensitivity: 'Data sensitivity',
+  criticality: 'Criticality',
+  scaling: 'Scaling',
+};
+
+/** Qualities that rules read: data sensitivity, criticality, scaling, slowness (§8.1). */
+function QualitiesForm({ element: el }: { element: Element }) {
+  const q: Qualities = el.qualities ?? {};
+  const set = (key: keyof Qualities, value: unknown) => {
+    const next: Record<string, unknown> = { ...q, [key]: value };
+    for (const k of Object.keys(next)) if (next[k] === undefined || next[k] === '') delete next[k];
+    patchElement(el.id, { qualities: Object.keys(next).length ? next : null }, 'Edit qualities');
+  };
+  return (
+    <fieldset className="space-y-2 rounded border border-[var(--ag-border)] p-2">
+      <legend className="px-1 text-xs font-semibold">Qualities</legend>
+      <div className="grid grid-cols-3 gap-2">
+        {(Object.keys(QUALITY_OPTIONS) as (keyof typeof QUALITY_OPTIONS)[]).map((key) => (
+          <Row key={key} label={QUALITY_HELP[key]} htmlFor={`el-q-${key}`}>
+            <select
+              id={`el-q-${key}`}
+              className={inputClass}
+              value={q[key] ?? ''}
+              onChange={(e) => set(key, e.target.value || undefined)}
+            >
+              <option value="">—</option>
+              {QUALITY_OPTIONS[key].map((v) => (
+                <option key={v} value={v}>
+                  {v}
+                </option>
+              ))}
+            </select>
+          </Row>
+        ))}
+      </div>
+      <label className="flex items-center gap-2 text-sm">
+        <input
+          type="checkbox"
+          checked={q.slow === true}
+          onChange={(e) => set('slow', e.target.checked || undefined)}
+        />
+        Slow (seconds, not milliseconds)
+      </label>
+    </fieldset>
+  );
 }
 
 function patchElement(id: string, patch: Record<string, unknown>, label = 'Edit') {
@@ -195,6 +280,7 @@ function ElementForm({ element: el }: { element: Element }) {
           />
         </fieldset>
       )}
+      <QualitiesForm element={el} />
       <div className="grid grid-cols-2 gap-2">
         <Row label="Owner (team)" htmlFor="el-owner">
           <CommitInput
