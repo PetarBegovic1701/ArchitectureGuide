@@ -6,6 +6,7 @@ import {
   Command,
   Download,
   LayoutTemplate,
+  Wand2,
   Moon,
   Redo2,
   Sun,
@@ -19,7 +20,7 @@ import { Palette } from '../panels/Palette';
 import { ProblemsButton, ProblemsPanel, SuppressDialog } from '../panels/Problems';
 import { SaveTemplateDialog, TemplatePicker } from '../panels/Templates';
 import { CompareBanner, SnapshotsDialog } from '../panels/Snapshots';
-import { dispatch, exportJson, redo, stampTemplate, undo } from '../actions';
+import { dispatch, exportJson, redo, stampTemplate, tidyUp, undo } from '../actions';
 import { useAutosave, useFolder, useShortcuts } from '../hooks';
 import { folder } from '../persistence/folder';
 import type { SaveStatus } from '../hooks';
@@ -185,6 +186,14 @@ function TopBar({ status }: { status: SaveStatus }) {
         title="Snapshots: save, compare and restore versions"
       >
         <History size={14} aria-hidden /> Snapshots
+      </button>
+      <button
+        type="button"
+        className="flex items-center gap-1 rounded px-2 py-1 text-xs hover:bg-[var(--ag-panel-2)]"
+        onClick={() => void tidyUp()}
+        title="Tidy up: lay out the diagram automatically"
+      >
+        <Wand2 size={14} aria-hidden /> Tidy up
       </button>
       <div className="ml-auto flex items-center gap-2">
         <ProblemsButton />

@@ -2,7 +2,18 @@ import { IdSchema, validRelationTypes } from '@archguide/core';
 import type { Element, Id, Layer, Qualities, Relation, Status } from '@archguide/core';
 import { catalog, conceptOf } from '../lib/catalog';
 import { LAYERS, elementById, takenIds } from '../lib/model';
-import { dispatch } from '../actions';
+import {
+  AlignCenterHorizontal,
+  AlignCenterVertical,
+  AlignEndHorizontal,
+  AlignEndVertical,
+  AlignHorizontalDistributeCenter,
+  AlignStartHorizontal,
+  AlignStartVertical,
+  AlignVerticalDistributeCenter,
+} from 'lucide-react';
+import { alignSelection, dispatch, distributeSelection } from '../actions';
+import type { Alignment } from '../lib/align';
 import { useProject } from '../store/project';
 import { useUi } from '../store/ui';
 import { LearnPanel } from './LearnPanel';
@@ -58,7 +69,7 @@ function PropertiesTab() {
       </div>
     );
   }
-  if (count > 1) return <p className="text-sm text-[var(--ag-muted)]">{count} items selected.</p>;
+  if (count > 1) return <MultiSelection count={count} />;
   const element = selection.elements[0] ? elementById(project, selection.elements[0]) : undefined;
   if (element)
     return (
@@ -74,6 +85,62 @@ function PropertiesTab() {
       <RelationForm key={relation.id} relation={relation} />
     </>
   ) : null;
+}
+
+const ALIGN: { how: Alignment; label: string; Icon: typeof AlignStartVertical }[] = [
+  { how: 'left', label: 'Align left', Icon: AlignStartVertical },
+  { how: 'center', label: 'Align centers', Icon: AlignCenterVertical },
+  { how: 'right', label: 'Align right', Icon: AlignEndVertical },
+  { how: 'top', label: 'Align top', Icon: AlignStartHorizontal },
+  { how: 'middle', label: 'Align middles', Icon: AlignCenterHorizontal },
+  { how: 'bottom', label: 'Align bottom', Icon: AlignEndHorizontal },
+];
+
+/** Several items selected: arrange them. */
+function MultiSelection({ count }: { count: number }) {
+  const button = 'rounded border border-[var(--ag-border)] p-1.5 hover:bg-[var(--ag-panel-2)]';
+  return (
+    <div className="space-y-3 text-sm">
+      <p className="text-[var(--ag-muted)]">{count} items selected.</p>
+      <div role="group" aria-label="Align" className="flex flex-wrap gap-1">
+        {ALIGN.map(({ how, label, Icon }) => (
+          <button
+            key={how}
+            type="button"
+            className={button}
+            aria-label={label}
+            title={label}
+            onClick={() => alignSelection(how)}
+          >
+            <Icon size={16} />
+          </button>
+        ))}
+      </div>
+      <div role="group" aria-label="Distribute" className="flex gap-1">
+        <button
+          type="button"
+          className={button}
+          aria-label="Distribute horizontally"
+          title="Distribute horizontally (3 or more)"
+          onClick={() => distributeSelection('horizontal')}
+        >
+          <AlignHorizontalDistributeCenter size={16} />
+        </button>
+        <button
+          type="button"
+          className={button}
+          aria-label="Distribute vertically"
+          title="Distribute vertically (3 or more)"
+          onClick={() => distributeSelection('vertical')}
+        >
+          <AlignVerticalDistributeCenter size={16} />
+        </button>
+      </div>
+      <p className="text-xs text-[var(--ag-muted)]">
+        Shapes are aligned within their container. Ctrl+click adds to the selection.
+      </p>
+    </div>
+  );
 }
 
 /** Findings about the selected item, with their fixes, above its properties. */

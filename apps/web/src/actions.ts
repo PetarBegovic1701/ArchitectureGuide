@@ -22,6 +22,12 @@ import { catalog, conceptOf, defaultSize } from './lib/catalog';
 import { copySelection, pasteOps } from './lib/clipboard';
 import { findingKey, findingsOf, focusIds, quickFixOps } from './lib/findings';
 import { stampOps, stampOrigin } from './lib/templates';
+import { layoutOps, toElkGraph } from './lib/layout';
+import { alignOps, alignProblem, distributeOps } from './lib/align';
+import type { Alignment, Distribution } from './lib/align';
+import ELK from 'elkjs/lib/elk-api.js';
+import type { ElkNode } from 'elkjs/lib/elk-api';
+import elkWorkerUrl from 'elkjs/lib/elk-worker.min.js?url';
 import {
   absolutePosition,
   activeView,
@@ -355,6 +361,55 @@ export function stampTemplate(template: Template, params: Record<string, unknown
 
 export function exportTemplateFile(file: TemplateFile): void {
   download(`${file.id}.archguide-template.json`, serializeTemplateFile(file), 'application/json');
+}
+
+// --- layout ------------------------------------------------------------------------
+
+let elk: InstanceType<typeof ELK> | undefined;
+
+/** ELK runs in its own Web Worker, so a large layout does not freeze the canvas. */
+function layoutInWorker(graph: ElkNode): Promise<ElkNode> {
+  elk ??= new ELK({ workerFactory: () => new Worker(elkWorkerUrl) });
+  return elk.layout(graph);
+}
+
+/** Lays out the whole view automatically (ELK), as one undo step. */
+export async function tidyUp(): Promise<void> {
+  const { project: p, viewId, version } = project();
+  if (!p) return;
+  const view = activeView(p, viewId);
+  if (view.nodes.length === 0) return;
+  let laid: ElkNode;
+  try {
+    laid = await layoutInWorker(toElkGraph(p, view));
+  } catch (error) {
+    ui().toast({ tone: 'error', message: `Layout failed: ${(error as Error).message}` });
+    return;
+  }
+  // The diagram changed while the layout ran: its result no longer fits.
+  if (project().version !== version) return;
+  if (dispatch(layoutOps(view, laid), { label: 'Tidy up' })) {
+    setTimeout(() => canvasApi.focus?.(view.nodes.map((n) => n.elementId)), 60);
+    ui().toast({ tone: 'success', message: 'Tidied up.', actions: [{ label: 'Undo', run: undo }] });
+  }
+}
+
+export function alignSelection(how: Alignment): void {
+  const { project: p, viewId, selection } = project();
+  if (!p) return;
+  const view = activeView(p, viewId);
+  const problem = alignProblem(p, view, selection.elements);
+  if (problem) return void ui().toast({ tone: 'info', message: problem });
+  dispatch(alignOps(p, view, selection.elements, how), { label: `Align ${how}` });
+}
+
+export function distributeSelection(how: Distribution): void {
+  const { project: p, viewId, selection } = project();
+  if (!p) return;
+  const view = activeView(p, viewId);
+  const problem = alignProblem(p, view, selection.elements, 3);
+  if (problem) return void ui().toast({ tone: 'info', message: problem });
+  dispatch(distributeOps(p, view, selection.elements, how), { label: `Distribute ${how}` });
 }
 
 export function undo(): void {

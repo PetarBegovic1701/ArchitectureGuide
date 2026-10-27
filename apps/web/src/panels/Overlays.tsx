@@ -5,12 +5,15 @@ import { catalog, defaultLayer } from '../lib/catalog';
 import { LAYERS, layerColor } from '../lib/model';
 import {
   addElementFromPalette,
+  alignSelection,
   canvasApi,
   createRelation,
   deleteSelection,
+  distributeSelection,
   duplicate,
   exportJson,
   redo,
+  tidyUp,
   undo,
 } from '../actions';
 import { useProject } from '../store/project';
@@ -152,6 +155,17 @@ export function CommandPalette() {
       ...(project ? [{ id: 'export', label: 'Export JSON', run: () => exportJson(project) }] : []),
       { id: 'templates', label: 'Insert template…', run: () => ui.set({ dialog: 'templates' }) },
       { id: 'snapshots', label: 'Snapshots…', run: () => ui.set({ dialog: 'snapshots' }) },
+      { id: 'tidy', label: 'Tidy up (automatic layout)', run: () => void tidyUp() },
+      ...(['left', 'center', 'right', 'top', 'middle', 'bottom'] as const).map((how) => ({
+        id: `align-${how}`,
+        label: `Align ${how}`,
+        run: () => alignSelection(how),
+      })),
+      ...(['horizontal', 'vertical'] as const).map((how) => ({
+        id: `distribute-${how}`,
+        label: `Distribute ${how}ly`,
+        run: () => distributeSelection(how),
+      })),
       {
         id: 'save-template',
         label: 'Save selection as template…',
