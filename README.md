@@ -13,6 +13,7 @@ v1 targets **React + Node.js + PostgreSQL** (TypeScript / JavaScript).
 
 Status: planning.
 
-- [docs/PLAN.md](docs/PLAN.md): the full implementation plan
+- [Implementation.md](Implementation.md): **the complete implementation document (source of truth)**
+- [docs/PLAN.md](docs/PLAN.md): earlier implementation plan
 - [docs/STACK-REACT-NODE-POSTGRES.md](docs/STACK-REACT-NODE-POSTGRES.md): v1 stack profile (concepts, rules, templates, analyzer)
 - [docs/RESEARCH.md](docs/RESEARCH.md): similar projects and what we take from them
