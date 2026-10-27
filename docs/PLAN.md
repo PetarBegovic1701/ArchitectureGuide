@@ -7,6 +7,33 @@ anti-patterns, and exports the result in a format that AI coding agents can read
 and act on. You can also point it at an existing repository to get a draft of that
 repository's architecture.
 
+Related documents:
+- [RESEARCH.md](RESEARCH.md): similar projects, and the decisions taken from them (R1–R12).
+- [STACK-REACT-NODE-POSTGRES.md](STACK-REACT-NODE-POSTGRES.md): the v1 stack profile
+  (concepts, relations, rules, templates, analyzer detectors, enforcement).
+
+---
+
+## 0. Scope of v1: React + Node.js + PostgreSQL
+
+v1 supports **one stack in depth**: React SPA (Vite), Node.js services (Express,
+Fastify, NestJS) and PostgreSQL (through Prisma, Drizzle, TypeORM, Kysely, Knex
+or `pg`), in TypeScript or JavaScript.
+
+- The core (schema, canvas, rules engine, exporters, MCP) stays generic.
+- Stack knowledge lives in a **stack profile** package:
+  `packages/profiles/react-node-postgres`. It holds the concepts, extra
+  relations, rules (RNP-001 … RNP-018), templates (T1 … T13), analyzer detectors
+  and enforcement generators.
+- Other technologies (Redis, Kafka, S3, other databases) can be placed as
+  generic "Other data store" / "External system" elements. Only generic rules
+  apply to them.
+- Next.js, Supabase/PostgREST and other languages are later profiles. The core
+  does not change for them.
+
+The generic concept and template lists in sections 6 and 8 describe the
+long-term catalog. **For v1, the profile document is the source of truth.**
+
 ---
 
 ## 1. Goals and non-goals
@@ -91,7 +118,9 @@ valid in CI and in the agent's tool calls.
 | Markdown | `react-markdown` for notes | Notes and annotations are Markdown. |
 | Image export | `html-to-image` for PNG/SVG | Works with React Flow viewport. |
 | MCP | `@modelcontextprotocol/sdk` (stdio transport) | Standard for Claude Code and other agents. |
-| Code parsing | `tree-sitter` (WASM) + manifest parsers | Multi-language import graphs. |
+| Import graph | **dependency-cruiser** (programmatic API) | Mature JS/TS import analysis; resolves `tsconfig` paths and workspaces; same engine runs the generated CI rules (RESEARCH R2, R3). |
+| AST patterns | `ts-morph` | Framework detection (Express routers, NestJS `@Module`, React Router, ORM calls). |
+| SQL / schema parsing | `@mrleebo/prisma-ast`, `libpg-query` (WASM), `pg-introspection` (optional live DB) | Prisma schema, raw SQL migrations, `pg_catalog` introspection with a read-only role (RESEARCH R8). |
 | Tests | Vitest (unit), Playwright (e2e) | Fast unit tests on core; real browser for canvas. |
 
 Alternatives considered: tldraw (great freeform drawing, weaker typed-graph
@@ -121,14 +150,19 @@ ArchitectureGuide/
 │  │  ├─ src/export/            # agent-md, yaml, json, mermaid, plantuml, c4-dsl
 │  │  ├─ src/import/            # json, mermaid (subset), structurizr (subset)
 │  │  └─ src/migrate/           # schemaVersion migrations
-│  ├─ templates/                # Built-in patterns (one file per pattern)
-│  ├─ analyzer/                 # Repo fact extraction (manifests, imports, infra)
+│  ├─ templates/                # Generic built-in patterns (one file per pattern)
+│  ├─ profiles/
+│  │  └─ react-node-postgres/   # v1 stack profile: concepts, rules, templates,
+│  │                            # analyzer detectors, enforcement generators
+│  ├─ analyzer/                 # Detector runner, dependency-cruiser + ts-morph wrappers
 │  ├─ cli/                      # `archguide` command
 │  └─ mcp-server/               # `archguide-mcp` stdio server
 ├─ schema/
 │  └─ archguide.schema.json     # Generated JSON Schema (published)
 └─ docs/
    ├─ PLAN.md                   # This file
+   ├─ RESEARCH.md               # Similar projects + decisions taken from them
+   ├─ STACK-REACT-NODE-POSTGRES.md  # v1 stack profile
    ├─ CONCEPTS.md               # Concept + relation catalog reference
    └─ RULES.md                  # Rule reference with rationale
 ```
@@ -190,6 +224,8 @@ interface Element {
     sla?: string;
   };
   properties?: Record<string, unknown>;   // kind-specific, validated by catalog
+  codePaths?: string[];          // globs: "services/orders/src/domain/**"; used for
+                                 // "open in code" and for generated CI rules
   source?: {                     // set when produced by repo analysis
     origin: 'manual' | 'inferred';
     confidence?: number;         // 0..1
@@ -479,7 +515,16 @@ Templates can create a new project or be **stamped** into an existing canvas
 (as a group, with a parameter dialog). Each project records `derivedFrom`, so the
 tool can show "drift from pattern" later.
 
-### Initial template set
+### v1 template set
+
+v1 ships the 13 React + Node.js + PostgreSQL templates (T1–T13) defined in
+[STACK-REACT-NODE-POSTGRES.md, section 4](STACK-REACT-NODE-POSTGRES.md#4-templates-v1-set):
+Starter, Layered Node API, Hexagonal Node service, NestJS modular monolith,
+React + BFF, database per service, background jobs on Postgres, transactional
+outbox, CQRS-lite, realtime, Feature-Sliced React, type-safe monorepo
+(tRPC/OpenAPI), multi-tenant SaaS.
+
+### Long-term generic template set (later profiles)
 
 **Backend**
 1. Layered (N-tier): Presentation → Application → Domain → Infrastructure
@@ -599,9 +644,13 @@ All notes are part of the export, so the agent gets the context too.
 | **Agent Markdown** (`ARCHITECTURE.md`) | Primary AI format (see below) |
 | **Agent YAML** (`architecture.yaml`) | Compact, machine-first, low token count |
 | **Change-set plan** (`plans/<change-set>.md`) | Feature plan with ordered tasks |
+| **Spec Kit layout** (`spec.md`, `plan.md`, `tasks.md`) | Change set as GitHub Spec Kit files (RESEARCH R4) |
+| **Kiro layout** (`.kiro/specs/<feature>/requirements.md`, `design.md`, `tasks.md`) | Change set as Kiro spec (RESEARCH R4) |
 | `AGENTS.md` / `CLAUDE.md` snippet | Invariants only, to paste into agent memory |
+| **Enforcement configs** | `.dependency-cruiser.cjs` (default), Nx `depConstraints`, ArchUnitTS spec (see 12.4) |
+| DBML / SQL | Postgres schema for ChartDB / dbdiagram (RESEARCH R7) |
 | Mermaid | Embed in READMEs, PRs |
-| PlantUML / C4 / Structurizr DSL | Interop with existing tools |
+| LikeC4 / Structurizr DSL / PlantUML | Interop with existing C4 tools (RESEARCH R6) |
 | PNG / SVG | Slides, docs |
 
 ### 11.1 Agent Markdown format (design)
@@ -743,6 +792,16 @@ sequenceDiagram
 
 ### 12.2 `packages/analyzer`: what it extracts (deterministic)
 
+**v1 is JavaScript/TypeScript only.** The detectors for React, Node.js and
+PostgreSQL (React Router routes, Vite proxy → backend edges, Express/Fastify
+routers, NestJS module graph, Prisma/Drizzle/TypeORM schemas, ORM usage →
+**data ownership map**, pg-boss / graphile-worker jobs, LISTEN/NOTIFY, optional
+live `pg_catalog` introspection) are listed in
+[STACK-REACT-NODE-POSTGRES.md, section 5](STACK-REACT-NODE-POSTGRES.md#5-analyzer-detectors-jsts-only).
+The import graph comes from dependency-cruiser; AST patterns from ts-morph.
+
+The table below is the long-term, multi-language picture:
+
 | Source | Facts |
 |---|---|
 | Manifests: `package.json`, workspaces, `go.mod`, `pom.xml`, `build.gradle`, `pyproject.toml`, `Cargo.toml`, `*.csproj` | Packages, apps, languages, frameworks (by dependency: `next`, `express`, `@nestjs/core`, `django`, `spring-boot`, `fastapi` ...) |
@@ -804,12 +863,29 @@ Batch tools (`upsert_*`) keep the number of round trips low. All write tools ret
 the rule findings their change introduced, so the agent can correct itself
 immediately.
 
+The agent never writes a DSL. Structurizr's MCP work showed that agents need
+several correction rounds to write valid DSL text. Structured JSON input with
+item-by-item validation errors avoids this (RESEARCH R1).
+
+**Claude Code skill.** Next to the MCP server, ship a skill
+(`.claude/skills/archguide/SKILL.md`). It tells the agent when to read the
+architecture (before planning a feature), how to map a repo, and how to keep
+the model up to date after a change. The skill calls the MCP tools, or the CLI
+when MCP is not configured (RESEARCH R5).
+
 ### 12.4 Drift detection and CI ("architecture fitness functions")
 
 - `archguide check` (CLI) runs rules on the model **and** compares invariants with
   the real import graph. Example: the model says `dom.*` must not depend on
   `ad.*`; the analyzer finds `services/orders/src/domain/order.ts` imports
   `../infra/prisma`. → CI fails with the file and line.
+- We do not build our own import checker. Element `codePaths` and invariants
+  compile into a **generated `.dependency-cruiser.cjs`**. dependency-cruiser then
+  enforces it (also usable alone, without ArchitectureGuide installed in CI).
+  Model-aware checks that dependency-cruiser cannot express (data ownership from
+  ORM usage, secrets in browser env vars, drift) run in `archguide check` itself.
+  Optional generators: Nx `depConstraints`, ArchUnitTS spec. Details and an
+  example: [STACK-REACT-NODE-POSTGRES.md, section 6](STACK-REACT-NODE-POSTGRES.md#6-enforcement-generated-from-the-model).
 - `archguide drift` lists elements in code but not in the model, and the reverse.
 - A GitHub Action wraps `archguide check` and posts a summary.
 
@@ -843,6 +919,12 @@ Ordered by value for feature planning:
 12. **Complexity score.** Simple metrics (number of deployables, sync depth, coupling)
     shown per project and per change set, to compare design options.
 13. **Presentation mode.** Step through views and annotations like slides.
+14. **OpenTelemetry trace import (later).** Confirm the real `calls` edges and their
+    volume from traces, and mark modelled edges that never occur at runtime
+    (RESEARCH R10).
+15. **Database drill-down.** Double-click a `pg.database` to see schemas and tables
+    (from Prisma/Drizzle/SQL or live introspection) with data-ownership coloring:
+    which service reads or writes each table.
 
 ---
 
@@ -853,7 +935,8 @@ Each phase ends with a usable result and tests.
 ### Phase 0: Foundations
 - Monorepo (pnpm, Turborepo, TS strict, ESLint, Prettier, Vitest, CI on GitHub Actions).
 - `core/schema` with Zod + JSON Schema generation.
-- `core/catalog` v1: ~35 concepts, 13 relation types, compatibility matrix.
+- `core/catalog`: generic categories, generic concepts, relation types, compatibility matrix.
+- `profiles/react-node-postgres`: the React / Node / Postgres concepts and relations.
 - **Done when:** schema round-trips (parse → serialize → parse) and is deterministic.
 
 ### Phase 1: Canvas MVP
@@ -870,15 +953,16 @@ Each phase ends with a usable result and tests.
 ### Phase 2: Rules engine
 - Hard constraints wired into `isValidConnection` and nesting drop.
 - Target highlighting during connect; refusal tooltips with "flip edge" fix.
-- Anti-pattern detectors AP-001 … AP-011, AP-016.
+- Anti-pattern detectors AP-001 … AP-011, AP-016, and the model-level profile
+  rules RNP-001, 002, 005–011, 014, 016.
 - Problems panel, badges on shapes/edges, suppressions with reason.
 - Rule packs.
 - **Done when:** every rule has fixture tests (positive + negative) and a doc entry.
 
 ### Phase 3: Templates and projects
-- Template engine with parameters; 10 templates first (Layered, Hexagonal, Clean,
-  Modular Monolith, Microservices+Gateway, Event-Driven, CQRS, BFF, Feature-Sliced,
-  SPA+API+DB), rest later.
+- Template engine with parameters; profile templates T1–T7 and T11 first
+  (Starter, Layered, Hexagonal, NestJS modular monolith, BFF, DB per service,
+  background jobs, Feature-Sliced React), then T8–T10, T12, T13.
 - Stamp template into existing canvas.
 - Workspace (project list), duplicate project, snapshots, snapshot diff.
 - File System Access "open folder" mode.
@@ -886,29 +970,41 @@ Each phase ends with a usable result and tests.
 
 ### Phase 4: Notes, annotations, exports
 - Element notes, sticky notes, callouts, regions, comments, project notes, ADRs.
-- Exporters: agent Markdown, agent YAML, AGENTS.md snippet, Mermaid, PNG/SVG.
+- Exporters: agent Markdown, agent YAML, AGENTS.md snippet, Mermaid, PNG/SVG,
+  DBML. (Spec Kit / Kiro layouts come with change sets in Phase 7; LikeC4 /
+  Structurizr in Phase 7.)
 - Golden-file tests for each exporter.
 - **Done when:** exported agent Markdown for each template is reviewed and stable.
 
 ### Phase 5: CLI + MCP server
 - `archguide` CLI: `init`, `validate`, `export`, `serve`.
 - `archguide-mcp` with read/write tools, resources, prompts.
+- Claude Code skill (`SKILL.md`).
 - Live reload in the web app via `archguide serve`.
 - **Done when:** Claude Code can create, edit, validate and export a project only
   through MCP, and the open browser tab updates live.
 
 ### Phase 6: Repository analysis
-- Analyzer detectors: JS/TS (package.json, Next, Express, Nest, imports), Docker
-  Compose, env files, OpenAPI. Then Python, Go, Java.
-- `analyze_repository`, `diff_with_repository`, `archguide check`, `archguide drift`.
+- Profile detectors (STACK-REACT-NODE-POSTGRES.md section 5): workspaces, React
+  (routes, state, API client, Vite proxy), Node (Express, Fastify, NestJS, auth,
+  validation, SDKs), Postgres (Prisma, Drizzle, TypeORM, SQL migrations, ORM usage →
+  data ownership, pg-boss, LISTEN/NOTIFY), Docker Compose, env files.
+- Analyzer-level rules RNP-003, 004, 012, 013, 015, 017, 018.
+- Optional live Postgres introspection (read-only role, `pg_catalog`).
+- `analyze_repository`, `diff_with_repository`, `archguide check` (generated
+  dependency-cruiser config + model checks), `archguide drift`.
 - "Inferred" review flow in the UI (accept / edit / reject, evidence links).
+- Database drill-down view with data-ownership coloring.
 - GitHub Action.
-- **Done when:** on 3 sample repos (monolith, microservices compose, Next.js app),
-  the generated baseline has ≥ 80% of the hand-made reference elements, and no
-  element without evidence.
+- **Done when:** on the 3 fixture repos (Vite+Express+Prisma, NestJS modular
+  monolith + Drizzle, pnpm monorepo with BFF + pg-boss), the generated baseline has
+  ≥ 80% of the hand-made reference elements, no element without evidence, and the
+  "bad" fixture triggers every analyzer-level RNP rule.
 
 ### Phase 7: Change sets and advanced views
-- Change sets with overlay, rule check, plan export with ordered tasks.
+- Change sets with overlay, rule check, plan export with ordered tasks, Spec Kit
+  and Kiro layouts.
+- LikeC4 and Structurizr DSL exports.
 - Views, drill-down, scenarios, focus/filter modes.
 - Remaining anti-patterns and templates.
 - **Done when:** a feature can be planned end-to-end: baseline from repo → change
@@ -951,8 +1047,14 @@ Each phase ends with a usable result and tests.
 2. **Hosted sync / collaboration?** Recommendation: not in v1. Git is the sync layer.
    Keep IDs and ops (change sets) CRDT-friendly so Yjs can be added later.
 3. **License and distribution** (npm packages for CLI/MCP, public web build).
-4. **Which languages first in the analyzer?** Recommendation: TypeScript/JavaScript
-   first, then Python, Go, Java.
+4. ~~Which languages first in the analyzer?~~ **Decided:** React + Node.js +
+   PostgreSQL, JS/TS only (section 0).
+5. **Next.js in v1?** It is React, but it mixes frontend and backend (server
+   components, route handlers that call Postgres directly). It needs its own rules,
+   because "browser code cannot reach Postgres" does not hold for server components.
+   Recommendation: v1.1 profile, right after v1.
+6. **Supabase / PostgREST?** Common with React + Postgres. It needs a "frontend talks
+   to the DB API, safe only with RLS" rule. Recommendation: v1.1, together with Next.js.
 
 ---
 
