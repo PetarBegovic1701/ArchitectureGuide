@@ -5,3 +5,5 @@ coverage/
 *.log
 .DS_Store
 architecture/.archguide/analysis/
+test-results/
+playwright-report/

@@ -7,6 +7,7 @@ import {
   checkRelation,
   createCatalog,
   createProject,
+  explainPair,
   shapeOf,
   validRelationTypes,
 } from '@archguide/core';
@@ -351,5 +352,25 @@ describe('layered calls', () => {
       'depends-on',
       'fetches-via',
     ]);
+  });
+});
+
+describe('explainPair (what the canvas shows for a refused drag)', () => {
+  it.each([
+    ['react.app', 'pg.schema', /Browser code cannot connect to PostgreSQL/, undefined],
+    ['pg.schema', 'node.service', /PostgreSQL does not call services/, 'reads'],
+    ['pg.job-queue', 'node.worker', /does not call/, 'processes'],
+    ['node.port', 'node.repository', /Reversed/, 'implements'],
+    ['node.worker', 'react.app', /server cannot call browser code/, 'calls'],
+    ['node.dto', 'node.service', /cannot be connected/, 'depends-on'],
+  ])('%s → %s', (from, to, message, flip) => {
+    const result = explainPair(catalog, from, to);
+    expect(result.allowed).toEqual([]);
+    expect(result.message).toMatch(message);
+    expect(result.flip).toBe(flip);
+  });
+
+  it('returns the allowed types and no message when the pair is valid', () => {
+    expect(explainPair(catalog, 'react.app', 'node.service')).toMatchObject({ message: '' });
   });
 });

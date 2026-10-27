@@ -1,0 +1,192 @@
+@import 'tailwindcss';
+@import '@xyflow/react/dist/style.css';
+
+/* Design tokens (Implementation.md §9.3). Light by default, dark via prefers-color-scheme or data-theme. */
+:root {
+  color-scheme: light;
+  --ag-bg: #f8fafc;
+  --ag-panel: #ffffff;
+  --ag-panel-2: #f1f5f9;
+  --ag-border: #e2e8f0;
+  --ag-text: #0f172a;
+  --ag-muted: #64748b;
+  --ag-accent: #2563eb;
+  --ag-accent-text: #ffffff;
+  --ag-edge: #475569;
+  --ag-valid: #16a34a;
+  --ag-error: #dc2626;
+  --ag-warning: #d97706;
+  --ag-info: #2563eb;
+  --ag-presentation: #3b82f6;
+  --ag-application: #14b8a6;
+  --ag-domain: #8b5cf6;
+  --ag-infrastructure: #64748b;
+  --ag-data: #f59e0b;
+  --ag-external: #78716c;
+  --ag-neutral: #94a3b8;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    color-scheme: dark;
+    --ag-bg: #0b1120;
+    --ag-panel: #111827;
+    --ag-panel-2: #1f2937;
+    --ag-border: #334155;
+    --ag-text: #e5e7eb;
+    --ag-muted: #94a3b8;
+    --ag-accent: #60a5fa;
+    --ag-accent-text: #0b1120;
+    --ag-edge: #94a3b8;
+    --ag-valid: #4ade80;
+    --ag-error: #f87171;
+    --ag-warning: #fbbf24;
+    --ag-info: #60a5fa;
+    --ag-presentation: #60a5fa;
+    --ag-application: #2dd4bf;
+    --ag-domain: #a78bfa;
+    --ag-infrastructure: #94a3b8;
+    --ag-data: #fbbf24;
+    --ag-external: #a8a29e;
+    --ag-neutral: #64748b;
+  }
+}
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --ag-bg: #0b1120;
+  --ag-panel: #111827;
+  --ag-panel-2: #1f2937;
+  --ag-border: #334155;
+  --ag-text: #e5e7eb;
+  --ag-muted: #94a3b8;
+  --ag-accent: #60a5fa;
+  --ag-accent-text: #0b1120;
+  --ag-edge: #94a3b8;
+  --ag-valid: #4ade80;
+  --ag-error: #f87171;
+  --ag-warning: #fbbf24;
+  --ag-info: #60a5fa;
+  --ag-presentation: #60a5fa;
+  --ag-application: #2dd4bf;
+  --ag-domain: #a78bfa;
+  --ag-infrastructure: #94a3b8;
+  --ag-data: #fbbf24;
+  --ag-external: #a8a29e;
+  --ag-neutral: #64748b;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--ag-bg);
+  color: var(--ag-text);
+  font-family:
+    ui-sans-serif,
+    system-ui,
+    -apple-system,
+    'Segoe UI',
+    Roboto,
+    sans-serif;
+  font-size: 14px;
+}
+
+/* React Flow theming */
+.react-flow {
+  --xy-background-color: var(--ag-bg);
+  --xy-node-color: var(--ag-text);
+  --xy-minimap-background-color: var(--ag-panel);
+  --xy-minimap-mask-background-color: color-mix(in srgb, var(--ag-bg) 65%, transparent);
+  --xy-controls-button-background-color: var(--ag-panel);
+  --xy-controls-button-color: var(--ag-text);
+  --xy-controls-button-border-color: var(--ag-border);
+  --xy-edge-stroke: var(--ag-edge);
+  --xy-selection-background-color: color-mix(in srgb, var(--ag-accent) 10%, transparent);
+  --xy-selection-border: 1px dashed var(--ag-accent);
+}
+
+.react-flow__node {
+  /* ShapeNode draws its own border and background. */
+  padding: 0;
+  border: none;
+  background: transparent;
+}
+
+.ag-handle {
+  width: 10px !important;
+  height: 10px !important;
+  border: 2px solid var(--ag-panel) !important;
+  background: var(--ag-accent) !important;
+  opacity: 0;
+  transition: opacity 0.1s;
+}
+.react-flow__node:hover .ag-handle,
+.react-flow__node.selected .ag-handle,
+.ag-connecting .ag-handle {
+  opacity: 1;
+}
+
+/* Containers: only the header strip and the handles catch the pointer. */
+.react-flow__node.ag-container {
+  pointer-events: none !important;
+}
+.react-flow__node.ag-container .ag-container-header,
+.react-flow__node.ag-container .react-flow__handle {
+  pointer-events: all;
+}
+.ag-container-header {
+  background: color-mix(in srgb, var(--ag-panel) 70%, transparent);
+  cursor: grab;
+}
+
+.ag-target-valid > .ag-shape {
+  filter: drop-shadow(0 0 6px var(--ag-valid));
+}
+.ag-target-invalid {
+  opacity: 0.3;
+}
+
+.ag-md :where(p, ul, ol, pre, table, blockquote) {
+  margin: 0 0 0.6em;
+}
+.ag-md :where(ul, ol) {
+  padding-left: 1.2em;
+  list-style: disc;
+}
+.ag-md code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  background: var(--ag-panel-2);
+  padding: 0.1em 0.3em;
+  border-radius: 4px;
+}
+.ag-md pre {
+  background: var(--ag-panel-2);
+  padding: 8px;
+  border-radius: 6px;
+  overflow-x: auto;
+}
+.ag-md pre code {
+  background: none;
+  padding: 0;
+}
+.ag-md table {
+  border-collapse: collapse;
+  font-size: 12px;
+}
+.ag-md th,
+.ag-md td {
+  border: 1px solid var(--ag-border);
+  padding: 2px 6px;
+  text-align: left;
+}
+.ag-md blockquote {
+  border-left: 3px solid var(--ag-border);
+  padding-left: 8px;
+  color: var(--ag-muted);
+}

@@ -74,7 +74,7 @@ module.exports = {
     enhancedResolveOptions: {
       exportsFields: ['exports'],
       conditionNames: ['import', 'default'],
-      extensions: ['.ts', '.js'],
+      extensions: ['.ts', '.tsx', '.js'],
     },
   },
 };

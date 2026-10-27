@@ -247,3 +247,58 @@ function describeParents(catalog: Catalog, child: Concept): string {
     .map((c) => c.name);
   return names.length > 0 ? names.join(' or ') : 'a parent';
 }
+
+export interface PairExplanation {
+  /** Valid relation types, best first. Empty when the pair cannot be connected. */
+  allowed: RelationType[];
+  /** Why nothing is allowed. Empty string when something is allowed. */
+  message: string;
+  /** The best relation type for the reversed direction, when that direction is valid. */
+  flip?: string;
+}
+
+/**
+ * Explains a drag from one concept to another (Implementation.md §10.5). When no type is
+ * allowed, the message comes from the deny rule that best matches what the user probably
+ * meant, in this order: a type an allow rule accepts but a deny rule blocks; a type that is
+ * valid in the reverse direction (the arrow was drawn backwards); `calls` (the usual intent
+ * of an arrow); a rule for every type. Otherwise the message is generic.
+ */
+export function explainPair(
+  catalog: Catalog,
+  sourceKind: string,
+  targetKind: string,
+): PairExplanation {
+  const allowed = validRelationTypes(catalog, sourceKind, targetKind);
+  if (allowed.length > 0) return { allowed, message: '' };
+  const source = catalog.concepts.get(sourceKind);
+  const target = catalog.concepts.get(targetKind);
+  if (!source || !target)
+    return { allowed, message: `Unknown concept "${source ? targetKind : sourceKind}".` };
+
+  const types = [...catalog.relationTypes.values()].sort(
+    (a, b) => a.defaultPriority - b.defaultPriority,
+  );
+  const deniedButAllowed = types.find(
+    (t) =>
+      allowPriority(catalog, t, source, target, false) !== undefined &&
+      denyRuleFor(catalog, t.id, source, target),
+  );
+  const matching = (pred: (r: DenyRule) => boolean) =>
+    catalog.denyRules.find(
+      (r) => pred(r) && matchesAny(r.deny.from, source) && matchesAny(r.deny.to, target),
+    );
+  const flipped = validRelationTypes(catalog, targetKind, sourceKind).map((t) => t.id);
+  const backwards = flipped.map((t) => denyRuleFor(catalog, t, source, target)).find(Boolean);
+  const deny =
+    (deniedButAllowed && denyRuleFor(catalog, deniedButAllowed.id, source, target)) ||
+    backwards ||
+    matching((r) => typeMatches(r.type, 'calls') && r.type !== '*') ||
+    matching((r) => r.type === '*');
+
+  const flip = FLIP_PREFERENCE.find((t) => flipped.includes(t)) ?? flipped[0];
+  let message = deny?.message ?? `${source.name} cannot be connected to ${target.name}.`;
+  if (flip)
+    message += ` Reverse it: ${target.name} ${catalog.relationTypes.get(flip)!.name} ${source.name}.`;
+  return { allowed, message, ...(flip ? { flip } : {}) };
+}

@@ -8,7 +8,7 @@ file formats, tool schemas, commands, and a task checklist per phase.
 The earlier planning notes (`docs/PLAN.md`, `docs/STACK-REACT-NODE-POSTGRES.md`,
 `docs/RESEARCH.md`) were merged into this file and removed.
 
-**Progress:** Phase 0 (foundations, including the learning foundations) is done. See §26 for the checklist.
+**Progress:** Phase 0 (foundations, including the learning foundations) and Phase 1 (canvas MVP) are done. See §26 for the checklists.
 
 ---
 
@@ -1341,6 +1341,21 @@ post to the rules worker → (serve mode) send ops over WebSocket.
 
 ### 13.3 React Flow integration
 
+Implementation notes (Phase 1):
+
+- **View positions** are relative to the parent element when the parent is shown in the
+  same view, and absolute otherwise. A container's size is computed to enclose its
+  children (stored `w`/`h` is the minimum).
+- **Stacking:** React Flow paints all nodes in one layer above the edges. Containers are
+  therefore see-through: only their header strip and handles catch the pointer, so arrows
+  and shapes inside them stay visible and clickable.
+- **Connections** may be dropped anywhere on a shape: when React Flow finds no handle near
+  the pointer, the shape under the pointer is used (`elementsFromPoint`).
+- **New shapes** are placed to the right of the selection (or of the selected arrow's
+  target), in node-sized steps, and the view fits to show a shape that lands off screen.
+- UI preferences (level, palette mode, theme, preferred relation types) are stored in
+  localStorage with an in-memory fallback; projects are stored in IndexedDB (Dexie).
+
 - **View ↔ React Flow:** `nodes` and `edges` are derived with selectors from
   `project.model` + the active view. React Flow is controlled. `onNodesChange`
   position changes → `setViewNode` ops (merged per drag via `mergeKey`).
@@ -2575,24 +2590,26 @@ Estimates assume one full-time developer. They are rough.
 - [x] Learning foundations (§17.10): relation properties, tours + ops, `node.endpoint`, `node.dto`, `pg.function`, `pg.trigger`, `invokes`, `fires-on`; `core/learn` (schemas, parsers, check evaluator, lesson helpers); content pipeline with CI check; 9 texts and 2 lessons proven solvable
 - **Done when:** schema round-trips deterministically; the §10.4 table passes as tests. **Done.**
 
-### Phase 1: Canvas MVP (~3 weeks)
+### Phase 1: Canvas MVP (~3 weeks) — done
 
-- [ ] Vite + React app shell, routes, Tailwind, Radix, theme (light/dark)
-- [ ] Shape registry: all shapes in §9.2 as SVG components; gallery page
-- [ ] `ShapeNode`, `RelationEdge`, handles, badges
-- [ ] Palette (search, Basic/Full, groups), drag and drop
-- [ ] Inline label edit; Inspector with forms from `propertySchema`
-- [ ] Connect with `isValidConnection`, target glow/fade, relation picker, refusal toast with fix
-- [ ] Groups and nesting with `checkNesting`
-- [ ] Color by layer + override, legend
-- [ ] `projectStore`, `historyStore` (inverse ops), `uiStore`
-- [ ] Undo/redo, copy/paste/duplicate, multi-select, align, snap, minimap
-- [ ] Dexie persistence, autosave, workspace page (list/new/duplicate/delete)
-- [ ] JSON import/export
-- [ ] Command palette + shortcuts (§13.5)
-- [ ] Level switch (§17.2); Learn tab in the Inspector showing the text of the selected concept or relation; "Why?" link on refusals
-- [ ] Property forms for relations (concurrency control, isolation, auth, retries ...)
-- **Done when:** a user builds the T1 diagram from scratch in < 2 minutes (Playwright scenario), and a refused relation shows a message, a working fix and a "Why?" text.
+- [x] Vite + React app shell, hash routes (`#/`, `#/p/:id`, `#/gallery`), Tailwind, theme (light/dark/system); editor and gallery load lazily
+- [x] Shape registry: all shapes in §9.2 as SVG components; gallery page
+- [x] `ShapeNode` (icon, label, inline rename, four handles), `RelationEdge` (floating ends, line style and markers per relation type, parallel relations spread apart)
+- [x] Palette (search by name/ID/alias, Basic/Full, groups), drag and drop, click to add (next to the selection, inside it when allowed)
+- [x] Inline label edit (a new element's ID follows its first name); Inspector with forms generated from `propertySchema`
+- [x] Connect with `isValidConnection`, valid targets glow and others fade, relation picker (last choice per pair first), drop anywhere on a shape, refusal toast with "Reverse it" and "Why?" (`explainPair` in core)
+- [x] Groups and nesting with `checkNesting`, on drop from the palette and on drag between containers
+- [x] Color by layer + override, legend
+- [x] `projectStore` with history (inverse ops, merge keys), `uiStore` (preferences persisted in localStorage)
+- [x] Undo/redo, copy/paste/duplicate, multi-select, delete, snap to grid, minimap
+- [x] Dexie persistence, autosave (debounce + max wait + flush on close), workspace page (list/new/starter/duplicate/delete)
+- [x] JSON import/export
+- [x] Command palette + shortcuts (§13.5)
+- [x] Level switch (§17.2); Learn tab showing the text of the selected concept or relation at the reader's level; "Why?" on refusals
+- [x] Property forms for relations (concurrency control, isolation, auth, retries ...)
+- [x] Tests: 23 unit tests for the web library; 6 Playwright scenarios (build the starter, refusals and fixes, picker, nesting refusal, drag from the palette, drag into another container, duplicate/delete/undo, inspector edits, Learn levels, command palette, reload persistence); e2e job in CI
+- Moved: finding badges → Phase 2 (they need the rules engine); align/distribute → Phase 3 (with auto-layout); Radix UI not needed so far (plain accessible elements)
+- **Done when:** a user builds the T1 diagram from scratch in < 2 minutes (Playwright scenario: about 9 s scripted), and a refused relation shows a message, a working fix and a "Why?" text. **Done.**
 
 ### Phase 2: Rules engine (~2 weeks)
 
@@ -2603,6 +2620,7 @@ Estimates assume one full-time developer. They are rough.
 - [ ] Problems panel, badges, halos, edge overlays, tooltips
 - [ ] Quick fixes with preview; suppressions with reason
 - [ ] Concurrency, API and auth rules RNP-019 … RNP-027 (packs `concurrency`, `api`, `security`)
+- [ ] Finding badges on shapes and edges (moved from Phase 1)
 - [ ] "Why?" link from every finding to its learning text; `finding` checks wired into lessons
 - [ ] `docs/RULES.md` generated from rule metadata
 - **Done when:** every rule has positive and negative fixture tests and a docs entry; perf budget met.
@@ -2615,7 +2633,7 @@ Estimates assume one full-time developer. They are rough.
 - [ ] One tour and one pattern text (`pattern.*`) per template
 - [ ] Snapshots (create, list, restore), compare (diff overlay)
 - [ ] File System Access "Open folder" mode; `archguide.config.json` reading
-- [ ] ELK auto-layout worker
+- [ ] ELK auto-layout worker; align/distribute (moved from Phase 1)
 - **Done when:** each template validates with 0 errors under its own packs; a project saved to a folder reopens identically.
 
 ### Phase 4: Notes, annotations, exports (~2 weeks)
