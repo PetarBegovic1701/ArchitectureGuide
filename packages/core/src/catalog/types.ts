@@ -1,6 +1,7 @@
 import type { ZodType } from 'zod';
 import type { Layer } from '../schema';
 import type { LearningDoc, Lesson } from '../learn/schema';
+import type { Rule } from '../rules/types';
 
 export const CATEGORY_IDS = [
   'deployable',
@@ -153,6 +154,8 @@ export interface StackProfile {
   relationTypes: RelationType[];
   /** Checked before core rules, so profile deny messages win. */
   relationRules: RelationRule[];
+  /** Stack-specific anti-pattern rules (Implementation.md §11.6). */
+  rules?: Rule[];
   /** Learning texts and lessons (Implementation.md §17). */
   content?: { docs: readonly LearningDoc[]; lessons: readonly Lesson[] };
 }

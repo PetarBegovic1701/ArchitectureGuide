@@ -6,3 +6,5 @@ export * from './migrate';
 export * from './catalog';
 export * from './ops';
 export * from './learn';
+export * from './graph';
+export * from './rules';

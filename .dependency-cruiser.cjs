@@ -59,9 +59,11 @@ module.exports = {
     },
     {
       name: 'no-circular',
+      comment:
+        'Runtime import cycles. Cycles made only of type imports are erased at compile time.',
       severity: 'error',
       from: {},
-      to: { circular: true },
+      to: { circular: true, viaOnly: { dependencyTypesNot: ['type-only'] } },
     },
   ],
   options: {

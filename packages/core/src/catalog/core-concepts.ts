@@ -1,3 +1,4 @@
+import { z } from 'zod';
 import type { Concept } from './types';
 
 const TOP_OR_GROUP = ['top', 'group.*'];
@@ -66,6 +67,12 @@ export const CORE_CONCEPTS: Concept[] = [
     icon: 'database',
     idPrefix: 'store',
     allowedParents: TOP_OR_GROUP,
+    propertySchema: z
+      .object({
+        kind: z.enum(['cache', 'key-value', 'document', 'object-storage', 'search', 'other']),
+        product: z.string(),
+      })
+      .partial(),
     palette: { group: 'Data', order: 90, basic: false },
     docs: 'A data store outside the active profile (Redis, S3, MongoDB ...). Only generic rules apply.',
     aliases: ['redis', 's3', 'mongo', 'cache', 'blob'],
@@ -77,6 +84,13 @@ export const CORE_CONCEPTS: Concept[] = [
     icon: 'radio-tower',
     idPrefix: 'broker',
     allowedParents: TOP_OR_GROUP,
+    propertySchema: z
+      .object({
+        product: z.string(),
+        deadLetter: z.boolean(),
+        ordering: z.enum(['none', 'per-key', 'strict']),
+      })
+      .partial(),
     palette: { group: 'Events', order: 90, basic: false },
     docs: 'A broker outside the active profile (Kafka, RabbitMQ, SQS ...). Only generic rules apply.',
     aliases: ['kafka', 'rabbitmq', 'sqs', 'sns', 'nats'],

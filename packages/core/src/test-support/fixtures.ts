@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { createCatalog } from '../catalog';
 import type { StackProfile } from '../catalog';
 import { createProject } from '../project';
+import { applyOps } from '../ops';
 import type { Element, Project, Relation } from '../schema';
 
 /** A tiny profile so core tests do not depend on a real profile package. */
@@ -73,6 +74,26 @@ export const testProfile: StackProfile = {
       docs: 'Database.',
     },
     {
+      id: 't.event',
+      name: 'Event',
+      category: 'event',
+      icon: 'zap',
+      idPrefix: 'evt',
+      allowedParents: ['top', 't.service', 't.module'],
+      palette: { group: 'Events', order: 2, basic: true },
+      docs: 'Event.',
+    },
+    {
+      id: 't.domain',
+      name: 'Domain',
+      category: 'domain-core',
+      icon: 'hexagon',
+      idPrefix: 'dom',
+      allowedParents: ['t.service', 't.module'],
+      palette: { group: 'Backend', order: 5, basic: true },
+      docs: 'Domain.',
+    },
+    {
       id: 't.queue',
       name: 'Queue',
       category: 'data-in-motion',
@@ -140,4 +161,44 @@ export function sampleProject(): Project {
     updatedAt: NOW,
   });
   return p;
+}
+
+type ElSpec = [id: string, kind: string, extra?: Partial<Element>];
+type RelSpec = [sourceId: string, type: string, targetId: string, extra?: Partial<Relation>];
+
+/**
+ * Builds a project through real ops (so fixtures respect the hard constraints).
+ * Every rule pack is on unless `packs` says otherwise.
+ */
+export function build(
+  elements: ElSpec[],
+  relations: RelSpec[] = [],
+  options: { packs?: string[]; catalog?: ReturnType<typeof createCatalog> } = {},
+): Project {
+  const p = createProject({ id: 'fixture', name: 'Fixture', profile: 'test', now: NOW });
+  p.settings.rulePacks = options.packs ?? [
+    'core',
+    'frontend',
+    'security',
+    'concurrency',
+    'api',
+    'event-driven',
+    'microservices',
+    'layered',
+    'hexagonal',
+    'fsd',
+  ];
+  const ops = [
+    ...elements.map(([id, kind, extra]) => ({
+      op: 'addElement' as const,
+      element: el(id, kind, extra),
+    })),
+    ...relations.map(([s, type, t, extra], i) => ({
+      op: 'addRelation' as const,
+      relation: { ...rel(`rel.r${i}-${type}`, type, s, t), ...extra },
+    })),
+  ];
+  const result = applyOps(p, ops, options.catalog ?? testCatalog);
+  if (!result.ok) throw new Error(`Invalid fixture: ${JSON.stringify(result.errors[0])}`);
+  return result.project;
 }
