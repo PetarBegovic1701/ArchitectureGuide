@@ -1,0 +1,191 @@
+id: lesson.prevent-lost-updates
+title: Prevent lost updates and duplicate orders
+summary: An inventory service runs on three instances and oversells. Find the race, choose a concurrency strategy, make retries safe, and move slow work out of the request.
+track: concurrency-and-parallelism
+level: intermediate
+minutes: 20
+profile: react-node-postgres
+conceptIds:
+  - topic.concurrency-control
+  - topic.transactions-and-isolation
+  - topic.event-loop-and-parallelism
+  - pg.job-queue
+  - writes
+start:
+  ops:
+    - op: addElement
+      element: { id: app.shop, kind: react.app, name: Shop, status: existing }
+    - op: addElement
+      element:
+        id: svc.inventory
+        kind: node.service
+        name: Inventory API
+        status: existing
+        properties: { framework: express, instances: 3, poolSize: 10 }
+    - op: addElement
+      element: { id: mod.stock, kind: node.module, name: Stock, parentId: svc.inventory, status: existing }
+    - op: addElement
+      element:
+        id: ctl.stock
+        kind: node.route-handler
+        name: Stock routes
+        parentId: mod.stock
+        status: existing
+        properties: { routes: ['POST /reservations'], validation: zod }
+    - op: addElement
+      element: { id: uc.reserve, kind: node.use-case, name: ReserveStock, parentId: mod.stock, status: existing }
+    - op: addElement
+      element:
+        id: repo.stock
+        kind: node.repository
+        name: StockRepository
+        parentId: mod.stock
+        status: existing
+        properties: { dataAccess: prisma }
+    - op: addElement
+      element: { id: db.shop, kind: pg.database, name: Shop DB, status: existing }
+    - op: addElement
+      element: { id: schema.inventory, kind: pg.schema, name: inventory, parentId: db.shop, status: existing }
+    - op: addRelation
+      relation: { id: rel.shop-calls-inventory, type: calls, sourceId: app.shop, targetId: svc.inventory, protocol: http, label: POST /reservations, status: existing }
+    - op: addRelation
+      relation: { id: rel.ctl-calls-reserve, type: calls, sourceId: ctl.stock, targetId: uc.reserve, status: existing }
+    - op: addRelation
+      relation: { id: rel.reserve-calls-repo, type: calls, sourceId: uc.reserve, targetId: repo.stock, status: existing }
+    - op: addRelation
+      relation: { id: rel.repo-reads-inventory, type: reads, sourceId: repo.stock, targetId: schema.inventory, via: prisma, status: existing }
+    - op: addRelation
+      relation: { id: rel.repo-writes-inventory, type: writes, sourceId: repo.stock, targetId: schema.inventory, via: prisma, status: existing }
+    - op: addRelation
+      relation: { id: rel.inventory-migrates, type: migrates, sourceId: svc.inventory, targetId: schema.inventory, status: existing }
+steps:
+  - id: the-race
+    title: Find the race
+    body: |
+      `ReserveStock` does this today:
+
+      ```ts
+      const product = await repo.find(productId);          // stock = 1
+      if (product.stock < quantity) throw new OutOfStock();
+      await repo.save({ ...product, stock: product.stock - quantity });
+      ```
+
+      Two customers press **Buy** at the same moment. Both requests read `stock = 1`, both
+      pass the check, both write `stock = 0`. You sold two items and had one.
+
+      It does not need three instances: inside one Node process, other requests run at
+      every `await`. Three instances only make it more likely.
+
+  - id: choose-strategy
+    title: Choose a concurrency strategy
+    body: |
+      Select the **writes** arrow from *StockRepository* to the *inventory* schema and set
+      **Concurrency control** in the inspector:
+
+      - **row-lock** — `SELECT ... FOR UPDATE`: the second request waits for the first.
+      - **optimistic-version** — a `version` column: the second write fails and retries.
+      - **serializable-retry** — `SERIALIZABLE` transactions with a retry loop.
+
+      For a hot counter like stock, the simplest correct code is one atomic statement:
+      `UPDATE products SET stock = stock - $1 WHERE id = $2 AND stock >= $1`.
+      PostgreSQL locks the row while it updates it, so pick **row-lock**.
+    check:
+      hasRelation:
+        type: writes
+        from: { id: repo.stock }
+        to: { id: schema.inventory }
+        where:
+          properties.concurrencyControl: { in: [row-lock, optimistic-version, serializable-retry] }
+      message: Set a concurrency control on the writes relation from StockRepository to the inventory schema.
+    hints:
+      - The setting is in the inspector when the arrow (not a shape) is selected.
+    success: |
+      Now the diagram says how this write stays correct. An agent that implements it, and
+      the next developer who reads it, both see the decision instead of guessing.
+    solution:
+      - op: updateRelation
+        id: rel.repo-writes-inventory
+        patch: { properties: { concurrencyControl: row-lock, isolation: read-committed } }
+
+  - id: safe-retries
+    title: Make retries safe
+    body: |
+      Mobile networks drop responses. The React app retries `POST /reservations`, and now
+      one click can reserve twice.
+
+      Select the **calls** arrow from *Shop* to *Inventory API* and turn on
+      **Idempotency key**: the client sends a unique key per reservation, and the server
+      stores it with a `UNIQUE` constraint, so a repeated request returns the first result.
+    check:
+      hasRelation:
+        type: calls
+        from: { id: app.shop }
+        to: { id: svc.inventory }
+        where:
+          properties.idempotencyKey: true
+    solution:
+      - op: updateRelation
+        id: rel.shop-calls-inventory
+        patch: { properties: { idempotencyKey: true, retries: 2 } }
+
+  - id: background-work
+    title: Move slow work out of the request
+    body: |
+      After a reservation, the service also sends a confirmation email, which takes up to
+      two seconds and sometimes fails. The customer waits for it, and a failed email turns
+      a good reservation into an error.
+
+      1. Add a **Postgres job queue** (Events group) named "emails".
+      2. Connect *ReserveStock* to it with **enqueues**, and turn on **In transaction**:
+         the job is saved in the same transaction as the reservation, so you never send an
+         email for a reservation that was rolled back.
+      3. Add a **Background worker** named "Email worker" and connect it to the queue with
+         **processes**.
+    check:
+      all:
+        - hasRelation:
+            type: enqueues
+            from: { id: uc.reserve }
+            to: { kind: pg.job-queue }
+            where: { inTransaction: true }
+          message: Enqueue the email job from ReserveStock in the same transaction.
+        - hasRelation:
+            type: processes
+            from: { kind: node.worker }
+            to: { kind: pg.job-queue }
+          message: Add a background worker that processes the queue.
+    hints:
+      - A worker is a separate Node process, so CPU or slow I/O there never delays API requests.
+    success: |
+      The request now does only the fast, essential work. The worker retries failed emails
+      on its own, and you can scale it separately from the API.
+    solution:
+      - op: addElement
+        element:
+          id: jobs.emails
+          kind: pg.job-queue
+          name: emails
+          status: planned
+          properties: { lib: pg-boss }
+      - op: addElement
+        element:
+          id: wrk.email
+          kind: node.worker
+          name: Email worker
+          status: planned
+          properties: { jobLib: pg-boss, concurrency: 5 }
+      - op: addRelation
+        relation: { id: rel.reserve-enqueues-emails, type: enqueues, sourceId: uc.reserve, targetId: jobs.emails, inTransaction: true, status: planned }
+      - op: addRelation
+        relation: { id: rel.email-processes-emails, type: processes, sourceId: wrk.email, targetId: jobs.emails, status: planned }
+
+  - id: wrap-up
+    title: What you changed
+    body: |
+      - **Concurrency control** on the write stops overselling.
+      - **Idempotency keys** make retries safe.
+      - **A job queue + worker** keeps slow, failure-prone work out of the request.
+
+      Count the connections too: 3 API instances × 10 = 30, plus the worker's pool. Keep the
+      total under PostgreSQL's `max_connections` (default 100). Read **Concurrency and
+      parallelism in Node.js** for why.

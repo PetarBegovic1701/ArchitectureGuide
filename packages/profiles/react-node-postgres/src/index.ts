@@ -1,6 +1,7 @@
 import type { StackProfile } from '@archguide/core';
 import { CONCEPTS } from './concepts';
 import { RELATION_RULES, RELATION_TYPES } from './relations';
+import { DOCS, LESSONS } from './content.generated';
 
 export const PROFILE_ID = 'react-node-postgres';
 
@@ -12,6 +13,7 @@ export const profile: StackProfile = {
   concepts: CONCEPTS,
   relationTypes: RELATION_TYPES,
   relationRules: RELATION_RULES,
+  content: { docs: DOCS, lessons: LESSONS },
 };
 
-export { CONCEPTS, RELATION_RULES, RELATION_TYPES };
+export { CONCEPTS, DOCS, LESSONS, RELATION_RULES, RELATION_TYPES };

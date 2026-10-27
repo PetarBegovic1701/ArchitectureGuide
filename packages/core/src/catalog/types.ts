@@ -1,5 +1,6 @@
 import type { ZodType } from 'zod';
 import type { Layer } from '../schema';
+import type { LearningDoc, Lesson } from '../learn/schema';
 
 export const CATEGORY_IDS = [
   'deployable',
@@ -9,6 +10,7 @@ export const CATEGORY_IDS = [
   'domain-object',
   'port',
   'adapter',
+  'schema',
   'data-at-rest',
   'data-in-motion',
   'client-state',
@@ -39,6 +41,7 @@ export const SHAPE_IDS = [
   'actor',
   'cloud',
   'gear',
+  'document',
   'container',
 ] as const;
 export type ShapeId = (typeof SHAPE_IDS)[number];
@@ -113,6 +116,8 @@ export interface RelationType {
   defaultPriority: number;
   /** Shown when no allow rule matches a pair. */
   hint?: string;
+  /** Validates `Relation.properties`. Unknown keys are allowed. */
+  propertySchema?: ZodType;
   docs: string;
 }
 
@@ -148,4 +153,6 @@ export interface StackProfile {
   relationTypes: RelationType[];
   /** Checked before core rules, so profile deny messages win. */
   relationRules: RelationRule[];
+  /** Learning texts and lessons (Implementation.md §17). */
+  content?: { docs: readonly LearningDoc[]; lessons: readonly Lesson[] };
 }

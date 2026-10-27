@@ -1,5 +1,5 @@
 // Package boundaries of this monorepo (Implementation.md §4.2).
-// Hand-written for now. From Phase 6 on, `archguide generate dependency-cruiser`
+// Hand-written for now. From Phase 7 on, `archguide generate dependency-cruiser`
 // produces it from architecture/archguide.archguide.json.
 /** @type {import('dependency-cruiser').IConfiguration} */
 module.exports = {

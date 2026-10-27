@@ -9,12 +9,20 @@ const NODE_CODE_PARENTS = ['node.service', 'node.bff', 'node.worker', 'node.modu
 const dataAccess = z.enum(['prisma', 'drizzle', 'typeorm', 'kysely', 'knex', 'pg']);
 const framework = z.enum(['express', 'fastify', 'nestjs']);
 const transport = z.enum(['rest', 'graphql', 'trpc', 'websocket']);
+/** How many processes run and how each uses CPU cores (learning topic: parallelism). */
+const scalingProps = {
+  instances: z.number().int().positive(),
+  processModel: z.enum(['single', 'cluster', 'worker-threads']),
+  /** Database connections per instance. */
+  poolSize: z.number().int().positive(),
+};
 const nodeServiceProps = z
   .object({
     framework,
     runtime: z.string(),
     transport: z.array(transport),
     dataAccess,
+    ...scalingProps,
   })
   .partial();
 
@@ -35,6 +43,8 @@ const REACT: Concept[] = [
         bundler: z.enum(['vite']),
         router: z.enum(['react-router', 'tanstack-router']),
         rendering: z.enum(['csr']),
+        /** Where the browser keeps auth tokens (learning topic: authentication). */
+        tokenStorage: z.enum(['http-only-cookie', 'memory', 'local-storage', 'session-storage']),
       })
       .partial(),
     palette: { group: 'Frontend', order: 10, basic: true },
@@ -133,7 +143,11 @@ const REACT: Concept[] = [
     idPrefix: 'qcache',
     allowedParents: ['react.app'],
     propertySchema: z
-      .object({ lib: z.enum(['tanstack-query', 'swr', 'rtk-query', 'apollo']) })
+      .object({
+        lib: z.enum(['tanstack-query', 'swr', 'rtk-query', 'apollo']),
+        staleTimeMs: z.number().int().nonnegative(),
+        optimisticUpdates: z.boolean(),
+      })
       .partial(),
     palette: { group: 'Frontend', order: 80, basic: true },
     docs: 'Caches data from the backend in the browser: TanStack Query, SWR, RTK Query, Apollo.',
@@ -147,7 +161,10 @@ const REACT: Concept[] = [
     idPrefix: 'store-ui',
     allowedParents: ['react.app', 'react.feature'],
     propertySchema: z
-      .object({ lib: z.enum(['zustand', 'redux-toolkit', 'context', 'jotai']) })
+      .object({
+        lib: z.enum(['zustand', 'redux-toolkit', 'context', 'jotai']),
+        persist: z.enum(['none', 'local-storage', 'session-storage', 'indexeddb']),
+      })
       .partial(),
     palette: { group: 'Frontend', order: 90, basic: false },
     docs: 'Holds UI state that does not come from the server: Zustand, Redux Toolkit, Context, Jotai.',
@@ -206,8 +223,10 @@ const NODE: Concept[] = [
     propertySchema: z
       .object({
         jobLib: z.enum(['pg-boss', 'graphile-worker']),
+        /** Jobs one instance runs at the same time. */
         concurrency: z.number().int().positive(),
         dataAccess,
+        ...scalingProps,
       })
       .partial(),
     palette: { group: 'Backend', order: 30, basic: true },
@@ -278,7 +297,11 @@ const NODE: Concept[] = [
     idPrefix: 'mw',
     allowedParents: NODE_CODE_PARENTS,
     propertySchema: z
-      .object({ kind: z.enum(['auth', 'validation', 'rate-limit', 'error', 'other']) })
+      .object({
+        kind: z.enum(['auth', 'validation', 'rate-limit', 'error', 'other']),
+        authMethod: z.enum(['session', 'jwt', 'api-key', 'oauth-introspection']),
+        roles: z.array(z.string()),
+      })
       .partial(),
     palette: { group: 'Backend', order: 80, basic: false },
     docs: 'Runs before or after handlers: auth, validation, rate limiting, error handling.',
@@ -357,6 +380,72 @@ const NODE: Concept[] = [
     aliases: ['openapi', 'swagger', 'zod', 'schema', 'types'],
   },
   {
+    id: 'node.endpoint',
+    name: 'API endpoint',
+    category: 'module',
+    icon: 'arrow-right-left',
+    idPrefix: 'ep',
+    allowedParents: ['node.route-handler', 'node.contract'],
+    nestingHint:
+      'Endpoints live inside a route handler (code-first) or an API contract (contract-first).',
+    propertySchema: z
+      .object({
+        method: z.enum(['GET', 'POST', 'PUT', 'PATCH', 'DELETE']),
+        path: z.string().startsWith('/'),
+        /** ID of the request data shape (node.dto). */
+        request: z.string(),
+        /** ID of the response data shape (node.dto). */
+        response: z.string(),
+        statusCodes: z.array(z.number().int().min(100).max(599)),
+        auth: z.enum(['none', 'required', 'roles']),
+        roles: z.array(z.string()),
+        idempotent: z.boolean(),
+        pagination: z.enum(['none', 'offset', 'cursor']),
+        returnsList: z.boolean(),
+        version: z.string(),
+      })
+      .partial(),
+    palette: { group: 'Backend', order: 75, basic: true },
+    docs: 'One operation of an API: method, path, request and response shapes, status codes and auth (`POST /orders`).',
+    aliases: ['route', 'rest', 'operation', 'http', 'api design'],
+  },
+  {
+    id: 'node.dto',
+    name: 'Data shape (DTO)',
+    category: 'schema',
+    icon: 'file-json',
+    idPrefix: 'dto',
+    allowedParents: [
+      'top',
+      'group.*',
+      'node.contract',
+      'node.shared-lib',
+      'node.module',
+      'node.route-handler',
+      'node.service',
+      'node.bff',
+      'react.app',
+      'react.feature',
+    ],
+    propertySchema: z
+      .object({
+        role: z.enum(['request', 'response', 'event-payload', 'view-model', 'shared']),
+        format: z.enum(['zod', 'typescript', 'json-schema', 'openapi', 'graphql']),
+        fields: z.array(
+          z.object({
+            name: z.string().min(1),
+            type: z.string().min(1),
+            required: z.boolean().optional(),
+            description: z.string().optional(),
+          }),
+        ),
+      })
+      .partial(),
+    palette: { group: 'Backend', order: 135, basic: true },
+    docs: 'The shape of data that crosses a boundary: a request body, a response, an event payload. Not the same as the domain model or the table.',
+    aliases: ['dto', 'model', 'schema', 'payload', 'type', 'interface', 'zod'],
+  },
+  {
     id: 'node.shared-lib',
     name: 'Shared package',
     category: 'module',
@@ -406,7 +495,9 @@ const POSTGRES: Concept[] = [
     icon: 'database',
     idPrefix: 'db',
     allowedParents: ['top', 'group.*', 'pg.cluster'],
-    propertySchema: z.object({ extensions: z.array(z.string()) }).partial(),
+    propertySchema: z
+      .object({ extensions: z.array(z.string()), maxConnections: z.number().int().positive() })
+      .partial(),
     palette: { group: 'Data', order: 20, basic: true },
     docs: 'A PostgreSQL database.',
     aliases: ['postgres', 'postgresql', 'db', 'sql'],
@@ -467,6 +558,48 @@ const POSTGRES: Concept[] = [
     palette: { group: 'Data', order: 40, basic: false },
     docs: 'A table. Usually shown in the database drill-down view.',
     aliases: ['entity', 'relation'],
+  },
+  {
+    id: 'pg.function',
+    name: 'Function / stored procedure',
+    category: 'module',
+    icon: 'square-function',
+    idPrefix: 'fn',
+    defaultLayer: 'data',
+    allowedParents: ['pg.schema'],
+    nestingHint: 'Functions and procedures live in a schema.',
+    propertySchema: z
+      .object({
+        kind: z.enum(['function', 'procedure']),
+        language: z.enum(['sql', 'plpgsql']),
+        volatility: z.enum(['immutable', 'stable', 'volatile']),
+        securityDefiner: z.boolean(),
+        returns: z.string(),
+      })
+      .partial(),
+    palette: { group: 'Data', order: 45, basic: true },
+    docs: 'Code that runs inside PostgreSQL, next to the data (`CREATE FUNCTION` / `CREATE PROCEDURE`).',
+    aliases: ['stored procedure', 'procedure', 'plpgsql', 'sql function', 'rpc'],
+  },
+  {
+    id: 'pg.trigger',
+    name: 'Trigger',
+    category: 'module',
+    icon: 'zap',
+    idPrefix: 'trg',
+    defaultLayer: 'data',
+    allowedParents: ['pg.schema'],
+    nestingHint: 'Triggers live in a schema.',
+    propertySchema: z
+      .object({
+        timing: z.enum(['before', 'after', 'instead-of']),
+        events: z.array(z.enum(['insert', 'update', 'delete', 'truncate'])),
+        level: z.enum(['row', 'statement']),
+      })
+      .partial(),
+    palette: { group: 'Data', order: 46, basic: false },
+    docs: 'Runs a function automatically when rows in a table change (audit logs, updated_at columns, denormalized counters).',
+    aliases: ['on insert', 'on update', 'audit'],
   },
   {
     id: 'pg.view',

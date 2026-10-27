@@ -8,7 +8,7 @@ file formats, tool schemas, commands, and a task checklist per phase.
 The earlier planning notes (`docs/PLAN.md`, `docs/STACK-REACT-NODE-POSTGRES.md`,
 `docs/RESEARCH.md`) were merged into this file and removed.
 
-**Progress:** Phase 0 (foundations) is done. See §25 for the checklist.
+**Progress:** Phase 0 (foundations, including the learning foundations) is done. See §26 for the checklist.
 
 ---
 
@@ -30,26 +30,30 @@ The earlier planning notes (`docs/PLAN.md`, `docs/STACK-REACT-NODE-POSTGRES.md`,
 14. [Persistence, projects and sync](#14-persistence-projects-and-sync)
 15. [Notes, annotations and decisions](#15-notes-annotations-and-decisions)
 16. [Change sets (feature planning)](#16-change-sets-feature-planning)
-17. [Exporters](#17-exporters)
-18. [Repository analyzer](#18-repository-analyzer)
-19. [MCP server](#19-mcp-server)
-20. [Claude Code skill](#20-claude-code-skill)
-21. [CLI](#21-cli)
-22. [Enforcement and CI](#22-enforcement-and-ci)
-23. [Security and privacy](#23-security-and-privacy)
-24. [Testing strategy](#24-testing-strategy)
-25. [Delivery phases and task checklists](#25-delivery-phases-and-task-checklists)
-26. [Risks and mitigations](#26-risks-and-mitigations)
-27. [Open decisions](#27-open-decisions)
-28. [Glossary](#28-glossary)
-29. [Sources](#29-sources)
+17. [Learning and onboarding](#17-learning-and-onboarding)
+18. [Exporters](#18-exporters)
+19. [Repository analyzer](#19-repository-analyzer)
+20. [MCP server](#20-mcp-server)
+21. [Claude Code skill](#21-claude-code-skill)
+22. [CLI](#22-cli)
+23. [Enforcement and CI](#23-enforcement-and-ci)
+24. [Security and privacy](#24-security-and-privacy)
+25. [Testing strategy](#25-testing-strategy)
+26. [Delivery phases and task checklists](#26-delivery-phases-and-task-checklists)
+27. [Risks and mitigations](#27-risks-and-mitigations)
+28. [Open decisions](#28-open-decisions)
+29. [Glossary](#29-glossary)
+30. [Sources](#30-sources)
 
 ---
 
 ## 1. Product summary
 
 ArchitectureGuide is a drag-and-drop builder for frontend and backend
-architecture.
+architecture, for **beginners and seniors**. It helps people **learn** high-level
+concepts (models, API construction, database schemas, stored procedures, state
+management, authentication, concurrency, parallelism ...), **plan** features, and
+**onboard** people and AI agents to a project or a concept (§17).
 
 - You place **geometric shapes** on a canvas. Each shape is an architectural
   concept (service, database, queue, port, page ...). The shape shows the
@@ -67,6 +71,19 @@ architecture.
 - An **MCP server** and a **CLI** analyze a repository, create a draft
   architecture model inside that repository, keep it in sync, and enforce it
   in CI.
+- You **learn** with texts at three levels (beginner, intermediate, senior) and
+  interactive **lessons** on the real canvas that check your work.
+- You **onboard** people and agents with **tours** of a project and an
+  **onboarding pack** that explains exactly the concepts the project uses.
+
+### Audiences
+
+| Audience | Needs | Main features |
+|---|---|---|
+| Beginner developer | Understand what the parts are and why they exist | Lessons, Learn tab, plain-language refusals, tours |
+| Senior developer / architect | Design fast, check trade-offs, document decisions | Templates, rules, properties (isolation, auth, scaling), ADRs, change sets |
+| Team lead / onboarding | Bring new people up to speed | Tours, onboarding pack, glossary |
+| AI agent | Context and constraints before writing code | Agent export with invariants and concept primer, MCP tools |
 
 ### Goals
 
@@ -77,6 +94,8 @@ architecture.
 5. AI-agent-friendly export and feature planning.
 6. Projects, saving, notes, annotations.
 7. Repository analysis and enforcement through MCP, CLI and CI.
+8. Teach concepts at the reader's level, with checked lessons and correct, referenced content.
+9. Onboard people and agents to a project or a concept.
 
 ### Non-goals for v1
 
@@ -86,8 +105,9 @@ architecture.
 
 ### Positioning
 
-"An architecture linter with a canvas, for React + Node.js + PostgreSQL,
-connected to your coding agent."
+"Learn, plan and explain software architecture on one canvas: a checked model for
+React + Node.js + PostgreSQL that teaches beginners, speeds up seniors, and briefs your
+coding agent."
 
 ---
 
@@ -108,6 +128,12 @@ v1 supports **one stack in depth**:
 other languages. You place them as the generic "Other data store" or "External
 system". Only generic rules apply to them, and they show an "outside profile"
 badge.
+
+**Learning topics in v1** (details and tracks in §17.3): models (domain, persistence,
+DTO, view), API construction, database schemas, stored functions and procedures,
+triggers, state management, authentication and authorization, concurrency
+(transactions, isolation, locks, idempotency) and parallelism (event loop, worker
+threads, instances, pools), and the architecture patterns of the templates.
 
 **Planned as v1.1 profiles:** Next.js / React Server Components,
 Supabase / PostgREST. Later: Python, Go, Java profiles.
@@ -175,18 +201,18 @@ anti-pattern rules, a two-way agent loop, and enforcement on the real code.
 
 | # | Decision | Where it is applied |
 |---|---|---|
-| R1 | MCP write tools take **structured JSON**, never DSL text. Every response returns validation errors and new rule findings. | §19 |
-| R2 | The import graph comes from **dependency-cruiser** (v1 is JS/TS only). | §18 |
-| R3 | **Generate enforcement config** from the model: `.dependency-cruiser.cjs` (default), Nx `depConstraints`, ArchUnitTS spec (optional). | §22 |
-| R4 | Change sets export **Spec Kit** and **Kiro** file layouts. | §17 |
-| R5 | Ship a **Claude Code skill** next to the MCP server. | §20 |
-| R6 | Export to **LikeC4** and **Structurizr DSL**. Do not compete on DSLs. | §17 |
-| R7 | Postgres drill-down is a light table view + **DBML** export, not a full ERD editor. | §13, §17 |
-| R8 | Live DB introspection is optional, uses a **read-only role** and **`pg_catalog`**. | §18 |
-| R9 | Analyzer, rendering and exports run **100% locally**. | §23 |
-| R10 | OpenTelemetry trace import is a later analyzer source. | §25 (later) |
+| R1 | MCP write tools take **structured JSON**, never DSL text. Every response returns validation errors and new rule findings. | §20 |
+| R2 | The import graph comes from **dependency-cruiser** (v1 is JS/TS only). | §19 |
+| R3 | **Generate enforcement config** from the model: `.dependency-cruiser.cjs` (default), Nx `depConstraints`, ArchUnitTS spec (optional). | §23 |
+| R4 | Change sets export **Spec Kit** and **Kiro** file layouts. | §18 |
+| R5 | Ship a **Claude Code skill** next to the MCP server. | §21 |
+| R6 | Export to **LikeC4** and **Structurizr DSL**. Do not compete on DSLs. | §18 |
+| R7 | Postgres drill-down is a light table view + **DBML** export, not a full ERD editor. | §13, §18 |
+| R8 | Live DB introspection is optional, uses a **read-only role** and **`pg_catalog`**. | §19 |
+| R9 | Analyzer, rendering and exports run **100% locally**. | §24 |
+| R10 | OpenTelemetry trace import is a later analyzer source. | §26 (later) |
 | R11 | The value is the workflow (plan → agent → CI), not the picture. | Whole product |
-| R12 | Scaffolding stays minimal. No business-logic generation. | §25 (later) |
+| R12 | Scaffolding stays minimal. No business-logic generation. | §26 (later) |
 
 ---
 
@@ -320,6 +346,7 @@ ArchitectureGuide/
 │  │  ├─ src/rules/                 # engine + generic rules AP-*
 │  │  ├─ src/templates/             # template engine
 │  │  ├─ src/changesets/            # overlay, diff, task ordering
+│  │  ├─ src/learn/                 # learning schemas, parsers, check evaluator, lesson helpers (§17)
 │  │  ├─ src/export/                # agent-md, yaml, plan, speckit, kiro, mermaid, likec4, structurizr, dbml
 │  │  ├─ src/import/                # json, mermaid (subset), structurizr (subset)
 │  │  ├─ src/serialize/             # deterministic JSON
@@ -330,8 +357,12 @@ ArchitectureGuide/
 │  │     ├─ src/concepts.ts  relations.ts  nesting.ts
 │  │     ├─ src/rules/              # RNP-* rules
 │  │     ├─ src/templates/          # T1–T13
-│  │     ├─ src/detectors/          # analyzer detectors (§18)
-│  │     ├─ src/generators/         # dependency-cruiser, nx, archunit (§22)
+│  │     ├─ src/detectors/          # analyzer detectors (§19)
+│  │     ├─ src/generators/         # dependency-cruiser, nx, archunit (§23)
+│  │     ├─ src/content.generated.ts  # compiled learning content (pnpm content)
+│  │     ├─ content/docs/           # learning texts, one Markdown file per ID (§17.4)
+│  │     ├─ content/lessons/        # lessons, one YAML file each (§17.5)
+│  │     ├─ scripts/build-content.ts
 │  │     └─ src/index.ts            # export const profile: StackProfile
 │  ├─ analyzer/
 │  │  ├─ src/discover.ts  run.ts  resolve.ts  match.ts
@@ -342,7 +373,7 @@ ArchitectureGuide/
 │  ├─ cli/                          # archguide
 │  └─ mcp-server/                   # archguide-mcp
 ├─ skills/
-│  └─ archguide/SKILL.md            # Claude Code skill (§20), copied by `archguide init`
+│  └─ archguide/SKILL.md            # Claude Code skill (§21), copied by `archguide init`
 └─ docs/                            # generated reference docs (RULES.md from Phase 2)
 ```
 
@@ -378,6 +409,7 @@ interface Project {
   views: View[];
   notes: Note[];
   decisions: Decision[];
+  tours: Tour[];             // onboarding walkthroughs (§17.8)
   changeSets: ChangeSet[];
   snapshots: SnapshotRef[];  // metadata only; content in .archguide/snapshots/
   settings: ProjectSettings;
@@ -422,6 +454,7 @@ interface Relation {
   via?: string;              // ORM for reads/writes: "prisma", "drizzle" ...
   inTransaction?: boolean;   // for enqueues (RNP-007)
   contract?: string;         // path or URL: "openapi.yaml#/paths/~1orders/post"
+  properties?: Record<string, unknown>;   // validated by the relation type's propertySchema (§10.2)
   status: Status;
   notes?: string;
   source?: Provenance;
@@ -456,6 +489,17 @@ interface Annotation {
 }
 
 interface Note { id: Id; title: string; body: string; linkedIds: Id[]; updatedAt: Iso }
+
+interface Tour {
+  id: Id; title: string; description?: string;
+  audience: 'any' | 'beginner' | 'intermediate' | 'senior' | 'agent';
+  steps: {
+    id: Id; title: string; body: string;    // Markdown
+    viewId?: Id;                            // view to open
+    elementIds: Id[]; relationIds: Id[];    // highlighted and zoomed to
+    conceptIds?: string[];                  // linked learning texts (§17.4)
+  }[];                                      // at least one
+}
 
 interface Decision {         // lightweight ADR
   id: Id;                    // "adr-004"
@@ -589,6 +633,7 @@ type ModelOp =
   | { op: 'upsertAnnotation'; viewId: Id; annotation: Annotation } | { op: 'removeAnnotation'; viewId: Id; id: Id }
   | { op: 'upsertNote'; note: Note } | { op: 'removeNote'; id: Id }
   | { op: 'upsertDecision'; decision: Decision } | { op: 'removeDecision'; id: Id }
+  | { op: 'upsertTour'; tour: Tour } | { op: 'removeTour'; id: Id }
   | { op: 'upsertSuppression'; suppression: Suppression } | { op: 'removeSuppression'; ruleId: string; targetIds: Id[] }
   | { op: 'updateProject'; patch: Patch }                // name, description, profile, derivedFrom
   | { op: 'updateSettings'; patch: Patch };              // any ProjectSettings field
@@ -604,10 +649,12 @@ Rules that apply to all ops:
 - Every op is validated with `OpSchema` first (ops from MCP and sync are untrusted).
 - Patches are merged, then the full item is validated, so a patch cannot break an item.
 - Removing an element or relation also removes its view nodes/edges, the
-  annotations anchored to it, view scopes and scenario steps that point at it.
-  The inverse restores all of them.
+  annotations anchored to it, view scopes, scenario steps and tour highlights that
+  point at it. Removing a view clears it from tour steps. The inverse restores all of them.
+- Relation and element `properties` are validated against the type's / concept's
+  `propertySchema` (`PROPERTY_INVALID`).
 - `renameId` updates parents, relation ends, views, anchors, note/decision links,
-  suppressions, and element properties whose value is exactly the old ID
+  suppressions, tour steps, and element properties whose value is exactly the old ID
   (for example `pg.schema` `ownedBy`). It does not rewrite ops stored in change sets.
 
 ### 8.2 Functions (`core/ops`)
@@ -652,7 +699,7 @@ direction is valid (for example "Database calls Service" → "Service reads Data
 
 ```ts
 interface Category {
-  id: CategoryId;            // 'deployable' | 'module' | 'ui' | 'domain-core' | 'domain-object' | 'port' | 'adapter'
+  id: CategoryId;            // 'deployable' | 'module' | 'ui' | 'domain-core' | 'domain-object' | 'port' | 'adapter' | 'schema'
                              // | 'data-at-rest' | 'data-in-motion' | 'event' | 'routing' | 'security'
                              // | 'actor' | 'external' | 'group' | 'cross-cutting' | 'client-state'
   shape: ShapeId;
@@ -684,8 +731,8 @@ interface StackProfile {
   rules: Rule[];                       // §11
   rulePacks: RulePack[];
   templates: Template[];               // §12
-  detectors: Detector[];               // §18
-  generators: EnforcementGenerator[];  // §22
+  detectors: Detector[];               // §19
+  generators: EnforcementGenerator[];  // §23
 }
 ```
 
@@ -711,6 +758,7 @@ interface StackProfile {
 | `actor` | Head + body | 60×80 | actor |
 | `cloud` | Cloud | 150×90 | external |
 | `gear` | Rounded rect with a gear badge | 120×64 | cross-cutting |
+| `document` | Page with a folded corner | 120×72 | schema (data shape) |
 | `container` | Dashed rectangle with a title tab, resizable | min 240×160 | group |
 
 Each shape is one React component that draws an SVG `path` from width and
@@ -760,35 +808,37 @@ A legend is generated for the active mode.
 
 | ID | Name | Shape | Prefix | Allowed parents | Key properties |
 |---|---|---|---|---|---|
-| `react.app` | React app | rect | `app` | top, `group.*` | `bundler: 'vite'`, `router: 'react-router' \| 'tanstack-router'`, `rendering: 'csr'` |
+| `react.app` | React app | rect | `app` | top, `group.*` | `bundler: 'vite'`, `router: 'react-router' \| 'tanstack-router'`, `rendering: 'csr'`, `tokenStorage: 'http-only-cookie' \| 'memory' \| 'local-storage' \| 'session-storage'` |
 | `react.route` | Route / page | window | `route` | `react.app`, `react.layout` | `path`, `lazy`, `authRequired` |
 | `react.layout` | Layout route | window | `layout` | `react.app`, `react.layout` | `path` |
 | `react.feature` | Feature module | rounded | `feat` | `react.app`, `group.layer` | `folder`, `fsdLayer: 'app' \| 'pages' \| 'widgets' \| 'features' \| 'entities' \| 'shared'` |
 | `react.component` | Shared component | rounded | `cmp` | `react.app`, `react.feature`, `react.design-system` | `folder` |
 | `react.design-system` | UI kit / design system | rounded | `ds` | top, `react.app` | `package` |
 | `react.hook` | Custom hook | rounded | `hook` | `react.app`, `react.feature` | – |
-| `react.server-state` | Server-state cache | cylinder-dashed | `qcache` | `react.app` | `lib: 'tanstack-query' \| 'swr' \| 'rtk-query' \| 'apollo'` |
-| `react.client-store` | Client state store | cylinder-dashed | `store` | `react.app`, `react.feature` | `lib: 'zustand' \| 'redux-toolkit' \| 'context' \| 'jotai'` |
+| `react.server-state` | Server-state cache | cylinder-dashed | `qcache` | `react.app` | `lib: 'tanstack-query' \| 'swr' \| 'rtk-query' \| 'apollo'`, `staleTimeMs`, `optimisticUpdates` |
+| `react.client-store` | Client state store | cylinder-dashed | `store-ui` | `react.app`, `react.feature` | `lib: 'zustand' \| 'redux-toolkit' \| 'context' \| 'jotai'`, `persist: 'none' \| 'local-storage' \| 'session-storage' \| 'indexeddb'` |
 | `react.api-client` | API client | plug | `apic` | `react.app` | `kind: 'fetch' \| 'axios' \| 'openapi-generated' \| 'trpc' \| 'graphql'` |
 
 ### 9.6 Node.js concepts
 
 | ID | Name | Shape | Prefix | Allowed parents | Key properties |
 |---|---|---|---|---|---|
-| `node.service` | Node service | rect | `svc` | top, `group.*` | `framework: 'express' \| 'fastify' \| 'nestjs'`, `runtime`, `transport[]` |
+| `node.service` | Node service | rect | `svc` | top, `group.*` | `framework: 'express' \| 'fastify' \| 'nestjs'`, `runtime`, `transport[]`, `dataAccess`, `instances`, `processModel: 'single' \| 'cluster' \| 'worker-threads'`, `poolSize` |
 | `node.bff` | Backend-for-Frontend | rect | `bff` | top, `group.*` | same as service, `client` (element ID) |
-| `node.worker` | Background worker | rect (cog) | `wrk` | top, `group.*` | `jobLib: 'pg-boss' \| 'graphile-worker'`, `concurrency` |
+| `node.worker` | Background worker | rect (cog) | `wrk` | top, `group.*` | `jobLib: 'pg-boss' \| 'graphile-worker'`, `concurrency`, `instances`, `processModel`, `poolSize` |
 | `node.scheduler` | Scheduled job | rect (clock) | `cron` | top, `node.service`, `node.worker` | `lib`, `cron` |
 | `node.ws-gateway` | Realtime gateway | diamond | `ws` | top, `node.service` | `lib: 'socket.io' \| 'ws'` |
 | `node.module` | Module | rounded | `mod` | `node.service`, `node.bff`, `node.worker`, `group.*` | `exports[]` (public API) |
 | `node.route-handler` | Controller / route handler | rounded | `ctl` | `node.service`, `node.bff`, `node.module` | `routes[]`, `validation` |
-| `node.middleware` | Middleware | rounded (filter) | `mw` | `node.service`, `node.bff`, `node.module` | `kind: 'auth' \| 'validation' \| 'rate-limit' \| 'error'` |
+| `node.middleware` | Middleware | rounded (filter) | `mw` | `node.service`, `node.bff`, `node.module` | `kind: 'auth' \| 'validation' \| 'rate-limit' \| 'error'`, `authMethod: 'session' \| 'jwt' \| 'api-key' \| 'oauth-introspection'`, `roles[]` |
 | `node.use-case` | Use case / application service | rounded | `uc` | `node.service`, `node.module` | – |
 | `node.domain` | Domain model / aggregate | hexagon | `dom` | `node.service`, `node.module`, `group.context` | `invariants[]` |
 | `node.port` | Port (interface) | circle | `port` | `node.service`, `node.module` | – |
 | `node.repository` | Repository / data access | plug | `repo` | `node.service`, `node.module` | `dataAccess: 'prisma' \| 'drizzle' \| 'typeorm' \| 'kysely' \| 'knex' \| 'pg'` |
 | `node.event` | Domain / integration event | triangle | `evt` | any non-data element | `payloadSchema` |
 | `node.contract` | API contract package | circle (document) | `api` | top, `group.*` | `kind: 'openapi' \| 'zod' \| 'trpc-router' \| 'graphql-schema'` |
+| `node.endpoint` | API endpoint | rounded | `ep` | `node.route-handler`, `node.contract` | `method`, `path`, `request` / `response` (DTO IDs), `statusCodes[]`, `auth: 'none' \| 'required' \| 'roles'`, `roles[]`, `idempotent`, `pagination: 'none' \| 'offset' \| 'cursor'`, `returnsList`, `version` |
+| `node.dto` | Data shape (DTO) | document | `dto` | top, `group.*`, contract, shared package, module, handler, service, BFF, React app/feature | `role: 'request' \| 'response' \| 'event-payload' \| 'view-model' \| 'shared'`, `format`, `fields[]` |
 | `node.shared-lib` | Shared package | rounded (stacked) | `lib` | top, `group.*` | `package` |
 
 The ORM is a **property** (`dataAccess`, or `via` on relations), not a shape.
@@ -798,10 +848,12 @@ The ORM is a **property** (`dataAccess`, or `via` on relations), not a shape.
 | ID | Name | Shape | Prefix | Allowed parents | Key properties |
 |---|---|---|---|---|---|
 | `pg.cluster` | Postgres server | container (elephant) | `pgc` | top, `group.zone` | `version`, `hosting: 'self' \| 'rds' \| 'neon' \| 'supabase' \| ...` |
-| `pg.database` | Database | cylinder | `db` | top, `pg.cluster`, `group.*` | `extensions[]` |
+| `pg.database` | Database | cylinder | `db` | top, `pg.cluster`, `group.*` | `extensions[]`, `maxConnections` |
 | `pg.schema` | Schema | cylinder (segment), acts as group | `schema` | `pg.database` | `ownedBy` (element ID), `migrationTool`, `rls` |
 | `pg.table` | Table | small rect (database view only) | `tbl` | `pg.schema` | `columns[]`, `primaryKey[]`, `foreignKeys[]`, `indexes[]` |
 | `pg.view` | View / materialized view | cylinder-dashed | `view` | `pg.schema` | `materialized`, `refresh` |
+| `pg.function` | Function / stored procedure | rounded | `fn` | `pg.schema` | `kind: 'function' \| 'procedure'`, `language: 'sql' \| 'plpgsql'`, `volatility`, `securityDefiner`, `returns` |
+| `pg.trigger` | Trigger | rounded (zap) | `trg` | `pg.schema` | `timing: 'before' \| 'after' \| 'instead-of'`, `events[]`, `level: 'row' \| 'statement'` |
 | `pg.replica` | Read replica | cylinder (copy) | `replica` | top, `pg.cluster` | `lagTolerance` |
 | `pg.pooler` | Connection pooler | diamond (small) | `pool` | top, `pg.cluster` | `kind: 'pgbouncer' \| 'pgcat' \| 'rds-proxy' \| 'app-pool'`, `mode` |
 | `pg.job-queue` | Postgres job queue | pipe | `jobs` | top, `pg.database`, `pg.schema` | `lib: 'pg-boss' \| 'graphile-worker'`, `queues[]` |
@@ -857,8 +909,23 @@ interface RelationType {
 | `serves` | static | solid, open arrow | Node serves the SPA build | RNP |
 | `uses-state` | static | dotted | Component/route → store | RNP |
 | `fetches-via` | sync | solid thin | Server-state/hook → API client | RNP |
+| `invokes` | sync | solid, arrow | Runs a database function or procedure | RNP |
+| `fires-on` | static | dashed thin | A trigger runs when rows of a table or view change | RNP |
 
 Nesting (component inside service) uses `parentId`, never an edge.
+
+**Relation properties.** A relation type may have a `propertySchema`; values live in
+`Relation.properties`. These carry the concurrency, auth and reliability decisions
+that the learning content (§17) and the rules (§11) talk about:
+
+| Relation | Properties |
+|---|---|
+| `calls` | `auth: 'none' \| 'session-cookie' \| 'bearer-token' \| 'api-key' \| 'mtls'`, `idempotent`, `idempotencyKey`, `timeoutMs`, `retries` |
+| `reads` | `isolation: 'read-committed' \| 'repeatable-read' \| 'serializable'`, `consistency: 'strong' \| 'eventual'`, `cached` |
+| `writes` | `isolation`, `concurrencyControl: 'none' \| 'optimistic-version' \| 'row-lock' \| 'advisory-lock' \| 'serializable-retry'`, `idempotencyKey`, `batch` |
+| `publishes` | `deliveryGuarantee: 'at-most-once' \| 'at-least-once' \| 'effectively-once'` |
+| `consumes` | `concurrency`, `ordering: 'none' \| 'per-key' \| 'strict'`, `deliveryGuarantee` |
+| `authenticates-with` | `flow: 'password' \| 'oidc-code-pkce' \| 'oauth-client-credentials' \| 'magic-link' \| 'passkey' \| 'api-key'`, `tokenType: 'session' \| 'jwt' \| 'opaque'` |
 
 ### 10.3 Compatibility matrix
 
@@ -933,6 +1000,13 @@ The profile adds rules for its relations and **restricts** core ones with
 | `pg.table` outside `pg.schema` | `NESTING_NOT_ALLOWED` | "Tables live in a schema (default: `public`)." | Create `public` schema |
 | `react.*` nested in `node.service` | `NESTING_NOT_ALLOWED` | "Use the *serves* relation instead of nesting." | Add `serves` |
 | Nesting cycle | `NESTING_CYCLE` | "An element cannot be inside itself." | – |
+| Node `calls` / `depends-on` a `pg.function` | `RELATION_NOT_ALLOWED` | "Run database functions with invokes (SELECT fn(...) or CALL proc(...))." | Use `invokes` |
+| `pg.function` / `pg.trigger` → app element | same | "Database code only works with database objects." | – |
+| React code `depends-on` server code (handler, use case, repository ...) | same | "Browser code must not import server code. Share types through an API contract or a data shape (DTO)." | – |
+| Backend or data element `renders` | same | "Only React code renders UI." | – |
+| `navigates` to a component | same | "Users navigate to routes, not to components." | – |
+| `calls` a connection pooler | same | "A pooler only forwards database connections. Use connects-via." | Use `connects-via` |
+| A data shape (DTO) with behaviour (calls, reads ...) | same | Generic: only `depends-on` another data shape | – |
 
 ### 10.5 Smart defaults
 
@@ -977,7 +1051,7 @@ interface RuleContext {
   project: Project;
   catalog: Catalog;
   settings: ProjectSettings;
-  analysis?: AnalysisResult;          // §18
+  analysis?: AnalysisResult;          // §19
 }
 
 interface Finding {
@@ -1042,7 +1116,9 @@ interface GraphQuery {
 | `cqrs` | read side must not write the write model | T9 |
 | `frontend` | AP-002, RNP-003, RNP-004, RNP-012 | all React templates |
 | `fsd` | RNP-013, RNP-014 | T11 |
-| `security` | AP-010/RNP-016, AP-015 | T13; recommended for all |
+| `security` | AP-010/RNP-016, AP-015, RNP-024, RNP-026 | T13; recommended for all |
+| `concurrency` | RNP-019, RNP-020, RNP-021, RNP-022, RNP-023 | T6, T7, T8; on in the concurrency track |
+| `api` | RNP-015, RNP-023, RNP-024, RNP-025 | T1, T2, T5, T12 |
 | `react-node-postgres` | all RNP rules not listed above | when the profile is active |
 
 ### 11.5 Generic anti-patterns (AP)
@@ -1090,6 +1166,23 @@ interface GraphQuery {
 | RNP-016 | Public service without auth | Path actor → Node deployable with no auth middleware / `authenticates-with` | model | warn | Add auth middleware or gateway |
 | RNP-017 | FK without index | Table FK columns without a matching index (from schema or introspection) | analysis | info | Add an index (migration snippet) |
 | RNP-018 | Cycles between Node modules | Import cycle between `node.module` `codePaths` (NestJS `forwardRef` is a hint) | analysis | warn | Extract a shared module, or use events |
+
+**Concurrency, parallelism, API and auth rules.** These use the relation and element
+properties (§10.2, §9) and are the rules the learning tracks (§17.3) lean on most:
+
+| ID | Anti-pattern | Detection | Scope | Sev. | Quick fix |
+|---|---|---|---|---|---|
+| RNP-019 | Lost-update risk | `writes` with no `concurrencyControl` (or `none`) to a target tagged `contended`, or whose writers run with `instances > 1` / worker `concurrency > 1` and responsibilities matching `/stock\|inventory\|balance\|seat\|counter\|quota/i` | model | warn | Set `row-lock` or `optimistic-version`; link to *Concurrency control* |
+| RNP-020 | Connection exhaustion | Σ over Node deployables writing/reading one `pg.database` of `instances × poolSize` (defaults 1 × 10) > `maxConnections` (default 100) × 0.8, and no `pg.pooler` in front | model | warn | Smaller pools, or add PgBouncer (transaction mode) |
+| RNP-021 | CPU-heavy work on the event loop | Node element with responsibilities matching `/resize\|image\|pdf\|hash\|encrypt\|compress\|report\|parse large/i` or tag `cpu-heavy`, `processModel: single`, and no worker in the path | model | info | Move to `worker_threads` or a `node.worker` |
+| RNP-022 | Serializable without retry | `writes` with `isolation: serializable` whose `concurrencyControl` is not `serializable-retry` | model | info | Retry the whole transaction on SQLSTATE 40001 |
+| RNP-023 | Retried call is not idempotent | `calls` with `retries > 0` to a `node.endpoint` with `method: POST` (or `PATCH`), `idempotent` not true, and no `idempotencyKey` | model | warn | Accept an `Idempotency-Key`; store it with a unique constraint |
+| RNP-024 | Mutating endpoint without auth | `node.endpoint` with method `POST`/`PUT`/`PATCH`/`DELETE` and `auth: none`, reachable from an actor | model | warn | Require auth, or document why it is public (suppression) |
+| RNP-025 | Unpaginated list endpoint | `node.endpoint` with `method: GET`, `returnsList: true`, `pagination: none` (or missing) | model | info | Add cursor or offset pagination |
+| RNP-026 | Tokens in web storage | `react.app` with `tokenStorage: local-storage \| session-storage`, or a `react.client-store` with `persist` that holds auth data (tag `auth`) | model | warn | HttpOnly, Secure, SameSite cookie; or a BFF that holds the tokens |
+| RNP-027 | Logic split between SQL and service | A `pg.function` or `pg.trigger` writes a table that a Node service also writes, and neither is documented in a decision | model | info | Decide where the rule lives; record an ADR |
+
+Every rule links to a learning text (rule text or topic, §17.4) from its "Why?" link.
 
 ### 11.7 Suppressions
 
@@ -1213,7 +1306,12 @@ finds other paths, the scan suggests updating them.
 ```
 
 Routes: `/` (workspace: project list, "New from template", "Open folder"),
-`/p/:projectId/:viewId?`, `/settings`.
+`/p/:projectId/:viewId?`, `/learn` (tracks and library), `/learn/:textId`,
+`/lessons/:lessonId` (opens the lesson's start model in a scratch project),
+`/settings`.
+
+The top bar has a **level switch** (Beginner / Intermediate / Senior, §17.2) and, in
+a lesson or tour, a progress strip.
 
 ### 13.2 Stores
 
@@ -1227,7 +1325,12 @@ Routes: `/` (workspace: project list, "New from template", "Open folder"),
 // mergeKey merges rapid ops (e.g. a drag) into one step
 
 // uiStore
-{ paletteMode: 'basic' | 'full'; colorBy: ...; filters: ...; focusId?: Id; panels: ...; theme: 'light' | 'dark' | 'system' }
+{ paletteMode: 'basic' | 'full'; colorBy: ...; filters: ...; focusId?: Id; panels: ...; theme: 'light' | 'dark' | 'system';
+  level: 'beginner' | 'intermediate' | 'senior' }      // §17.2; persisted per browser
+
+// learnStore
+{ activeLesson?: { lessonId: string; stepIndex: number; hintsShown: number }; activeTour?: { tourId: Id; stepIndex: number };
+  progress: Progress }                                // §17.9; Dexie "progress" table
 
 // findingsStore (from rules worker)
 { byTarget: Map<Id, Finding[]>; all: Finding[]; running: boolean }
@@ -1270,6 +1373,9 @@ post to the rules worker → (serve mode) send ops over WebSocket.
 | Decisions | ADR list + editor, status, links |
 | Change set | Ops list (human readable), status, tasks, "Export plan" |
 | Analysis review | Inferred items grouped by detector, confidence, evidence; Accept / Edit / Reject per item or in bulk |
+| Learn (Inspector tab) | Learning text for the selection or finding at the user's level; examples; related texts; quiz (§17.7) |
+| Lesson | Current step, check status, hints, "Show me", success text (§17.5) |
+| Tours | Tour list, player, editor, "Draft tour" (§17.8) |
 
 ### 13.5 Interactions and shortcuts
 
@@ -1358,6 +1464,7 @@ db.version(1).stores({
   snapshots: 'id, projectId, createdAt',  // full Project JSON
   handles: 'id',                          // FileSystemDirectoryHandle (persisted)
   prefs: 'key',
+  progress: 'key',                        // learning progress (§17.9)
 });
 ```
 
@@ -1436,7 +1543,7 @@ db.version(1).stores({
   the ID.
 - A glossary is a project note titled "Glossary" with a `term: definition`
   list. The agent export puts it in its own section.
-- All notes, decisions and unresolved comments are exported (§17), so the agent
+- All notes, decisions and unresolved comments are exported (§18), so the agent
   gets the context too.
 
 ---
@@ -1476,7 +1583,7 @@ diffProjects(a: Project, b: Project): {
 ```
 
 Used for: change set overlay (baseline vs baseline+ops), snapshot comparison,
-analyzer drift (§18.6).
+analyzer drift (§19.6).
 
 ### 16.4 Task generation
 
@@ -1500,11 +1607,226 @@ The user can edit, merge, reorder and tick off tasks.
 
 ### 16.5 Change-set plan export
 
-See §17.4.
+See §18.4.
 
 ---
 
-## 17. Exporters
+## 17. Learning and onboarding
+
+ArchitectureGuide has three jobs, in this order of audience size:
+
+1. **Learn** frontend and backend concepts (beginners and seniors).
+2. **Plan** features and systems (people and AI agents).
+3. **Onboard** people and AI agents to a project, or to a concept.
+
+All three use the same semantic model. Because the model knows what a "repository",
+a "transaction" or an "idempotency key" is, the tool can explain it, check a
+learner's work, and hand the same knowledge to an agent.
+
+### 17.1 Principles
+
+- **Learn by building.** Lessons happen on the real canvas, with the real rules. A
+  refused relation or an anti-pattern finding is a teaching moment, with a "why" link.
+- **One fact, many depths.** Every text has a beginner and a senior version. The reader
+  picks a level. Nobody reads a different truth, only a different depth.
+- **Concepts are shown where they live.** A transaction is not a box; it is a
+  property of a `writes` relation. Isolation, locking, auth method, idempotency,
+  retries, instances and pool sizes are properties on elements and relations (§7.2),
+  so the diagram shows the decision and the tool can reason about it.
+- **Checked content.** Texts and lessons are files in the repo, validated in CI. Every
+  lesson is proven solvable by a test (§17.6).
+- **The same knowledge for people and agents.** The "concepts used in this project"
+  section of the agent export and the onboarding pack come from the same texts.
+
+### 17.2 Experience levels
+
+The user picks a level (stored per browser, not in the project). It changes how much
+the UI shows and how it talks, never what the rules allow.
+
+| Area | Beginner | Intermediate | Senior |
+|---|---|---|---|
+| Palette | Basic concepts only (toggle to Full) | Full | Full, compact |
+| Messages | Plain words, the "why", a link to the text | Standard | Short, with rule ID and references |
+| Learn tab | Beginner text, analogy, example | Intermediate text, trade-offs | Senior text, trade-offs, references |
+| Info findings | Shown as "tips" | Shown | Collapsed by default |
+| Glossary hover | On | On | Off |
+| Tours | Start automatically on first open | Offered | Offered |
+
+### 17.3 Curriculum (tracks)
+
+| Track | Topics (texts) | Concepts in the catalog |
+|---|---|---|
+| `foundations` | Client/server, request lifecycle, three parts of a web app, environments | `react.app`, `node.service`, `pg.database` |
+| `data-and-models` | Domain vs persistence vs DTO vs view models; tables, keys, constraints, normalization, indexes; migrations; stored functions, procedures, triggers; views and materialized views | `node.domain`, `node.dto`, `pg.table`, `pg.function`, `pg.trigger`, `pg.view` |
+| `api-design` | Resources and endpoints, methods and status codes, validation, errors (Problem Details), pagination, versioning, idempotency, REST vs GraphQL vs tRPC, contracts (OpenAPI, zod) | `node.endpoint`, `node.dto`, `node.contract`, `node.route-handler` |
+| `state-management` | Client vs server state, caching and invalidation, optimistic updates, forms, global vs local state | `react.server-state`, `react.client-store`, `react.api-client` |
+| `auth` | Authentication vs authorization, sessions vs tokens, cookies and CSRF, OIDC + PKCE, token storage, RBAC, ownership checks, Row Level Security | `gen.auth-provider`, `node.middleware`, `node.bff`, `pg.schema` (`rls`) |
+| `concurrency-and-parallelism` | Event loop, async I/O vs CPU work, worker threads, cluster and instances, connection pools, transactions and isolation levels, lost updates, locks (row, advisory, SKIP LOCKED), optimistic concurrency, idempotency and retries, job queues | `node.worker`, `pg.job-queue`, `pg.pooler`; relation properties |
+| `patterns` | Layered, hexagonal, modular monolith, BFF, database per service, outbox, CQRS-lite, realtime (one text + one tour per template, §12) | templates T1–T13 |
+| `operations` (later) | Caching, rate limiting, observability, background jobs at scale | – |
+
+Text IDs: a concept ID (`pg.function`), a relation type (`invokes`), a rule
+(`RNP-007`) or a topic (`topic.transactions-and-isolation`). Rule rationales (§11)
+link to these texts.
+
+### 17.4 Learning texts
+
+One Markdown file per text in the profile: `content/docs/<id>.md`. Front matter holds
+the metadata; `##` sections hold the text. Implemented in `packages/core/src/learn`
+(`LearningDocSchema`, `parseLearningDoc`).
+
+```markdown
+---
+id: pg.function
+kind: concept                 # concept | relation | rule | topic | pattern
+title: Stored functions and procedures
+summary: Code that runs inside PostgreSQL, next to the data.   # max 200 chars
+level: intermediate           # the level the text starts at
+tracks: [data-and-models]
+related: [pg.trigger, invokes, topic.transactions-and-isolation]
+references:                   # at least one (checked in CI)
+  - title: PostgreSQL docs — CREATE FUNCTION
+    url: https://www.postgresql.org/docs/current/sql-createfunction.html
+quiz:                         # optional
+  - question: What can a procedure do that a function cannot?
+    options: [Return a value, Run COMMIT or ROLLBACK inside its body, Read tables, Take parameters]
+    answer: 1
+    explanation: Procedures may control transactions ...
+---
+
+## Beginner          (required)
+## Intermediate      (optional)
+## Senior            (required)
+## Analogy           (optional)
+## When to use       (optional, "- " list)
+## When not to use   (optional, "- " list)
+## Trade-offs        (optional, "- " list)
+## Common mistakes   (optional, "- " list)
+## Examples          (optional; fenced code blocks, the line before a block is its title)
+```
+
+Unknown sections, text before the first section, empty sections and examples
+without a language are errors with the file name in the message.
+
+### 17.5 Lessons and checks
+
+A lesson is a YAML file `content/lessons/<name>.yaml` (`LessonSchema`,
+`parseLesson`). It starts from a model (a list of ops, empty for a blank canvas) and
+has steps. A step is a **reading step** (no check) or a **task step** with:
+
+- `body`: what to do and why (Markdown),
+- `check`: when the step is done,
+- `hints`: shown one by one on request,
+- `success`: what the learner just did, shown after the check passes,
+- `solution`: ops for "Show me" (and for the solvability test),
+- `focus`: elements to highlight.
+
+**Check language** (`CheckSchema`, `evaluateCheck`). Pure, evaluated after every op:
+
+```yaml
+check:
+  all:
+    - hasRelation:                       # also: min, max
+        type: enqueues                   # or a list
+        from: { id: uc.reserve }
+        to: { kind: pg.job-queue }       # kind selector: "pg.job-queue", "pg.*", "category:...", "group:..."
+        where: { inTransaction: true }   # dotted paths: "properties.concurrencyControl"
+    - hasElement: { kind: node.worker, parent: { kind: group.context }, nameIncludes: email }
+    - noPath: { from: { kind: node.domain }, to: { kind: node.repository }, types: [depends-on] }
+    - not: { hasRelation: { type: reads, from: { kind: react.app } } }
+    - finding: { ruleId: RNP-007, present: false }   # needs the rules engine (Phase 2)
+  message: Optional text shown instead of the generated reason
+```
+
+Value matches: a scalar (equal), `{ in: [...] }`, `{ exists: true|false }`,
+`{ includes: "text" }`. Failures produce readable reasons, for example
+`Expected at least one "enqueues" relation from element ("uc.reserve") ... , found 0`.
+
+**Lesson player (UI).** A side panel shows the current step; the canvas stays fully
+usable. After each op the step's check runs; when it passes, the success text appears
+and the next step opens. "Hint" reveals hints one by one; "Show me" applies the
+solution as one undo step. Progress is stored per browser (§17.9).
+
+**Exercises** are lessons that start from a flawed model ("This design oversells:
+fix it") and use `finding` checks, so the rules engine (§11) grades the result.
+
+### 17.6 Content quality
+
+- Files are reviewed in pull requests like code.
+- `pnpm content` compiles all texts and lessons into
+  `src/content.generated.ts`; `pnpm content:check` fails in CI when it is stale.
+- Tests (`content.test.ts`): unique IDs; file name = ID; the ID matches its kind
+  (concept and relation IDs exist in the catalog); `related` and lesson `conceptIds`
+  resolve; at least one reference per text; known example languages.
+- **Solvability test:** for every lesson, from the start model, each task step must
+  *fail* before its solution and *pass* after it. A lesson that cannot be finished, or
+  that is already finished, fails CI.
+- The build prints coverage (concepts and relation types with a text). Goal for v1:
+  every concept, relation type and rule has a text.
+
+### 17.7 Learn surfaces in the UI
+
+| Surface | What it does |
+|---|---|
+| **Learn tab** (Inspector) | Text for the selected concept, relation type or finding, at the user's level; examples with copy buttons; related texts; quiz |
+| **Library** | All texts by track, searchable; a page per text |
+| **Tracks page** | Lessons per track, with level, time and progress |
+| **Lesson player** | §17.5 |
+| **"Why?" links** | On every refused connection and every finding |
+| **Glossary hover** | Underlined terms in texts and notes show the summary |
+| **Concurrency lab** (Phase 5) | A timeline view: two or more requests or workers as lanes, steps as cards (read, compute, write, lock, commit). Play shows the interleaving that causes a lost update; switching the relation's `concurrencyControl` replays it with the lock or version check |
+| **API view** (Phase 8) | Endpoints of a route handler or contract as a table: method, path, request/response DTO, status codes, auth, pagination, idempotency; exports an OpenAPI skeleton |
+
+### 17.8 Onboarding people and agents to a project
+
+**Tours** (`Project.tours`, §7.2) are guided walkthroughs stored in the project:
+ordered steps, each with a title, Markdown body, the view to open, the elements and
+relations to highlight, and linked concept texts. Audience: `any`, `beginner`,
+`intermediate`, `senior` or `agent`.
+
+- **Tour player:** highlights and zooms to each step's items; "Learn more" opens the
+  linked texts at the viewer's level.
+- **Draft a tour automatically:** actors → entry points (what actors call) → follow
+  sync `calls` breadth-first → data stores and ownership → async parts (queues,
+  workers) → cross-cutting. One step per deployable, with its children and the concepts
+  it uses. The author edits the draft.
+- **Template tours:** every template ships a tour that explains the pattern on its own
+  elements.
+
+**Onboarding pack** (export `onboarding-md`, §18): what the system does; the big
+picture (Mermaid); the tour as text; key scenarios; data ownership; rules of the road
+(invariants); decisions; glossary; **concepts used in this project** — only the
+concepts, relation types and properties that actually appear, each with its summary
+and a link to the text at the chosen level; where to start (tasks tagged
+`good-first-task`, open change sets).
+
+**For agents:** `agent-md` gains an optional `## Concepts` section (one line per used
+concept + project-specific invariants), and MCP tools (§20) let an agent read texts
+and tours, and *teach*: an agent can run a lesson with a user through
+`get_lesson` / `check_lesson_step`.
+
+**Onboarding to a concept, not a project:** a **concept pack** export bundles a
+text, the matching template, its invariants and its tour, so a person or an agent can
+apply "transactional outbox" to their own repo.
+
+### 17.9 Progress
+
+Learner progress is per browser in IndexedDB (`progress` store): finished steps,
+read texts, quiz answers. Export and import as JSON. No accounts in v1 (§28).
+
+### 17.10 Status
+
+Done in Phase 0: schemas (`LearningDocSchema`, `LessonSchema`, `CheckSchema`), the
+Markdown and YAML parsers, the check evaluator, lesson helpers (`startLesson`,
+`checkStep`, `applySolution`), tours in the project schema with ops, relation
+properties, the content pipeline, and sample content: 9 texts (models, API endpoints,
+tables and schema design, stored functions, server vs client state, authentication,
+transactions and isolation, concurrency control, concurrency and parallelism in
+Node.js) and 2 lessons (`lesson.first-full-stack`, `lesson.prevent-lost-updates`).
+
+---
+
+## 18. Exporters
 
 All exporters live in `core/export`. They are pure functions
 `(project, options) → { files: { path: string; content: string }[] }`.
@@ -1513,27 +1835,29 @@ They are available in the UI (Export dialog), the CLI and MCP.
 | Format ID | Output | Notes |
 |---|---|---|
 | `json` | `<id>.archguide.json` | Lossless |
-| `agent-md` | `ARCHITECTURE.md` | Primary AI format (§17.2) |
-| `agent-yaml` | `architecture.yaml` | Compact (§17.3) |
-| `plan-md` | `plans/<cs-id>.md` | Change-set plan (§17.4) |
+| `agent-md` | `ARCHITECTURE.md` | Primary AI format (§18.2) |
+| `agent-yaml` | `architecture.yaml` | Compact (§18.3) |
+| `plan-md` | `plans/<cs-id>.md` | Change-set plan (§18.4) |
 | `speckit` | `specs/<n>-<slug>/spec.md`, `plan.md`, `tasks.md` | GitHub Spec Kit layout (R4) |
 | `kiro` | `.kiro/specs/<slug>/requirements.md`, `design.md`, `tasks.md` | Kiro layout (R4) |
-| `agents-snippet` | Text block for `AGENTS.md` / `CLAUDE.md` | Invariants + pointer to ARCHITECTURE.md (§17.5) |
-| `dependency-cruiser` | `.dependency-cruiser.cjs` | §22 |
-| `nx-constraints` | JSON for `@nx/enforce-module-boundaries` | §22 |
-| `archunit` | `architecture.spec.ts` | §22 |
+| `agents-snippet` | Text block for `AGENTS.md` / `CLAUDE.md` | Invariants + pointer to ARCHITECTURE.md (§18.5) |
+| `dependency-cruiser` | `.dependency-cruiser.cjs` | §23 |
+| `nx-constraints` | JSON for `@nx/enforce-module-boundaries` | §23 |
+| `archunit` | `architecture.spec.ts` | §23 |
 | `dbml` | `<db>.dbml` | Tables, FKs (R7) |
 | `mermaid` | `.mmd` flowchart (and `sequenceDiagram` for scenarios) | |
 | `likec4` | `.c4` | Element kinds from the catalog (R6) |
 | `structurizr` | `workspace.dsl` | Software system / container / component mapping (R6) |
 | `plantuml` | `.puml` (C4-PlantUML) | |
+| `onboarding-md` | `ONBOARDING.md` | Onboarding pack for people, at a chosen level (§17.8) |
+| `concept-pack` | `concepts/<id>.md` | One concept or pattern: text + template + invariants + tour, for people and agents (§17.8) |
 | `png` / `svg` | Image | UI only |
 
 **Common options:** `focus?: Id`, `depth?: number` (neighborhood: BFS over
 relations up to `depth`, plus ancestors and children of the focus),
 `includeNotes` (default true), `includeLayout` (json only), `changeSetId?`.
 
-### 17.1 Design principles for agent formats
+### 18.1 Design principles for agent formats
 
 1. Stable IDs everywhere.
 2. Tables for lists. Prose only where it adds meaning.
@@ -1545,7 +1869,7 @@ relations up to `depth`, plus ancestors and children of the focus),
 6. No layout data. Deterministic order (by layer, then ID).
 7. A front-matter block for machines. Markdown for both people and agents.
 
-### 17.2 Agent Markdown (`agent-md`)
+### 18.2 Agent Markdown (`agent-md`)
 
 Section order (empty sections are left out):
 
@@ -1559,8 +1883,10 @@ Section order (empty sections are left out):
 7. `## Known issues`: rule, where, status, reason.
 8. `## Decisions`: accepted / proposed ADRs (title, one-line decision, links).
 9. `## Glossary`.
-10. `## Notes`.
-11. `## Open change sets`: name, status, link to the plan file.
+10. `## Concepts` (optional, `includeConcepts`): one line per concept, relation type and
+    property value used in the project, from the learning texts' `summary` (§17.8).
+11. `## Notes`.
+12. `## Open change sets`: name, status, link to the plan file.
 
 Example:
 
@@ -1630,7 +1956,7 @@ Online shop. The React SPA talks to a Node BFF. The Orders service follows Hexag
 - **Order**: a confirmed cart. Drafts are **Carts**.
 ````
 
-### 17.3 Agent YAML (`agent-yaml`)
+### 18.3 Agent YAML (`agent-yaml`)
 
 ```yaml
 archguide: 1
@@ -1651,7 +1977,7 @@ known_issues:
 
 Relations use the tuple form `[from, type, to, {props}]` to save tokens.
 
-### 17.4 Change-set plan (`plan-md`)
+### 18.4 Change-set plan (`plan-md`)
 
 ````markdown
 ---
@@ -1702,7 +2028,7 @@ baseRevision: 42
 6. Run `archguide check`.
 ````
 
-### 17.5 `AGENTS.md` / `CLAUDE.md` snippet
+### 18.5 `AGENTS.md` / `CLAUDE.md` snippet
 
 ```markdown
 ## Architecture
@@ -1714,7 +2040,7 @@ Rules (enforced by `archguide check` in CI):
 After a structural change, update the model (MCP tool `upsert_elements` / `upsert_relations`) or run `archguide analyze --write`.
 ```
 
-### 17.6 Spec Kit and Kiro layouts
+### 18.6 Spec Kit and Kiro layouts
 
 | Section | Spec Kit file | Kiro file | Content |
 |---|---|---|---|
@@ -1722,7 +2048,7 @@ After a structural change, update the model (MCP tool `upsert_elements` / `upser
 | Architecture of the change | `plan.md` | `design.md` | Changes table, invariants, affected elements subset of agent-md, Mermaid diagram of the changed neighborhood, rule check |
 | Tasks | `tasks.md` | `tasks.md` | Checkbox list from §16.4, with code paths |
 
-### 17.7 Interop formats
+### 18.7 Interop formats
 
 - **Mermaid:** `flowchart LR`; groups → `subgraph`; shapes mapped to Mermaid
   shapes (cylinder `[( )]`, hexagon `{{ }}`, diamond `{ }`, circle `(( ))`); async
@@ -1736,15 +2062,15 @@ After a structural change, update the model (MCP tool `upsert_elements` / `upser
 
 ---
 
-## 18. Repository analyzer
+## 19. Repository analyzer
 
-### 18.1 Goal
+### 19.1 Goal
 
 Produce a **draft model with evidence** from a React / Node / Postgres repository,
 locally, without running any repository code. An agent or a person then reviews
 it.
 
-### 18.2 Pipeline
+### 19.2 Pipeline
 
 ```
 discover → engines → detectors → resolve → match → result
@@ -1770,7 +2096,7 @@ discover → engines → detectors → resolve → match → result
 5. **match:** candidates vs the existing model → `AnalysisDiff`.
 6. **result:** `AnalysisResult`, written to `.archguide/analysis/last.json`.
 
-### 18.3 Types
+### 19.3 Types
 
 ```ts
 interface Detector {
@@ -1819,7 +2145,7 @@ interface AnalysisDiff {
 }
 ```
 
-### 18.4 Detectors (profile `react-node-postgres`)
+### 19.4 Detectors (profile `react-node-postgres`)
 
 **Workspace and packages**
 
@@ -1869,7 +2195,7 @@ interface AnalysisDiff {
 | `infra.compose` | `postgres`, `pgbouncer`, Node service images, ports, `depends_on` | `pg.cluster`, `pg.pooler`, port map for matching |
 | `infra.env` | `DATABASE_URL`-style names per package, browser-exposed names | `env-var` (RNP-004) |
 
-### 18.5 Data ownership algorithm
+### 19.5 Data ownership algorithm
 
 ```
 for each deployable package P:
@@ -1887,7 +2213,7 @@ writers(S) > 1 across deployables → RNP-001 analysis finding (with evidence li
 Lifting (§11.2) shows the result at service level in container views and at
 table level in the database view.
 
-### 18.6 Resolve and match
+### 19.6 Resolve and match
 
 - **Resolve:** one candidate element per fact `subject`. IDs come from
   `idPrefix + slug(name)`. Parents come from file location (a handler file
@@ -1902,7 +2228,7 @@ table level in the database view.
   `origin: 'inferred'`, `reviewed: false`; never auto-remove: missing items
   become a finding "Element not found in code").
 
-### 18.7 Live Postgres introspection (optional)
+### 19.7 Live Postgres introspection (optional)
 
 - Turned on by `--db` or `analyzer.database.urlEnv`. The URL is read from the
   environment only.
@@ -1913,7 +2239,7 @@ table level in the database view.
   and extensions.
 - Never reads table data.
 
-### 18.8 Limits and performance
+### 19.8 Limits and performance
 
 - Default `maxFiles` 20,000, max file 1 MB, timeout 120 s (configurable).
   When a limit is hit, the result has a warning and stays partial.
@@ -1921,7 +2247,7 @@ table level in the database view.
 - Cache: file hash → facts, in `.archguide/analysis/cache/`. A second run
   parses only changed files.
 
-### 18.9 Review flow in the UI
+### 19.9 Review flow in the UI
 
 The Analysis review panel lists `suggestedOps` grouped by detector, with
 confidence and evidence (click → open the file at the line). **Accept** applies
@@ -1931,7 +2257,7 @@ next run does not suggest it again.
 
 ---
 
-## 19. MCP server
+## 20. MCP server
 
 Package `mcp-server`, binary `archguide-mcp`. Transport: stdio.
 
@@ -1943,7 +2269,7 @@ claude mcp add archguide -- npx -y archguide-mcp --workspace ./architecture
 Options: `--workspace <dir>` (default `./architecture`), `--repo <dir>`
 (default: the workspace's `codeRoot`), `--read-only`.
 
-### 19.1 Response envelope (all tools)
+### 20.1 Response envelope (all tools)
 
 ```ts
 type ToolResult =
@@ -1955,7 +2281,7 @@ type ToolResult =
   and a short count of all findings. The agent can fix its own mistakes right away (R1).
 - Errors give `itemId`, `code`, `message`, `hint`, and a `fix` (ops) when one exists.
 
-### 19.2 Tools
+### 20.2 Tools
 
 | Tool | Input (summary) | Output `data` |
 |---|---|---|
@@ -1983,10 +2309,16 @@ type ToolResult =
 | `generate_tasks` | `projectId`, `changeSetId` | tasks |
 | `export` | `projectId`, `format`, `changeSetId?`, `write?: boolean` (write to the configured path) | content or written paths |
 | `generate_enforcement` | `projectId`, `target: 'dependency-cruiser' \| 'nx' \| 'archunit'`, `write?` | content or path |
+| `explain_concept` | `id` (concept, relation type, rule or topic), `level?` (default `intermediate`) | the learning text at that level, examples, related IDs |
+| `search_learning` | `query`, `track?` | matching texts (id, title, summary) |
+| `list_lessons` / `get_lesson` | `track?`, `level?` / `lessonId` | lessons; one lesson with steps (no solutions unless `includeSolutions`) |
+| `check_lesson_step` | `projectId`, `lessonId`, `stepId` | `{ passed, failures }` — lets an agent tutor a user |
+| `get_onboarding` | `projectId`, `audience?`, `level?` | the onboarding pack (Markdown) |
+| `list_tours` / `upsert_tour` / `draft_tour` | `projectId` / tour / `projectId`, `audience` | tours; a drafted tour for review |
 
 Write tools take `changeSetId` to record into a change set instead of the baseline.
 
-### 19.3 Resources
+### 20.3 Resources
 
 - `archguide://projects` (list)
 - `archguide://projects/{id}` (agent-md)
@@ -1996,7 +2328,7 @@ Write tools take `changeSetId` to record into a change set instead of the baseli
 - `archguide://rules` and `archguide://rules/{ruleId}` (rationale)
 - `archguide://templates/{id}`
 
-### 19.4 Prompts
+### 20.4 Prompts
 
 | Prompt | Arguments | Steps it gives the agent |
 |---|---|---|
@@ -2004,7 +2336,7 @@ Write tools take `changeSetId` to record into a change set instead of the baseli
 | `plan-feature` | `feature` | 1. `get_architecture` (focus on the affected area). 2. `create_change_set`. 3. `upsert_*` / `apply_template` with `changeSetId`. 4. `validate_project` with `changeSetId` until no new errors. 5. `generate_tasks`. 6. `export` `plan-md` (and `speckit`/`kiro` if the repo uses them). |
 | `review-change` | `baseRef?` | 1. `diff_with_repository`. 2. Report invariant violations with file and line. 3. Propose model updates or code fixes. |
 
-### 19.5 Concurrency
+### 20.5 Concurrency
 
 Writes go through the running `archguide serve` when its lock file exists
 (the browser updates live). Otherwise they write the file directly with the
@@ -2012,7 +2344,7 @@ revision check and atomic rename (§14.5). `--read-only` disables all write tool
 
 ---
 
-## 20. Claude Code skill
+## 21. Claude Code skill
 
 `skills/archguide/SKILL.md`. `archguide init` copies it to
 `.claude/skills/archguide/SKILL.md` in the user's repo. Draft:
@@ -2040,13 +2372,17 @@ The architecture model lives in `architecture/`. `architecture/ARCHITECTURE.md` 
 Use the MCP prompt `map-repository`, or:
 `npx archguide init && npx archguide analyze --write && npx archguide export agent-md --write`.
 
+## When you join a project or explain it to someone
+Read the onboarding pack (MCP `get_onboarding`, or `architecture/ONBOARDING.md`). For any
+concept you are unsure about, call `explain_concept` instead of guessing.
+
 ## Without MCP
 Every MCP tool has a CLI equivalent: `npx archguide --help`.
 ```
 
 ---
 
-## 21. CLI
+## 22. CLI
 
 Package `cli`, binary `archguide`. Global options: `--workspace <dir>`
 (default `./architecture`), `--project <id>`, `--json` (machine output),
@@ -2063,6 +2399,8 @@ Package `cli`, binary `archguide`. Global options: `--workspace <dir>`
 | `archguide export <format>` | Any export | `--change-set`, `--focus`, `--depth`, `--out`, `--write` (use config paths) |
 | `archguide generate <target>` | Enforcement configs | `dependency-cruiser \| nx \| archunit`, `--out` |
 | `archguide templates` | List templates | – |
+| `archguide explain <id>` | Print a learning text in the terminal | `--level beginner\|intermediate\|senior` |
+| `archguide onboarding` | Write the onboarding pack | `--audience`, `--level`, `--out` |
 | `archguide mcp` | Start the MCP server (same as `archguide-mcp`) | – |
 | `archguide migrate` | Upgrade project files to the latest `schemaVersion` | `--dry-run` |
 
@@ -2074,9 +2412,9 @@ error, `3` internal error.
 
 ---
 
-## 22. Enforcement and CI
+## 23. Enforcement and CI
 
-### 22.1 Generators
+### 23.1 Generators
 
 ```ts
 interface EnforcementGenerator {
@@ -2094,7 +2432,7 @@ interface EnforcementGenerator {
 3. Profile defaults: no DB clients in React packages (RNP-003), no cycles
    (AP-003 / RNP-018), FSD direction (RNP-013), feature isolation (RNP-014).
 
-### 22.2 Generated dependency-cruiser config (example)
+### 23.2 Generated dependency-cruiser config (example)
 
 ```js
 // Generated by archguide from architecture/shop.archguide.json (revision 42). Do not edit.
@@ -2135,7 +2473,7 @@ module.exports = {
 The generated file works **without** ArchitectureGuide installed in CI
 (`npx depcruise apps services packages`).
 
-### 22.3 `archguide check`
+### 23.3 `archguide check`
 
 1. Load the project and run model rules (`--fail-on`, default `error`).
 2. Run the analyzer (with cache).
@@ -2146,7 +2484,7 @@ The generated file works **without** ArchitectureGuide installed in CI
    `newInCode` deployables → info.
 6. Print the report. Exit code from the highest severity vs `--fail-on`.
 
-### 22.4 GitHub Action
+### 23.4 GitHub Action
 
 ```yaml
 # .github/workflows/architecture.yml
@@ -2167,7 +2505,7 @@ new findings and drift.
 
 ---
 
-## 23. Security and privacy
+## 24. Security and privacy
 
 - **Local only (R9).** The analyzer, rules, exports and rendering run on the
   user's machine. No telemetry in v1.
@@ -2187,7 +2525,7 @@ new findings and drift.
 
 ---
 
-## 24. Testing strategy
+## 25. Testing strategy
 
 | Layer | Tool | What |
 |---|---|---|
@@ -2202,7 +2540,9 @@ new findings and drift.
 | server | Vitest | WebSocket protocol; revision conflicts; external file change |
 | MCP | Vitest with the SDK client | Every tool: happy path + error path; envelope shape |
 | CLI | Vitest (execa) | Exit codes; `--format github` |
-| web | Playwright | Drag a shape, rename, connect (valid + refused), nest, apply template, quick fix, undo/redo, export, change set overlay |
+| web | Playwright | Drag a shape, rename, connect (valid + refused), nest, apply template, quick fix, undo/redo, export, change set overlay, finish a lesson, play a tour |
+| content | Vitest (`content.test.ts`) | IDs, kinds, links, references, example languages; **every lesson solvable step by step** (§17.6); generated file up to date (`pnpm content:check`) |
+| learn | Vitest (`learn.test.ts`) | Markdown/YAML parsers with error messages; every check type; lesson helpers |
 | a11y | Playwright + axe | Panels and dialogs without violations |
 
 **Fixture repos** (`packages/analyzer/fixtures/`):
@@ -2217,7 +2557,7 @@ commit in a nightly job.
 
 ---
 
-## 25. Delivery phases and task checklists
+## 26. Delivery phases and task checklists
 
 Estimates assume one full-time developer. They are rough.
 
@@ -2232,6 +2572,7 @@ Estimates assume one full-time developer. They are rough.
 - [x] `core/catalog`: categories, shapes, generic concepts, core relation types, matrix, `validRelationTypes`, `checkRelation`, `checkNesting`
 - [x] `profiles/react-node-postgres`: concepts, relations, nesting, deny rules
 - [x] Profile registry (`createCatalog(profiles)`); package dependency rules (§4.2) checked with dependency-cruiser
+- [x] Learning foundations (§17.10): relation properties, tours + ops, `node.endpoint`, `node.dto`, `pg.function`, `pg.trigger`, `invokes`, `fires-on`; `core/learn` (schemas, parsers, check evaluator, lesson helpers); content pipeline with CI check; 9 texts and 2 lessons proven solvable
 - **Done when:** schema round-trips deterministically; the §10.4 table passes as tests. **Done.**
 
 ### Phase 1: Canvas MVP (~3 weeks)
@@ -2249,7 +2590,9 @@ Estimates assume one full-time developer. They are rough.
 - [ ] Dexie persistence, autosave, workspace page (list/new/duplicate/delete)
 - [ ] JSON import/export
 - [ ] Command palette + shortcuts (§13.5)
-- **Done when:** a user builds the T1 diagram from scratch in < 2 minutes (Playwright scenario), and a refused relation shows a message and a working fix.
+- [ ] Level switch (§17.2); Learn tab in the Inspector showing the text of the selected concept or relation; "Why?" link on refusals
+- [ ] Property forms for relations (concurrency control, isolation, auth, retries ...)
+- **Done when:** a user builds the T1 diagram from scratch in < 2 minutes (Playwright scenario), and a refused relation shows a message, a working fix and a "Why?" text.
 
 ### Phase 2: Rules engine (~2 weeks)
 
@@ -2259,6 +2602,8 @@ Estimates assume one full-time developer. They are rough.
 - [ ] Rules worker with incremental runs; findings store
 - [ ] Problems panel, badges, halos, edge overlays, tooltips
 - [ ] Quick fixes with preview; suppressions with reason
+- [ ] Concurrency, API and auth rules RNP-019 … RNP-027 (packs `concurrency`, `api`, `security`)
+- [ ] "Why?" link from every finding to its learning text; `finding` checks wired into lessons
 - [ ] `docs/RULES.md` generated from rule metadata
 - **Done when:** every rule has positive and negative fixture tests and a docs entry; perf budget met.
 
@@ -2267,6 +2612,7 @@ Estimates assume one full-time developer. They are rough.
 - [ ] Template engine (params dialog, new project from template, stamp into canvas, `derivedFrom`, packs on)
 - [ ] T1, T2, T3, T4, T5, T6, T7, T11
 - [ ] Save selection as custom template; import/export template files
+- [ ] One tour and one pattern text (`pattern.*`) per template
 - [ ] Snapshots (create, list, restore), compare (diff overlay)
 - [ ] File System Access "Open folder" mode; `archguide.config.json` reading
 - [ ] ELK auto-layout worker
@@ -2280,26 +2626,41 @@ Estimates assume one full-time developer. They are rough.
 - [ ] Exporters: `agent-md`, `agent-yaml`, `agents-snippet`, `mermaid`, `dbml`, `png`/`svg`, `json`
 - [ ] Focus/depth neighborhood export
 - [ ] Export dialog with preview and copy
+- [ ] Tours: editor, player, "Draft tour" (§17.8)
+- [ ] Exporters: `onboarding-md`, `concept-pack`; `## Concepts` section in `agent-md`
 - [ ] Golden-file tests for each exporter × template
 - **Done when:** the agent-md output of each template is reviewed and stable.
 
-### Phase 5: Server, CLI, MCP, skill (~2 weeks)
+### Phase 5: Learning mode (~3 weeks, plus a content stream)
+
+- [ ] Library page (texts by track, search) and text pages at the chosen level
+- [ ] Tracks page with lessons, level, time and progress
+- [ ] Lesson player (§17.5): live checks after every op, hints, "Show me", success texts
+- [ ] Progress store (Dexie), export/import as JSON
+- [ ] Quizzes in texts
+- [ ] Exercises: lessons that start from a flawed model and pass when the rule findings are gone
+- [ ] Concurrency lab (§17.7): timeline lanes for two or more requests/workers, replay with each `concurrencyControl`
+- [ ] Content stream (parallel, continuous): a text for every concept, relation type and rule; about four lessons per track for `foundations`, `data-and-models`, `api-design`, `state-management`, `auth`, `concurrency-and-parallelism`
+- **Done when:** a beginner finishes `lesson.first-full-stack` without help in a usability test, every lesson in CI is solvable, and content coverage is 100% for concepts and relation types.
+
+### Phase 6: Server, CLI, MCP, skill (~2 weeks)
 
 - [ ] `server`: Fastify, static app, token, WebSocket protocol, chokidar, lock file, atomic writes, revision checks
 - [ ] Web `serveClient` (live updates, conflict UI)
 - [ ] CLI: `init`, `serve`, `validate`, `export`, `generate`, `templates`, `migrate`, `mcp`
 - [ ] MCP server: envelope, all tools except analysis ones, resources, prompts `plan-feature`
 - [ ] Skill file + `init` copy
+- [ ] Learning and onboarding tools: `explain_concept`, `search_learning`, `list_lessons`, `get_lesson`, `check_lesson_step`, `get_onboarding`, tours; CLI `explain`, `onboarding`
 - [ ] MCP contract tests
 - **Done when:** Claude Code creates, edits, validates and exports a project only through MCP, and the open browser tab updates live.
 
-### Phase 6: Repository analysis and enforcement (~4 weeks)
+### Phase 7: Repository analysis and enforcement (~4 weeks)
 
 - [ ] Analyzer pipeline (discover, engines, detectors, resolve, match, cache, limits)
-- [ ] Detectors in §18.4 (workspace, React, Node, Postgres, infra)
-- [ ] Data ownership algorithm (§18.5)
+- [ ] Detectors in §19.4 (workspace, React, Node, Postgres, infra)
+- [ ] Data ownership algorithm (§19.5)
 - [ ] Analysis-scope rules RNP-003, 004, 012, 013, 015, 017, 018 (+ analysis parts of 001, 002, 005, 006)
-- [ ] Optional live introspection (§18.7)
+- [ ] Optional live introspection (§19.7)
 - [ ] Generators: dependency-cruiser (default), Nx, ArchUnitTS
 - [ ] CLI: `analyze`, `check`, `drift`; `--format github`
 - [ ] MCP: `analyze_repository`, `apply_analysis`, `diff_with_repository`, `generate_enforcement`; prompts `map-repository`, `review-change`
@@ -2307,7 +2668,7 @@ Estimates assume one full-time developer. They are rough.
 - [ ] GitHub Action example; fixture repos 1–4
 - **Done when:** on fixtures 1–3 the baseline has ≥ 80% of the hand-made reference elements and no element without evidence; fixture 4 triggers every analysis rule; `archguide check` fails on a seeded domain → Prisma import with file and line.
 
-### Phase 7: Change sets and advanced views (~3 weeks)
+### Phase 8: Change sets and advanced views (~3 weeks)
 
 - [ ] Change-set mode (record ops into a change set), overlay, new-findings filter
 - [ ] Rebase on baseline changes; conflict list
@@ -2315,6 +2676,7 @@ Estimates assume one full-time developer. They are rough.
 - [ ] Exporters: `plan-md`, `speckit`, `kiro`, `likec4`, `structurizr`, `plantuml`
 - [ ] MCP: change-set tools; `plan-feature` end to end
 - [ ] Views: context/container/component/database/scenario; drill-down; breadcrumbs
+- [ ] API view (§17.7): endpoints table, DTO links, OpenAPI skeleton export
 - [ ] Scenario recording, playback, Mermaid sequence export
 - [ ] Focus mode and filters
 - [ ] Templates T8, T9, T10, T12, T13
@@ -2327,18 +2689,22 @@ Estimates assume one full-time developer. They are rough.
 - OpenTelemetry trace import (R10): confirm `calls` edges and volumes.
 - Scaffolding from a change set (folders, ports, empty stubs as a patch) (R12).
 - Optional in-app AI assistant ("what is missing?", "explain this finding",
-  "draft a model from text"), off by default, needs an API key.
+  "draft a model from text", a tutor that answers questions grounded in the learning
+  texts), off by default, needs an API key.
+- Accounts and progress sync; classrooms (a teacher assigns lessons and sees progress).
+- Translations of learning content.
 - Complexity score per project and per change set.
 - Presentation mode.
 - Real-time collaboration (Yjs over the same ops).
 - More profiles: Python, Go, Java; Redis, Kafka, S3 concepts.
 
-**Total v1 estimate:** about 19 weeks for one developer, about 11 weeks for
-two (core/web and analyzer/MCP can run in parallel after Phase 2).
+**Total v1 estimate:** about 22 weeks for one developer, about 13 weeks for
+two (core/web and analyzer/MCP can run in parallel after Phase 2). Learning content
+is a separate, continuous stream: best done by an author with a senior reviewer.
 
 ---
 
-## 26. Risks and mitigations
+## 27. Risks and mitigations
 
 | Risk | Mitigation |
 |---|---|
@@ -2351,11 +2717,15 @@ two (core/web and analyzer/MCP can run in parallel after Phase 2).
 | Concurrent writes (UI, MCP, CLI, git) | Single writer in serve mode; revision checks + atomic writes otherwise; reload on external change |
 | Framework detection breaks with new library versions | Small detectors with fixtures; confidence < 1 for pattern matches; easy to add detectors |
 | Generated CI rules create noise | Generated rules only from strict packs and explicit invariants; `severity` follows the rule; `--fail-on error` default |
-| Same niche as Eraser / IcePanel / Archaic | Focus on stack-specific rules + enforcement + change-set planning (R11) |
+| Same niche as Eraser / IcePanel / Archaic | Focus on stack-specific rules + enforcement + change-set planning (R11), and learning |
+| Wrong or outdated learning content teaches bad habits | Content in PRs with senior review; at least one official reference per text; examples reviewed as code; `reviewed` dates and a yearly content review |
+| Beginners overwhelmed, seniors slowed down | Levels change depth and noise, not rules (§17.2); Basic palette; seniors can hide tips |
+| Lessons break when the catalog changes | Solvability test for every lesson in CI (§17.6) |
+| Content volume (a text per concept, relation and rule) | Separate content stream; coverage report in every build; start with the tracks in §17.3 |
 
 ---
 
-## 27. Open decisions
+## 28. Open decisions
 
 | # | Question | Recommendation |
 |---|---|---|
@@ -2366,10 +2736,14 @@ two (core/web and analyzer/MCP can run in parallel after Phase 2).
 | 5 | Next.js in v1? | v1.1 profile, right after v1 (needs its own rules for server components) |
 | 6 | Supabase / PostgREST? | v1.1, with an RLS rule |
 | 7 | Product name and domain | "ArchitectureGuide" / `archguide` CLI as a working name |
+| 8 | Learning content license | CC BY 4.0 for texts and lessons (reusable by schools and teams), code under the code license |
+| 9 | Accounts and progress sync for learners | Not in v1: progress per browser + JSON export. Add accounts with classrooms later |
+| 10 | AI tutor in the app | Later and optional; grounded in the learning texts; agents can already tutor through MCP (`get_lesson`, `check_lesson_step`) |
+| 11 | Which tracks first | `foundations`, `concurrency-and-parallelism`, `api-design`, `data-and-models`, then `auth`, `state-management` |
 
 ---
 
-## 28. Glossary
+## 29. Glossary
 
 | Term | Meaning |
 |---|---|
@@ -2390,10 +2764,18 @@ two (core/web and analyzer/MCP can run in parallel after Phase 2).
 | Fact | One observation of the analyzer, with evidence |
 | Drift | A difference between the model and the code |
 | Lifting | Treating a child's relation as its ancestor's relation for higher-level rules |
+| Level | Beginner, intermediate or senior: how deep texts go and how much the UI explains |
+| Learning text | A Markdown file that explains one concept, relation type, rule, topic or pattern at several levels |
+| Topic | A learning text about an idea that is not a shape (`topic.transactions-and-isolation`) |
+| Track | A group of texts and lessons on one subject (`concurrency-and-parallelism`) |
+| Lesson | Steps on the real canvas; task steps have a check and a solution |
+| Check | A condition on the model (`hasRelation`, `noPath`, `finding` ...) that tells whether a step is done |
+| Tour | A guided walkthrough of a project, for onboarding people and agents |
+| Onboarding pack | An export that explains a project and only the concepts it uses |
 
 ---
 
-## 29. Sources
+## 30. Sources
 
 Research date: 2026-10-27. Vendor claims are marked as such in §3.
 

@@ -34,6 +34,7 @@ export function createProject(input: NewProjectInput): Project {
     views: [{ id: 'main', name: 'Main', kind: 'free', nodes: [], edges: [], annotations: [] }],
     notes: [],
     decisions: [],
+    tours: [],
     changeSets: [],
     snapshots: [],
     settings: {

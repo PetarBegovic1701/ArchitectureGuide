@@ -264,3 +264,92 @@ describe('end to end with ops', () => {
     });
   });
 });
+
+describe('learning concepts: APIs, data shapes, stored functions, triggers', () => {
+  it.each([
+    ['react.api-client', 'node.endpoint', ['calls']],
+    ['node.endpoint', 'node.use-case', ['calls', 'depends-on']],
+    ['node.endpoint', 'node.dto', ['depends-on']],
+    ['node.dto', 'node.dto', ['depends-on']],
+    ['react.feature', 'node.dto', ['depends-on']],
+    ['node.repository', 'pg.function', ['invokes']],
+    ['node.endpoint', 'pg.function', ['invokes']],
+    ['pg.function', 'pg.function', ['invokes']],
+    ['pg.trigger', 'pg.function', ['invokes']],
+    ['pg.trigger', 'pg.table', ['fires-on', 'reads', 'writes']],
+    ['pg.function', 'pg.table', ['reads', 'writes']],
+    ['pg.function', 'pg.channel', ['notifies']],
+    ['pg.function', 'pg.job-queue', ['enqueues']],
+  ])('%s → %s offers %j', (from, to, expected) => {
+    expect(types(from, to)).toEqual(expected);
+  });
+
+  it('runs database functions with invokes, never calls', () => {
+    const check = checkRelation(catalog, 'calls', 'node.service', 'pg.function');
+    expect(check).toMatchObject({ ok: false, alternatives: ['invokes'] });
+    if (!check.ok) expect(check.message).toMatch(/invokes/);
+  });
+
+  it('keeps database code inside the database', () => {
+    for (const to of ['node.service', 'react.app', 'gen.external', 'gen.other-store']) {
+      expect(types('pg.function', to), to).toEqual([]);
+    }
+    expect(types('react.app', 'pg.function')).toEqual([]);
+    expect(types('pg.function', 'pg.view')).toEqual(['reads']);
+  });
+
+  it('only React renders, and browser code does not import server code', () => {
+    expect(types('node.module', 'node.module')).toEqual(['calls', 'depends-on']);
+    expect(types('react.route', 'react.component')).toEqual(['renders']);
+    expect(types('react.route', 'react.route')).toEqual(['renders', 'navigates']);
+    const check = checkRelation(catalog, 'depends-on', 'react.feature', 'node.use-case');
+    expect(check.ok).toBe(false);
+    if (!check.ok) expect(check.message).toMatch(/must not import server code/);
+    expect(types('react.feature', 'node.contract')).toEqual(['depends-on', 'uses-port']);
+  });
+
+  it('data shapes have no behaviour', () => {
+    for (const to of ['node.service', 'pg.table', 'node.use-case'])
+      expect(types('node.dto', to), to).toEqual([]);
+  });
+
+  it('validates endpoint, scaling and relation properties', () => {
+    const endpoint = catalog.concepts.get('node.endpoint')!.propertySchema!;
+    expect(
+      endpoint.safeParse({ method: 'POST', path: '/orders', statusCodes: [201, 409] }).success,
+    ).toBe(true);
+    expect(endpoint.safeParse({ method: 'FETCH' }).success).toBe(false);
+    expect(endpoint.safeParse({ path: 'orders' }).success).toBe(false);
+    const service = catalog.concepts.get('node.service')!.propertySchema!;
+    expect(service.safeParse({ instances: 3, processModel: 'cluster', poolSize: 10 }).success).toBe(
+      true,
+    );
+    const writes = catalog.relationTypes.get('writes')!.propertySchema!;
+    expect(
+      writes.safeParse({ concurrencyControl: 'row-lock', isolation: 'serializable' }).success,
+    ).toBe(true);
+    expect(writes.safeParse({ concurrencyControl: 'hope' }).success).toBe(false);
+  });
+
+  it('nests endpoints, data shapes, functions and triggers in the right places', () => {
+    expect(checkNesting(catalog, 'node.endpoint', 'node.route-handler').ok).toBe(true);
+    expect(checkNesting(catalog, 'node.endpoint', 'node.contract').ok).toBe(true);
+    expect(checkNesting(catalog, 'node.endpoint', 'node.service').ok).toBe(false);
+    expect(checkNesting(catalog, 'node.dto', 'node.contract').ok).toBe(true);
+    expect(checkNesting(catalog, 'pg.function', 'pg.schema').ok).toBe(true);
+    expect(checkNesting(catalog, 'pg.function', 'pg.database').ok).toBe(false);
+    expect(checkNesting(catalog, 'pg.trigger', null).ok).toBe(false);
+  });
+});
+
+describe('layered calls', () => {
+  it('a use case calls a repository directly (layered) or through a port (hexagonal)', () => {
+    expect(types('node.use-case', 'node.repository')).toEqual(['calls', 'depends-on']);
+    expect(types('node.use-case', 'node.port')).toEqual(['depends-on', 'uses-port']);
+    expect(types('react.feature', 'react.api-client')).toEqual([
+      'calls',
+      'depends-on',
+      'fetches-via',
+    ]);
+  });
+});

@@ -34,6 +34,7 @@ export function canonicalize(project: Project): Project {
   }
   p.notes.sort(byId);
   p.decisions.sort(byId);
+  p.tours.sort(byId);
   p.changeSets.sort(byId);
   p.snapshots.sort(byId);
   for (const cs of p.changeSets) dropEmpty(cs, ['tasks']);
@@ -58,6 +59,8 @@ function pruneElement(e: Element): Element {
 }
 
 function pruneRelation(r: Relation): Relation {
+  dropEmpty(r, ['properties']);
+  if (r.properties) r.properties = sortKeys(r.properties);
   if (r.source) dropEmpty(r.source, ['evidence']);
   return r;
 }

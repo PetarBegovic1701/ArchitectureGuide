@@ -3,6 +3,7 @@ import { IdSchema, IsoSchema } from './common';
 import { ElementSchema, RelationSchema } from './model';
 import { AnnotationSchema, ViewEdgeSchema, ViewNodeSchema, ViewSchema } from './view';
 import { DecisionSchema, NoteSchema, SuppressionSchema, TaskSchema } from './records';
+import { TourSchema } from './tour';
 
 /**
  * Patches are merged shallowly into the target. A `null` value removes the field.
@@ -33,6 +34,8 @@ export const ModelOpSchema = z.discriminatedUnion('op', [
   z.object({ op: z.literal('removeNote'), id: IdSchema }),
   z.object({ op: z.literal('upsertDecision'), decision: DecisionSchema }),
   z.object({ op: z.literal('removeDecision'), id: IdSchema }),
+  z.object({ op: z.literal('upsertTour'), tour: TourSchema }),
+  z.object({ op: z.literal('removeTour'), id: IdSchema }),
   z.object({ op: z.literal('upsertSuppression'), suppression: SuppressionSchema }),
   z.object({
     op: z.literal('removeSuppression'),

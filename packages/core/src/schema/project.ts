@@ -3,6 +3,7 @@ import { IdSchema, IsoSchema } from './common';
 import { ModelSchema } from './model';
 import { ViewSchema } from './view';
 import { ChangeSetSchema } from './ops';
+import { TourSchema } from './tour';
 import { DecisionSchema, NoteSchema, ProjectSettingsSchema, SnapshotRefSchema } from './records';
 
 export const SCHEMA_VERSION = 1;
@@ -27,6 +28,7 @@ export const ProjectSchema = z.object({
   views: z.array(ViewSchema),
   notes: z.array(NoteSchema),
   decisions: z.array(DecisionSchema),
+  tours: z.array(TourSchema),
   changeSets: z.array(ChangeSetSchema),
   snapshots: z.array(SnapshotRefSchema),
   settings: ProjectSettingsSchema,

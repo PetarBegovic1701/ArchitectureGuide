@@ -495,3 +495,78 @@ describe('views, annotations, notes, decisions, settings', () => {
     ).toBe('SCHEMA_INVALID');
   });
 });
+
+describe('relation properties', () => {
+  it('accepts valid properties and refuses invalid ones', () => {
+    expectUndoable(sampleProject(), [
+      {
+        op: 'updateRelation',
+        id: 'rel.pg-db',
+        patch: {
+          properties: { concurrencyControl: 'optimistic-version', isolation: 'read-committed' },
+        },
+      },
+    ]);
+    expect(
+      err(sampleProject(), [
+        { op: 'updateRelation', id: 'rel.pg-db', patch: { properties: { isolation: 'chaos' } } },
+      ]),
+    ).toMatchObject({ code: 'PROPERTY_INVALID', itemId: 'rel.pg-db' });
+    expect(
+      err(sampleProject(), [
+        {
+          op: 'addRelation',
+          relation: { ...rel('rel.x', 'calls', 'app.web', 'svc.api'), properties: { retries: -1 } },
+        },
+      ]).code,
+    ).toBe('PROPERTY_INVALID');
+  });
+});
+
+describe('tours', () => {
+  const tour = {
+    id: 'welcome',
+    title: 'Welcome',
+    audience: 'beginner',
+    steps: [
+      {
+        id: 's1',
+        title: 'The web app',
+        body: 'Start here.',
+        viewId: 'main',
+        elementIds: ['app.web'],
+        relationIds: [],
+      },
+      {
+        id: 's2',
+        title: 'The API',
+        body: '',
+        elementIds: ['svc.api', 'db.main'],
+        relationIds: ['rel.web-api'],
+      },
+    ],
+  };
+
+  it('upserts and removes a tour', () => {
+    const p = expectUndoable(sampleProject(), [{ op: 'upsertTour', tour }]);
+    expect(p.tours).toHaveLength(1);
+    expectUndoable(p, [{ op: 'removeTour', id: 'welcome' }]);
+  });
+
+  it('refuses tours that point at missing items', () => {
+    const bad = { ...tour, steps: [{ ...tour.steps[0]!, elementIds: ['nope'] }] };
+    expect(err(sampleProject(), [{ op: 'upsertTour', tour: bad }]).code).toBe('ID_NOT_FOUND');
+  });
+
+  it('keeps tours consistent when items are removed or renamed, and undoes', () => {
+    const base = ok(sampleProject(), [{ op: 'upsertTour', tour }]).project;
+    const removed = expectUndoable(base, [{ op: 'removeElement', id: 'svc.api', cascade: true }]);
+    expect(removed.tours[0]!.steps[1]).toMatchObject({ elementIds: ['db.main'], relationIds: [] });
+    const noView = expectUndoable(base, [{ op: 'removeView', id: 'main' }]);
+    expect(noView.tours[0]!.steps[0]).not.toHaveProperty('viewId');
+    const renamed = expectUndoable(base, [
+      { op: 'renameId', from: 'rel.web-api', to: 'rel.web-calls-api' },
+    ]);
+    expect(renamed.tours[0]!.steps[1]!.relationIds).toEqual(['rel.web-calls-api']);
+  });
+});

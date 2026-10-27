@@ -1,4 +1,30 @@
+import { z } from 'zod';
 import type { RelationRule, RelationType } from './types';
+
+/** How concurrent writers are kept from overwriting each other (learning topic: concurrency). */
+export const ConcurrencyControlSchema = z.enum([
+  'none',
+  'optimistic-version',
+  'row-lock',
+  'advisory-lock',
+  'serializable-retry',
+]);
+export const IsolationLevelSchema = z.enum(['read-committed', 'repeatable-read', 'serializable']);
+export const DeliveryGuaranteeSchema = z.enum([
+  'at-most-once',
+  'at-least-once',
+  'effectively-once',
+]);
+
+const callProperties = z
+  .object({
+    auth: z.enum(['none', 'session-cookie', 'bearer-token', 'api-key', 'mtls']),
+    idempotent: z.boolean(),
+    idempotencyKey: z.boolean(),
+    timeoutMs: z.number().int().positive(),
+    retries: z.number().int().nonnegative(),
+  })
+  .partial();
 
 /** Generic relation types (Implementation.md §10.2). */
 export const CORE_RELATION_TYPES: RelationType[] = [
@@ -8,6 +34,7 @@ export const CORE_RELATION_TYPES: RelationType[] = [
     mode: 'sync',
     line: { width: 1.5, marker: 'arrow' },
     defaultPriority: 10,
+    propertySchema: callProperties,
     docs: 'Synchronous request/response. Set `protocol` (http, graphql, trpc, websocket, grpc).',
   },
   {
@@ -16,6 +43,13 @@ export const CORE_RELATION_TYPES: RelationType[] = [
     mode: 'sync',
     line: { width: 1, marker: 'arrow' },
     defaultPriority: 20,
+    propertySchema: z
+      .object({
+        isolation: IsolationLevelSchema,
+        consistency: z.enum(['strong', 'eventual']),
+        cached: z.boolean(),
+      })
+      .partial(),
     docs: 'Reads data from a store. Set `via` to the data-access library.',
   },
   {
@@ -24,7 +58,15 @@ export const CORE_RELATION_TYPES: RelationType[] = [
     mode: 'sync',
     line: { width: 2.5, marker: 'arrow' },
     defaultPriority: 21,
-    docs: 'Writes data to a store. Set `via` to the data-access library.',
+    propertySchema: z
+      .object({
+        isolation: IsolationLevelSchema,
+        concurrencyControl: ConcurrencyControlSchema,
+        idempotencyKey: z.boolean(),
+        batch: z.boolean(),
+      })
+      .partial(),
+    docs: 'Writes data to a store. Set `via` to the data-access library, and `concurrencyControl` when several writers can change the same rows.',
   },
   {
     id: 'publishes',
@@ -32,6 +74,7 @@ export const CORE_RELATION_TYPES: RelationType[] = [
     mode: 'async',
     line: { dash: '6 4', width: 1.5, marker: 'open-arrow' },
     defaultPriority: 30,
+    propertySchema: z.object({ deliveryGuarantee: DeliveryGuaranteeSchema }).partial(),
     docs: 'Sends messages or events to a queue, topic or bus.',
   },
   {
@@ -40,6 +83,13 @@ export const CORE_RELATION_TYPES: RelationType[] = [
     mode: 'async',
     line: { dash: '6 4', width: 1.5, marker: 'open-arrow' },
     defaultPriority: 31,
+    propertySchema: z
+      .object({
+        concurrency: z.number().int().positive(),
+        ordering: z.enum(['none', 'per-key', 'strict']),
+        deliveryGuarantee: DeliveryGuaranteeSchema,
+      })
+      .partial(),
     docs: 'Receives messages from a queue, topic or bus.',
   },
   {
@@ -105,6 +155,19 @@ export const CORE_RELATION_TYPES: RelationType[] = [
     mode: 'sync',
     line: { dash: '8 3 2 3', width: 1, marker: 'arrow' },
     defaultPriority: 70,
+    propertySchema: z
+      .object({
+        flow: z.enum([
+          'password',
+          'oidc-code-pkce',
+          'oauth-client-credentials',
+          'magic-link',
+          'passkey',
+          'api-key',
+        ]),
+        tokenType: z.enum(['session', 'jwt', 'opaque']),
+      })
+      .partial(),
     docs: 'Uses an auth provider to sign in users or verify tokens.',
   },
 ];
@@ -159,7 +222,14 @@ export const CORE_RELATION_RULES: RelationRule[] = [
       'category:routing',
       'category:adapter',
     ],
-    to: ['category:deployable', 'category:module', 'category:routing', 'category:external'],
+    // Adapters are called directly in layered designs (use case → repository).
+    to: [
+      'category:deployable',
+      'category:module',
+      'category:adapter',
+      'category:routing',
+      'category:external',
+    ],
   },
   {
     type: ['reads', 'writes'],
@@ -179,8 +249,17 @@ export const CORE_RELATION_RULES: RelationRule[] = [
   {
     type: 'depends-on',
     from: ['category:module', 'category:deployable', 'category:adapter', 'category:domain-core'],
-    to: ['category:module', 'category:port', 'category:domain-core', 'category:domain-object'],
+    to: [
+      'category:module',
+      'category:adapter',
+      'category:port',
+      'category:domain-core',
+      'category:domain-object',
+      'category:schema',
+    ],
   },
+  // A data shape (DTO, API schema) may be composed of other data shapes.
+  { type: 'depends-on', from: ['category:schema'], to: ['category:schema'] },
   // An adapter usually also imports its port; "implements" is the more useful default.
   { type: 'implements', from: ['category:adapter'], to: ['category:port'], priority: 35 },
   {

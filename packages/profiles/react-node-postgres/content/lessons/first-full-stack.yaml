@@ -1,0 +1,125 @@
+id: lesson.first-full-stack
+title: Your first full-stack architecture
+summary: Build the classic shape of a web app — a React app, a Node.js API and a PostgreSQL database — and learn why each part exists.
+track: foundations
+level: beginner
+minutes: 15
+profile: react-node-postgres
+conceptIds: [react.app, node.service, pg.database, pg.schema, topic.models, node.endpoint]
+start:
+  ops: []
+steps:
+  - id: welcome
+    title: Three parts, three jobs
+    body: |
+      Almost every web app has the same three parts:
+
+      - the **frontend** runs in the user's browser and draws the screens (React),
+      - the **backend** runs on a server, checks requests and holds the business rules (Node.js),
+      - the **database** keeps the data safe when everything restarts (PostgreSQL).
+
+      In this lesson you draw them and connect them. The canvas checks every connection,
+      so you cannot make a connection that does not make sense.
+
+  - id: add-app
+    title: Add the React app
+    body: |
+      Open the **Frontend** group in the palette and drag a **React app** onto the canvas.
+      Name it "Web".
+    check:
+      hasElement: { kind: react.app }
+      message: Add a React app from the Frontend group.
+    hints:
+      - The React app is the first shape in the Frontend group (the atom icon).
+    success: |
+      This is everything that runs in the browser. Anyone can open the browser's developer
+      tools and read this code, so it must never contain secrets.
+    solution:
+      - op: addElement
+        element: { id: app.web, kind: react.app, name: Web, status: planned }
+
+  - id: add-api
+    title: Add the API and connect it
+    body: |
+      Drag a **Node service** from the **Backend** group and name it "API".
+      Then drag from the React app to the API to connect them. The tool picks **calls**,
+      because the browser sends HTTP requests to the server.
+    check:
+      all:
+        - hasElement: { kind: node.service }
+        - hasRelation: { type: calls, from: { kind: react.app }, to: { kind: node.service } }
+    hints:
+      - Hover the React app, then drag from one of the small handles on its border to the API.
+    success: |
+      The API is the only part that talks to the database. It decides who may do what,
+      and checks every request, because requests can come from anywhere — not only from
+      your React app.
+    solution:
+      - op: addElement
+        element:
+          id: svc.api
+          kind: node.service
+          name: API
+          status: planned
+          properties: { framework: express }
+      - op: addRelation
+        relation: { id: rel.web-calls-api, type: calls, sourceId: app.web, targetId: svc.api, protocol: http, status: planned }
+
+  - id: add-database
+    title: Add the database
+    body: |
+      From the **Data** group, drag a **Database** and name it "Shop DB". Then drag a
+      **Schema** *into* the database and name it "public". A schema is a folder of tables.
+    check:
+      hasElement: { kind: pg.schema, parent: { kind: pg.database } }
+      message: Put a Schema inside a Database.
+    hints:
+      - Drop the schema shape on top of the database shape to nest it.
+    solution:
+      - op: addElement
+        element: { id: db.shop, kind: pg.database, name: Shop DB, status: planned }
+      - op: addElement
+        element: { id: schema.public, kind: pg.schema, name: public, parentId: db.shop, status: planned }
+
+  - id: connect-database
+    title: Let the API read and write
+    body: |
+      Connect the API to the schema twice: once as **reads** and once as **writes**.
+      Separate arrows make it easy to see later which services change which data.
+    check:
+      all:
+        - hasRelation: { type: reads, from: { kind: node.service }, to: { kind: pg.schema } }
+        - hasRelation: { type: writes, from: { kind: node.service }, to: { kind: pg.schema } }
+    solution:
+      - op: addRelation
+        relation: { id: rel.api-reads-public, type: reads, sourceId: svc.api, targetId: schema.public, via: prisma, status: planned }
+      - op: addRelation
+        relation: { id: rel.api-writes-public, type: writes, sourceId: svc.api, targetId: schema.public, via: prisma, status: planned }
+
+  - id: ownership
+    title: Decide who owns the tables
+    body: |
+      Tables change over time through **migrations**: small scripts that add a column or a
+      table. Exactly one service should own them. Add a **migrates** relation from the API
+      to the schema.
+    check:
+      hasRelation: { type: migrates, from: { kind: node.service }, to: { kind: pg.schema } }
+    success: |
+      Later, when you add a second service, the tool warns you if two services write the
+      same schema or both run migrations on it.
+    solution:
+      - op: addRelation
+        relation: { id: rel.api-migrates-public, type: migrates, sourceId: svc.api, targetId: schema.public, status: planned }
+
+  - id: why-not-direct
+    title: Why can't the browser talk to the database?
+    body: |
+      Try to connect the React app directly to the schema. The tool refuses:
+
+      > Browser code cannot connect to PostgreSQL. Go through a Node service.
+
+      The database password would have to be in the browser, where anyone can read it,
+      and nothing would check what the user is allowed to do. The API is the guard.
+
+      Next steps: open **Designing API endpoints** to plan what the API offers, and
+      **Models** to see why the API's JSON is not the same as your tables.

@@ -48,6 +48,8 @@ export const RelationSchema = z.object({
   via: z.string().optional(),
   inTransaction: z.boolean().optional(),
   contract: z.string().optional(),
+  /** Validated by the relation type's propertySchema (isolation, auth, retries ...). */
+  properties: z.record(z.string(), z.unknown()).optional(),
   status: StatusSchema,
   notes: z.string().optional(),
   source: ProvenanceSchema.optional(),

@@ -314,6 +314,13 @@
               "contract": {
                 "type": "string"
               },
+              "properties": {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {}
+              },
               "status": {
                 "type": "string",
                 "enum": [
@@ -798,6 +805,98 @@
         ]
       }
     },
+    "tours": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "maxLength": 128,
+            "pattern": "^[a-z0-9]+(?:[.-][a-z0-9]+)*$"
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1
+          },
+          "description": {
+            "type": "string"
+          },
+          "audience": {
+            "type": "string",
+            "enum": [
+              "any",
+              "beginner",
+              "intermediate",
+              "senior",
+              "agent"
+            ]
+          },
+          "steps": {
+            "minItems": 1,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "maxLength": 128,
+                  "pattern": "^[a-z0-9]+(?:[.-][a-z0-9]+)*$"
+                },
+                "title": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "body": {
+                  "type": "string"
+                },
+                "viewId": {
+                  "type": "string",
+                  "maxLength": 128,
+                  "pattern": "^[a-z0-9]+(?:[.-][a-z0-9]+)*$"
+                },
+                "elementIds": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "maxLength": 128,
+                    "pattern": "^[a-z0-9]+(?:[.-][a-z0-9]+)*$"
+                  }
+                },
+                "relationIds": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "maxLength": 128,
+                    "pattern": "^[a-z0-9]+(?:[.-][a-z0-9]+)*$"
+                  }
+                },
+                "conceptIds": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                }
+              },
+              "required": [
+                "id",
+                "title",
+                "body",
+                "elementIds",
+                "relationIds"
+              ]
+            }
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "audience",
+          "steps"
+        ]
+      }
+    },
     "changeSets": {
       "type": "array",
       "items": {
@@ -1152,6 +1251,13 @@
                         },
                         "contract": {
                           "type": "string"
+                        },
+                        "properties": {
+                          "type": "object",
+                          "propertyNames": {
+                            "type": "string"
+                          },
+                          "additionalProperties": {}
                         },
                         "status": {
                           "type": "string",
@@ -2157,6 +2263,126 @@
                   "properties": {
                     "op": {
                       "type": "string",
+                      "const": "upsertTour"
+                    },
+                    "tour": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "maxLength": 128,
+                          "pattern": "^[a-z0-9]+(?:[.-][a-z0-9]+)*$"
+                        },
+                        "title": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "description": {
+                          "type": "string"
+                        },
+                        "audience": {
+                          "type": "string",
+                          "enum": [
+                            "any",
+                            "beginner",
+                            "intermediate",
+                            "senior",
+                            "agent"
+                          ]
+                        },
+                        "steps": {
+                          "minItems": 1,
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string",
+                                "maxLength": 128,
+                                "pattern": "^[a-z0-9]+(?:[.-][a-z0-9]+)*$"
+                              },
+                              "title": {
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "body": {
+                                "type": "string"
+                              },
+                              "viewId": {
+                                "type": "string",
+                                "maxLength": 128,
+                                "pattern": "^[a-z0-9]+(?:[.-][a-z0-9]+)*$"
+                              },
+                              "elementIds": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string",
+                                  "maxLength": 128,
+                                  "pattern": "^[a-z0-9]+(?:[.-][a-z0-9]+)*$"
+                                }
+                              },
+                              "relationIds": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string",
+                                  "maxLength": 128,
+                                  "pattern": "^[a-z0-9]+(?:[.-][a-z0-9]+)*$"
+                                }
+                              },
+                              "conceptIds": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string",
+                                  "minLength": 1
+                                }
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "title",
+                              "body",
+                              "elementIds",
+                              "relationIds"
+                            ]
+                          }
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "title",
+                        "audience",
+                        "steps"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "op",
+                    "tour"
+                  ]
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "op": {
+                      "type": "string",
+                      "const": "removeTour"
+                    },
+                    "id": {
+                      "type": "string",
+                      "maxLength": 128,
+                      "pattern": "^[a-z0-9]+(?:[.-][a-z0-9]+)*$"
+                    }
+                  },
+                  "required": [
+                    "op",
+                    "id"
+                  ]
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "op": {
+                      "type": "string",
                       "const": "upsertSuppression"
                     },
                     "suppression": {
@@ -2535,6 +2761,7 @@
     "views",
     "notes",
     "decisions",
+    "tours",
     "changeSets",
     "snapshots",
     "settings"

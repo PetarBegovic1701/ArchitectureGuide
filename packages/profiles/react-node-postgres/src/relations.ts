@@ -8,12 +8,49 @@ const NODE_ACTORS = [
   'node.scheduler',
   'node.module',
   'node.route-handler',
+  'node.endpoint',
   'node.use-case',
+  'node.repository',
+];
+
+const DB_CODE = ['pg.function', 'pg.trigger'];
+/** Backend elements that hold server-only code. Contracts, DTOs and shared packages are not in it. */
+const SERVER_CODE = [
+  'node.service',
+  'node.bff',
+  'node.worker',
+  'node.scheduler',
+  'node.ws-gateway',
+  'node.module',
+  'node.route-handler',
+  'node.endpoint',
+  'node.middleware',
+  'node.use-case',
+  'node.domain',
+  'node.port',
   'node.repository',
 ];
 
 /** Relation types added by the profile (Implementation.md §10.2). */
 export const RELATION_TYPES: RelationType[] = [
+  {
+    id: 'invokes',
+    name: 'invokes',
+    mode: 'sync',
+    line: { width: 1.5, marker: 'arrow' },
+    defaultPriority: 15,
+    hint: 'Node code, functions and triggers invoke a database function or procedure.',
+    docs: 'Runs a database function or procedure (`SELECT fn(...)`, `CALL proc(...)`, or `EXECUTE FUNCTION` in a trigger).',
+  },
+  {
+    id: 'fires-on',
+    name: 'fires on',
+    mode: 'static',
+    line: { dash: '4 3', width: 1, marker: 'arrow' },
+    defaultPriority: 16,
+    hint: 'A trigger fires on a table or a view.',
+    docs: 'The trigger runs when rows of this table (or view) change.',
+  },
   {
     id: 'migrates',
     name: 'migrates',
@@ -112,6 +149,52 @@ export const RELATION_TYPES: RelationType[] = [
 export const RELATION_RULES: RelationRule[] = [
   // Deny rules (Implementation.md §10.4).
   {
+    type: 'renders',
+    deny: { from: ['group:Backend', 'group:Data'] },
+    message: 'Only React code renders UI.',
+  },
+  {
+    type: 'renders',
+    deny: { to: ['group:Backend', 'group:Data'] },
+    message: 'Only React code renders UI.',
+  },
+  {
+    type: 'navigates',
+    deny: { to: ['react.component'] },
+    message: 'Users navigate to routes, not to components. Point the relation at a route.',
+  },
+  {
+    type: 'depends-on',
+    deny: { from: ['group:Frontend'], to: SERVER_CODE },
+    message:
+      'Browser code must not import server code. Share types through an API contract or a data shape (DTO).',
+  },
+  {
+    type: '*',
+    deny: { from: DB_CODE, to: ['gen.*', 'node.*', 'react.*'] },
+    message: 'Database code only works with database objects. Let the application read the result.',
+  },
+  {
+    type: ['calls', 'depends-on'],
+    deny: { to: DB_CODE },
+    message:
+      'Run database functions with "invokes" (SELECT fn(...) or CALL proc(...)). Triggers run by themselves when their table changes.',
+  },
+  {
+    type: [
+      'depends-on',
+      'renders',
+      'emits',
+      'handles',
+      'publishes',
+      'consumes',
+      'authenticates-with',
+    ],
+    deny: { from: DB_CODE },
+    message:
+      'Database functions call other functions with "invokes", and send messages with "notifies" or "enqueues".',
+  },
+  {
     type: 'migrates',
     deny: { from: ['group:Frontend'] },
     message: 'Migrations run from backend code.',
@@ -164,14 +247,17 @@ export const RELATION_RULES: RelationRule[] = [
     from: ['node.service', 'node.bff', 'node.worker'],
     to: ['pg.schema', 'pg.database'],
   },
-  { type: 'enqueues', from: NODE_ACTORS, to: ['pg.job-queue'] },
+  { type: 'invokes', from: [...NODE_ACTORS, ...DB_CODE], to: ['pg.function'] },
+  { type: 'fires-on', from: ['pg.trigger'], to: ['pg.table', 'pg.view'] },
+  // graphile-worker's add_job() and pg_notify() can be called from SQL as well.
+  { type: 'enqueues', from: [...NODE_ACTORS, ...DB_CODE], to: ['pg.job-queue'] },
   { type: 'processes', from: ['node.worker'], to: ['pg.job-queue'], priority: 27 },
   {
     type: 'processes',
     from: ['node.service', 'node.module', 'node.use-case'],
     to: ['pg.job-queue'],
   },
-  { type: 'notifies', from: NODE_ACTORS, to: ['pg.channel'] },
+  { type: 'notifies', from: [...NODE_ACTORS, ...DB_CODE], to: ['pg.channel'] },
   { type: 'listens', from: [...NODE_ACTORS, 'node.ws-gateway'], to: ['pg.channel'] },
   { type: 'connects-via', from: NODE_ACTORS, to: ['pg.pooler'] },
   { type: 'connects-via', from: ['pg.pooler'], to: ['pg.database'] },

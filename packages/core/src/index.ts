@@ -5,3 +5,4 @@ export * from './serialize';
 export * from './migrate';
 export * from './catalog';
 export * from './ops';
+export * from './learn';

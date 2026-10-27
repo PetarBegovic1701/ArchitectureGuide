@@ -84,7 +84,11 @@ function applyOne(p: Project, op: Op, catalog: Catalog): Op[] {
     case 'removeView': {
       const view = getView(p, op.id);
       p.views = p.views.filter((v) => v !== view);
-      return [{ op: 'addView', view }];
+      // Restore the view before the tours that point at it.
+      return [
+        { op: 'addView', view },
+        ...detachFromTours(p, new Set(), new Set(), new Set([view.id])),
+      ];
     }
     case 'setViewNode': {
       const view = getView(p, op.viewId);
@@ -152,6 +156,21 @@ function applyOne(p: Project, op: Op, catalog: Catalog): Op[] {
     case 'removeDecision': {
       const prev = removeFrom(p.decisions, (d) => d.id === op.id, op.id, 'Decision');
       return [{ op: 'upsertDecision', decision: prev }];
+    }
+    case 'upsertTour': {
+      for (const step of op.tour.steps) {
+        if (step.viewId) getView(p, step.viewId);
+        for (const id of step.elementIds) getElement(p, id);
+        for (const id of step.relationIds) getRelation(p, id);
+      }
+      return upsertIn(p.tours, op.tour, (t) => t.id === op.tour.id, {
+        restore: (prev) => ({ op: 'upsertTour', tour: prev }),
+        remove: () => ({ op: 'removeTour', id: op.tour.id }),
+      });
+    }
+    case 'removeTour': {
+      const prev = removeFrom(p.tours, (t) => t.id === op.id, op.id, 'Tour');
+      return [{ op: 'upsertTour', tour: prev }];
     }
     case 'upsertSuppression': {
       const key = suppressionKey(op.suppression);
@@ -273,6 +292,7 @@ function removeElement(p: Project, id: Id, cascade: boolean): Op[] {
     ...removed.map((element): Op => ({ op: 'addElement', element })),
     ...relations.map((relation): Op => ({ op: 'addRelation', relation })),
     ...detachFromViews(p, removedIds, relationIds),
+    ...detachFromTours(p, removedIds, relationIds, new Set()),
   ];
 }
 
@@ -301,6 +321,7 @@ function addRelation(p: Project, relation: Relation, catalog: Catalog): Op[] {
   const source = getElement(p, relation.sourceId);
   const target = getElement(p, relation.targetId);
   assertRelationAllowed(catalog, relation, source.kind, target.kind, p);
+  assertRelationProperties(catalog, relation);
   p.model.relations.push(relation);
   return [{ op: 'removeRelation', id: relation.id }];
 }
@@ -321,6 +342,7 @@ function updateRelation(
     const target = getElement(p, next.targetId);
     assertRelationAllowed(catalog, next, source.kind, target.kind);
   }
+  assertRelationProperties(catalog, next);
   replaceIn(p.model.relations, rel, next);
   return [{ op: 'updateRelation', id, patch: inverse }];
 }
@@ -328,7 +350,12 @@ function updateRelation(
 function removeRelation(p: Project, id: Id): Op[] {
   const rel = getRelation(p, id);
   p.model.relations = p.model.relations.filter((r) => r !== rel);
-  return [{ op: 'addRelation', relation: rel }, ...detachFromViews(p, new Set(), new Set([id]))];
+  const ids = new Set([id]);
+  return [
+    { op: 'addRelation', relation: rel },
+    ...detachFromViews(p, new Set(), ids),
+    ...detachFromTours(p, new Set(), ids, new Set()),
+  ];
 }
 
 // --- ids ---------------------------------------------------------------------
@@ -376,6 +403,10 @@ function renameId(p: Project, from: Id, to: Id): Op[] {
   for (const n of p.notes) n.linkedIds = swapAll(n.linkedIds);
   for (const d of p.decisions) d.linkedIds = swapAll(d.linkedIds);
   for (const s of p.settings.suppressions) s.targetIds = swapAll(s.targetIds);
+  for (const step of p.tours.flatMap((t) => t.steps)) {
+    step.elementIds = swapAll(step.elementIds);
+    step.relationIds = swapAll(step.relationIds);
+  }
   return [{ op: 'renameId', from: to, to: from }];
 }
 
@@ -439,6 +470,42 @@ function detachFromViews(p: Project, elementIds: Set<Id>, relationIds: Set<Id>):
   return inverse;
 }
 
+/**
+ * Removes deleted elements, relations and views from tour steps; returns their inverse.
+ * A tour keeps its steps even when a step has nothing left to highlight.
+ */
+function detachFromTours(
+  p: Project,
+  elementIds: Set<Id>,
+  relationIds: Set<Id>,
+  viewIds: Set<Id>,
+): Op[] {
+  const inverse: Op[] = [];
+  p.tours = p.tours.map((tour) => {
+    const touched = tour.steps.some(
+      (s) =>
+        (s.viewId !== undefined && viewIds.has(s.viewId)) ||
+        s.elementIds.some((id) => elementIds.has(id)) ||
+        s.relationIds.some((id) => relationIds.has(id)),
+    );
+    if (!touched) return tour;
+    inverse.push({ op: 'upsertTour', tour });
+    return {
+      ...tour,
+      steps: tour.steps.map((s) => {
+        const step = {
+          ...s,
+          elementIds: s.elementIds.filter((id) => !elementIds.has(id)),
+          relationIds: s.relationIds.filter((id) => !relationIds.has(id)),
+        };
+        if (step.viewId !== undefined && viewIds.has(step.viewId)) delete step.viewId;
+        return step;
+      }),
+    };
+  });
+  return inverse;
+}
+
 function checkAnchor(p: Project, anchor: Anchor): void {
   if ('elementId' in anchor) getElement(p, anchor.elementId);
   else if ('relationId' in anchor) getRelation(p, anchor.relationId);
@@ -486,6 +553,21 @@ function assertRelationAllowed(
     extra.fix = [{ op: 'addRelation', relation: flipped }];
   }
   throw new OpFailure(check.code, check.message, extra);
+}
+
+function assertRelationProperties(catalog: Catalog, r: Relation): void {
+  const schema = catalog.relationTypes.get(r.type)?.propertySchema;
+  if (!schema || !r.properties) return;
+  const result = schema.safeParse(r.properties);
+  if (!result.success) {
+    throw new OpFailure(
+      'PROPERTY_INVALID',
+      `Invalid properties for ${r.type}: ${zodMessage(result.error)}`,
+      {
+        itemId: r.id,
+      },
+    );
+  }
 }
 
 function assertProperties(catalog: Catalog, el: Element): void {

@@ -80,6 +80,13 @@ export const SHAPES: Record<ShapeId, ShapeSpec> = {
     resizable: true,
     description: 'Rounded rectangle with a gear badge',
   },
+  document: {
+    id: 'document',
+    width: 120,
+    height: 72,
+    resizable: true,
+    description: 'Page with a folded corner',
+  },
   container: {
     id: 'container',
     width: 240,
@@ -112,6 +119,7 @@ export const CATEGORIES: Record<CategoryId, Category> = {
   },
   port: { id: 'port', name: 'Port / interface', shape: 'circle', defaultLayer: 'domain' },
   adapter: { id: 'adapter', name: 'Adapter', shape: 'plug', defaultLayer: 'infrastructure' },
+  schema: { id: 'schema', name: 'Data shape', shape: 'document', defaultLayer: 'application' },
   'data-at-rest': {
     id: 'data-at-rest',
     name: 'Data at rest',

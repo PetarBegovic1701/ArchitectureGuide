@@ -16,7 +16,9 @@
     "depcruise": "depcruise packages --config .dependency-cruiser.cjs",
     "schema": "pnpm --filter @archguide/core run schema",
     "schema:check": "pnpm --filter @archguide/core run schema:check",
-    "check": "pnpm lint && pnpm format:check && pnpm typecheck && pnpm test && pnpm depcruise && pnpm schema:check"
+    "check": "pnpm lint && pnpm format:check && pnpm typecheck && pnpm test && pnpm depcruise && pnpm schema:check && pnpm content:check",
+    "content": "pnpm --filter @archguide/profile-react-node-postgres run content",
+    "content:check": "pnpm --filter @archguide/profile-react-node-postgres run content:check"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
