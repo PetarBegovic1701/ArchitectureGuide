@@ -1068,7 +1068,7 @@ runRules(project, catalog, { rules?, only?: string[] }): Finding[]   // most sev
 ```
 
 Analysis-scope rules (they need analyzer facts, §19) get `ctx.analysis` and
-`evidence` in Phase 7.
+`evidence` in Phase 8.
 
 ### 11.2 GraphQuery
 
@@ -1226,11 +1226,11 @@ Every rule links to a learning text (rule text or topic, §17.4) from its "Why?"
     request stuck behind CPU work); only `worker-threads` passes.
   - RNP-023 is in the `api` and `concurrency` packs.
   - RNP-012 (server data in a client store) needs code facts to be reliable;
-    it moves to Phase 7 with the analysis-only rules RNP-003, 004, 017, 018.
+    it moves to Phase 8 with the analysis-only rules RNP-003, 004, 017, 018.
   - `pg.job-queue` got a `deadLetter` property, so AP-012 applies to it.
 - **UI deviations from §11.8:** quick fixes apply at once, as one undo step,
   with an Undo button in the confirmation toast; the preview overlay comes
-  with change sets (Phase 8). Tooltips are the badge's native title. Edges
+  with change sets (Phase 9). Tooltips are the badge's native title. Edges
   with findings take the severity color instead of a dashed overlay.
   Suppressions cannot be linked to a decision from the UI yet (Phase 4).
 - **Levels:** beginners see info findings as "Tips" and rule IDs are hidden;
@@ -1530,6 +1530,42 @@ an element becomes an ELK partition (presentation left → data right). The resu
   the same meaning.
 - Performance budget: 500 nodes / 1,000 edges → pan/zoom at 60 fps
   (`onlyRenderVisibleElements`, memoized nodes).
+
+### 13.10 Small screens and touch
+
+The editor is built for a desktop first. On a phone, the fixed side panels
+(palette 224 px, inspector 320 px) leave no room for the canvas, and some
+actions need a mouse (dragging from a handle, Ctrl+click, hover tooltips).
+Phase 5 makes the app usable on tablets and phones. The goal on a phone is to
+view, learn, follow tours and lessons, review problems and make small edits;
+drawing a large diagram from scratch stays a tablet or desktop task.
+
+| Width | Layout |
+|---|---|
+| ≥ 1024 px | As today: palette, canvas, inspector, Problems panel below the canvas |
+| 640–1023 px (tablet) | Canvas full width; palette and inspector are drawers over the canvas (toggle buttons in the top bar); Problems panel as a bottom drawer |
+| < 640 px (phone) | Canvas full screen; bottom toolbar (Add, Inspect, Learn, Problems, ⋯); panels as bottom sheets with a drag handle; dialogs (templates, snapshots, suppress) full screen; top bar keeps back, name, undo/redo and a "⋯" menu for the rest |
+
+**Touch interactions:**
+
+- Handles get a 44 × 44 px touch area (visible dot unchanged).
+- **Connect mode:** tap "Connect" (toolbar or long-press menu), tap the source,
+  then the target. Valid targets glow as with dragging; a refused pair shows
+  the same message, "Reverse it" and "Why?".
+- **Long-press** on a shape or arrow opens a context menu: rename, connect,
+  inspect, learn, duplicate, delete.
+- **Select several:** a toolbar toggle replaces Ctrl/Shift+click; align and
+  distribute work as on desktop.
+- Pinch to zoom and drag to pan (React Flow); tapping the empty canvas
+  closes open sheets.
+- Nothing depends on hover: badge counts and finding titles are visible on tap.
+- Adding from the palette places the shape in the visible center (as today
+  with click-to-add); drag-and-drop from the palette is desktop only.
+
+**Quality:** the layout never scrolls sideways; text is at least 14 px on
+phones; touch targets are at least 44 px; sheets and drawers are focus-trapped
+and close with Escape or a swipe down. Playwright runs the main scenarios with
+phone (390 × 844) and tablet (820 × 1180) viewports with touch enabled.
 
 ---
 
@@ -1861,8 +1897,8 @@ fix it") and use `finding` checks, so the rules engine (§11) grades the result.
 | **Lesson player** | §17.5 |
 | **"Why?" links** | On every refused connection and every finding |
 | **Glossary hover** | Underlined terms in texts and notes show the summary |
-| **Concurrency lab** (Phase 5) | A timeline view: two or more requests or workers as lanes, steps as cards (read, compute, write, lock, commit). Play shows the interleaving that causes a lost update; switching the relation's `concurrencyControl` replays it with the lock or version check |
-| **API view** (Phase 8) | Endpoints of a route handler or contract as a table: method, path, request/response DTO, status codes, auth, pagination, idempotency; exports an OpenAPI skeleton |
+| **Concurrency lab** (Phase 6) | A timeline view: two or more requests or workers as lanes, steps as cards (read, compute, write, lock, commit). Play shows the interleaving that causes a lost update; switching the relation's `concurrencyControl` replays it with the lock or version check |
+| **API view** (Phase 9) | Endpoints of a route handler or contract as a table: method, path, request/response DTO, status codes, auth, pagination, idempotency; exports an OpenAPI skeleton |
 
 ### 17.8 Onboarding people and agents to a project
 
@@ -2687,10 +2723,10 @@ Estimates assume one full-time developer. They are rough.
 
 - [x] `core/graph` (GraphQuery: indexed lookups, subtree lifting, Tarjan SCC with a node map and relation filter, longest chain)
 - [x] Rule API, packs, `replaces`, overrides (`off` or a severity), thresholds, suppressions
-- [x] Model-scope rules: AP-001…AP-018, RNP-001, 002, 005–011, 013, 014, 015, 016 (RNP-012 → Phase 7, §11.9)
+- [x] Model-scope rules: AP-001…AP-018, RNP-001, 002, 005–011, 013, 014, 015, 016 (RNP-012 → Phase 8, §11.9)
 - [x] Findings computed on the main thread, cached per project change (worker and incremental runs deferred, §11.3)
 - [x] Problems panel (grouped by severity, show suppressed, rule-pack menu), badges, halos, edge colors; counts in the top bar
-- [x] Quick fixes (one undo step; preview deferred to Phase 8); suppressions with a required reason
+- [x] Quick fixes (one undo step; preview deferred to Phase 9); suppressions with a required reason
 - [x] Concurrency, API and auth rules RNP-019 … RNP-027 (packs `concurrency`, `api`, `security`)
 - [x] Finding badges on shapes and edges (moved from Phase 1)
 - [x] "Why?" from every finding to the rule's rationale and its learning text; `finding` checks wired into lessons
@@ -2709,7 +2745,7 @@ Estimates assume one full-time developer. They are rough.
 - [x] File System Access "Open folder" mode; `archguide.config.json` reading (written on first save); snapshots in `.archguide/snapshots/<project>/`; last folder remembered for one-click reopen
 - [x] ELK auto-layout ("Tidy up", ELK's own worker); align/distribute (moved from Phase 1)
 - [x] Tests: template validity for every parameter variant, custom template round trip, diff, folder store with an in-memory folder, ELK layout of every template, align/distribute; Playwright scenarios for templates (new project, insert + undo, save selection), snapshots (save, compare, restore), folder mode (save, edit, reopen identically, using the browser's private file system), tidy up and align
-- Not done: comparing two snapshots with each other (compare is snapshot vs canvas); the Dexie copy of a folder project is a cache, so editing the same project in two tabs is not detected (serve mode, Phase 6, handles conflicts)
+- Not done: comparing two snapshots with each other (compare is snapshot vs canvas); the Dexie copy of a folder project is a cache, so editing the same project in two tabs is not detected (serve mode, Phase 7, handles conflicts)
 - **Done when:** each template validates with 0 errors under its own packs; a project saved to a folder reopens identically. **Done.**
 
 ### Phase 4: Notes, annotations, exports (~2 weeks)
@@ -2725,7 +2761,18 @@ Estimates assume one full-time developer. They are rough.
 - [ ] Golden-file tests for each exporter × template
 - **Done when:** the agent-md output of each template is reviewed and stable.
 
-### Phase 5: Learning mode (~3 weeks, plus a content stream)
+### Phase 5: Mobile and touch (~1 week)
+
+- [ ] Responsive editor layout (§13.10): drawers on tablets; full-screen canvas, bottom toolbar and bottom sheets on phones; "⋯" menu in the top bar
+- [ ] Full-screen dialogs on phones (templates, snapshots, suppress, save as template)
+- [ ] Connect mode (tap source, tap target) with the same refusal messages and fixes
+- [ ] Long-press context menu on shapes and arrows; "Select several" toggle
+- [ ] 44 px touch areas for handles, badges and toolbar buttons; no hover-only information
+- [ ] Workspace, Learn tab and Problems panel checked at phone width (no sideways scroll)
+- [ ] Playwright projects for phone and tablet viewports with touch; the starter, findings and template scenarios run on them
+- **Done when:** on a 390 px wide phone, a user opens the starter, follows its tour, fixes a finding, connects two shapes and renames one, without horizontal scrolling and without a mouse or keyboard.
+
+### Phase 6: Learning mode (~3 weeks, plus a content stream)
 
 - [ ] Library page (texts by track, search) and text pages at the chosen level
 - [ ] Tracks page with lessons, level, time and progress
@@ -2737,7 +2784,7 @@ Estimates assume one full-time developer. They are rough.
 - [ ] Content stream (parallel, continuous): a text for every concept, relation type and rule; about four lessons per track for `foundations`, `data-and-models`, `api-design`, `state-management`, `auth`, `concurrency-and-parallelism`
 - **Done when:** a beginner finishes `lesson.first-full-stack` without help in a usability test, every lesson in CI is solvable, and content coverage is 100% for concepts and relation types.
 
-### Phase 6: Server, CLI, MCP, skill (~2 weeks)
+### Phase 7: Server, CLI, MCP, skill (~2 weeks)
 
 - [ ] `server`: Fastify, static app, token, WebSocket protocol, chokidar, lock file, atomic writes, revision checks
 - [ ] Web `serveClient` (live updates, conflict UI)
@@ -2748,7 +2795,7 @@ Estimates assume one full-time developer. They are rough.
 - [ ] MCP contract tests
 - **Done when:** Claude Code creates, edits, validates and exports a project only through MCP, and the open browser tab updates live.
 
-### Phase 7: Repository analysis and enforcement (~4 weeks)
+### Phase 8: Repository analysis and enforcement (~4 weeks)
 
 - [ ] Analyzer pipeline (discover, engines, detectors, resolve, match, cache, limits)
 - [ ] Detectors in §19.4 (workspace, React, Node, Postgres, infra)
@@ -2762,7 +2809,7 @@ Estimates assume one full-time developer. They are rough.
 - [ ] GitHub Action example; fixture repos 1–4
 - **Done when:** on fixtures 1–3 the baseline has ≥ 80% of the hand-made reference elements and no element without evidence; fixture 4 triggers every analysis rule; `archguide check` fails on a seeded domain → Prisma import with file and line.
 
-### Phase 8: Change sets and advanced views (~3 weeks)
+### Phase 9: Change sets and advanced views (~3 weeks)
 
 - [ ] Change-set mode (record ops into a change set), overlay, new-findings filter
 - [ ] Rebase on baseline changes; conflict list
