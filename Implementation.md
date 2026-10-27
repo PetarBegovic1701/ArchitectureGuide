@@ -334,7 +334,7 @@ ArchitectureGuide/
 │     ├─ src/dialogs/               # Template picker, Export, Relation picker, Suppress
 │     ├─ src/command/               # Command palette + shortcuts
 │     ├─ src/store/                 # projectStore, uiStore, historyStore
-│     ├─ src/workers/               # rules.worker.ts, layout.worker.ts
+│     ├─ src/workers/               # rules.worker.ts (planned); ELK uses its own worker
 │     ├─ src/persistence/           # dexie.ts, fsAccess.ts, serveClient.ts
 │     └─ e2e/                       # Playwright
 ├─ packages/
@@ -1316,6 +1316,41 @@ folderLayout: {
 
 `folderLayout` fills `codePaths`. The user can edit them. If a repo scan
 finds other paths, the scan suggests updating them.
+
+### 12.4 Phase 3 implementation notes
+
+- **API as built** (`packages/core/src/templates`): a template's `build(params, b)`
+  describes elements with a small builder (`b.el(key, kind, name, {parent, x, y, ...})`,
+  `b.rel(sourceKey, type, targetKey, extra)`, `b.step(...)` for the tour) instead of
+  returning raw ops. `instantiateTemplate(template, project, catalog, {params, origin,
+  viewId})` turns that into ops: elements with readable IDs that are unique in the
+  project, relations, view nodes, the template's tour, a `derivedFrom` entry, and the
+  template's rule packs. `resolveParams` checks parameters (required strings, number
+  bounds, enum options, list length and unique items); `renderInvariants` fills them in.
+- **Stamping** puts the template right of the existing diagram, at the top level. The
+  "wrap in a new `group.context`" option is not built: several templates contain
+  elements that cannot live in a context (for example `pg.cluster`).
+- **Templates built:** T1, T2, T3, T4, T5, T6, T7, T11, each with a tour and a pattern
+  text (`pattern.starter`, `pattern.layered`, `pattern.hexagonal`,
+  `pattern.modular-monolith`, `pattern.bff`, `pattern.database-per-service`,
+  `pattern.background-jobs`, `pattern.feature-sliced`). Tests build each template with
+  its defaults, its smallest lists and its largest lists: no findings of any severity
+  under its own packs, unique IDs when stamped twice, no overlapping top-level shapes,
+  and an ELK layout without overlaps.
+- **Deviations from §12.2:**
+  - T4 uses each schema's `ownedBy` property for module ownership (only services and
+    workers may `migrates`); the new pack `modular-monolith` has RNP-028 "module writes
+    another module's schema". `cqrs` (T9) is still to come.
+  - T6's `gateway` parameter is the gateway product (nginx, kong, traefik, cloud).
+  - T7 has one queue with one queue name per job, and one worker.
+  - T11's slices are `react.feature` elements with `fsdLayer` inside `group.layer`
+    containers; entities load data through the API client.
+  - Every template that has a public entry includes an auth middleware, so it passes the
+    security pack.
+- **Custom templates** (`templateFromSelection`, `templateFromFile`) are plain data files
+  (`format: "archguide-template"`) without parameters. They keep the selection's
+  positions and recreate it with new IDs. Stored in IndexedDB; import and export as
+  `*.archguide-template.json`.
 
 ---
 
@@ -2664,16 +2699,18 @@ Estimates assume one full-time developer. They are rough.
 - [x] Tests: positive and negative fixtures for every model rule (50 tests), engine tests (packs, replaces, overrides, suppressions, ordering, performance), 2 Playwright scenarios (fix with undo, "Why?", suppress, unsuppress, rule packs)
 - **Done when:** every rule has positive and negative fixture tests and a docs entry; perf budget met. **Done.**
 
-### Phase 3: Templates and projects (~2 weeks)
+### Phase 3: Templates and projects (~2 weeks) — done
 
-- [ ] Template engine (params dialog, new project from template, stamp into canvas, `derivedFrom`, packs on)
-- [ ] T1, T2, T3, T4, T5, T6, T7, T11
-- [ ] Save selection as custom template; import/export template files
-- [ ] One tour and one pattern text (`pattern.*`) per template
-- [ ] Snapshots (create, list, restore), compare (diff overlay)
-- [ ] File System Access "Open folder" mode; `archguide.config.json` reading
-- [ ] ELK auto-layout worker; align/distribute (moved from Phase 1)
-- **Done when:** each template validates with 0 errors under its own packs; a project saved to a folder reopens identically.
+- [x] Template engine (params dialog, new project from template, stamp into canvas, `derivedFrom`, packs on) — §12.4
+- [x] T1, T2, T3, T4, T5, T6, T7, T11
+- [x] Save selection as custom template; import/export template files
+- [x] One tour and one pattern text (`pattern.*`) per template
+- [x] Snapshots (create, list, restore), compare (diff overlay with new/changed marks and a list of removed items); `diffProjects` in core (§16.3)
+- [x] File System Access "Open folder" mode; `archguide.config.json` reading (written on first save); snapshots in `.archguide/snapshots/<project>/`; last folder remembered for one-click reopen
+- [x] ELK auto-layout ("Tidy up", ELK's own worker); align/distribute (moved from Phase 1)
+- [x] Tests: template validity for every parameter variant, custom template round trip, diff, folder store with an in-memory folder, ELK layout of every template, align/distribute; Playwright scenarios for templates (new project, insert + undo, save selection), snapshots (save, compare, restore), folder mode (save, edit, reopen identically, using the browser's private file system), tidy up and align
+- Not done: comparing two snapshots with each other (compare is snapshot vs canvas); the Dexie copy of a folder project is a cache, so editing the same project in two tabs is not detected (serve mode, Phase 6, handles conflicts)
+- **Done when:** each template validates with 0 errors under its own packs; a project saved to a folder reopens identically. **Done.**
 
 ### Phase 4: Notes, annotations, exports (~2 weeks)
 
