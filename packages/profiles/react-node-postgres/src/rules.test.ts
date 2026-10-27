@@ -502,3 +502,19 @@ describe('profile rules: API and authentication', () => {
     expect(fire(fix(p, 'RNP-025'), 'RNP-025')).toEqual([]);
   });
 });
+
+describe('profile rules: modular monolith', () => {
+  it('RNP-028 a module writes a schema another module owns', () => {
+    const els: ElSpec[] = [
+      ['app.shop', 'node.service'],
+      ['mod.orders', 'node.module', { parentId: 'app.shop', name: 'Orders' }],
+      ['mod.billing', 'node.module', { parentId: 'app.shop', name: 'Billing' }],
+      ['db.main', 'pg.database'],
+      ['schema.orders', 'pg.schema', { parentId: 'db.main', properties: { ownedBy: 'Orders' } }],
+    ];
+    expect(fire(build(els, [['mod.billing', 'writes', 'schema.orders']]), 'RNP-028')).toHaveLength(
+      1,
+    );
+    expect(fire(build(els, [['mod.orders', 'writes', 'schema.orders']]), 'RNP-028')).toEqual([]);
+  });
+});

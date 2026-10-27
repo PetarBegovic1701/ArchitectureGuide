@@ -802,6 +802,33 @@ const logicSplit: Rule = {
   },
 };
 
+const crossModuleWrite: Rule = {
+  id: 'RNP-028',
+  title: "Module writes another module's schema",
+  severity: 'warning',
+  packs: ['modular-monolith'],
+  learnId: 'pattern.modular-monolith',
+  rationale:
+    "In a modular monolith each module owns its tables. When one module writes another module's schema, the two can no longer change, test or move into a service on their own. Call the owning module's public service instead. The owner is the schema's `ownedBy` property (module name or ID).",
+  check: ({ graph: g }) =>
+    g.relations
+      .filter((r) => g.typeIs(r, 'writes'))
+      .flatMap((r) => {
+        const mod = g.nearest(r.sourceId, 'node.module');
+        const schema = g.nearest(r.targetId, 'pg.schema');
+        const owner = schema && prop(schema, 'ownedBy');
+        if (!mod || !schema || typeof owner !== 'string' || !owner) return [];
+        if (owner === mod.id || owner.toLowerCase() === mod.name.toLowerCase()) return [];
+        return [
+          {
+            targetIds: [r.id],
+            relatedIds: [mod.id, schema.id],
+            message: `${mod.name} writes ${schema.name}, which belongs to ${owner}. Call ${owner}'s public service instead.`,
+          },
+        ];
+      }),
+};
+
 export const RULES: Rule[] = [
   sharedTables,
   migrationOwners,
@@ -825,4 +852,5 @@ export const RULES: Rule[] = [
   unpaginatedList,
   tokensInWebStorage,
   logicSplit,
+  crossModuleWrite,
 ];

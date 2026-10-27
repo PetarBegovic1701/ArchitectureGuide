@@ -8,3 +8,4 @@ export * from './ops';
 export * from './learn';
 export * from './graph';
 export * from './rules';
+export * from './templates';

@@ -2,6 +2,7 @@ import type { ZodType } from 'zod';
 import type { Layer } from '../schema';
 import type { LearningDoc, Lesson } from '../learn/schema';
 import type { Rule } from '../rules/types';
+import type { Template } from '../templates/types';
 
 export const CATEGORY_IDS = [
   'deployable',
@@ -156,6 +157,8 @@ export interface StackProfile {
   relationRules: RelationRule[];
   /** Stack-specific anti-pattern rules (Implementation.md §11.6). */
   rules?: Rule[];
+  /** Built-in architecture templates (Implementation.md §12). */
+  templates?: Template[];
   /** Learning texts and lessons (Implementation.md §17). */
   content?: { docs: readonly LearningDoc[]; lessons: readonly Lesson[] };
 }

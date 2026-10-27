@@ -20,6 +20,7 @@ new projects start with: `core`, `frontend`, `security`, `concurrency`, `api`, `
 | `api` | API design | Idempotent retries, pagination. |
 | `event-driven` | Event-driven | Dual writes, dead letters, orphan queues, callbacks to the publisher. |
 | `microservices` | Microservices | Shared databases, synchronous call chains and cycles, frontend fan-out. |
+| `modular-monolith` | Modular monolith | Modules write only their own tables and use each other through public APIs. |
 | `layered` | Layered | Layers are not skipped. |
 | `hexagonal` | Hexagonal | The domain depends on nothing outside it. |
 | `fsd` | Feature-Sliced Design | Features do not import each other. |
@@ -68,6 +69,7 @@ new projects start with: `core`, `frontend`, `security`, `concurrency`, `api`, `
 | [RNP-025](#rnp-025) | Unpaginated list endpoint | info | api |
 | [RNP-026](#rnp-026) | Tokens in web storage | warning | security |
 | [RNP-027](#rnp-027) | Logic split between SQL and a service | info | react-node-postgres |
+| [RNP-028](#rnp-028) | Module writes another module's schema | warning | modular-monolith |
 
 ## Generic rules
 
@@ -366,3 +368,11 @@ Learn: `topic.authentication`.
 When a function or trigger and a Node service both write the same table, the rules for that data live in two places, in two languages. Either can be right; decide where each rule lives and record it in a decision, so the next person knows where to look.
 
 Learn: `pg.function`.
+
+### RNP-028
+
+**Module writes another module's schema** · warning · packs: Modular monolith
+
+In a modular monolith each module owns its tables. When one module writes another module's schema, the two can no longer change, test or move into a service on their own. Call the owning module's public service instead. The owner is the schema's `ownedBy` property (module name or ID).
+
+Learn: `pattern.modular-monolith`.

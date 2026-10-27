@@ -32,6 +32,11 @@ export const RULE_PACKS: RulePack[] = [
     name: 'Microservices',
     description: 'Shared databases, synchronous call chains and cycles, frontend fan-out.',
   },
+  {
+    id: 'modular-monolith',
+    name: 'Modular monolith',
+    description: 'Modules write only their own tables and use each other through public APIs.',
+  },
   { id: 'layered', name: 'Layered', description: 'Layers are not skipped.' },
   { id: 'hexagonal', name: 'Hexagonal', description: 'The domain depends on nothing outside it.' },
   { id: 'fsd', name: 'Feature-Sliced Design', description: 'Features do not import each other.' },

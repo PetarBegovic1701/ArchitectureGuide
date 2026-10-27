@@ -91,6 +91,596 @@ export const DOCS: LearningDoc[] = [
     "source": "content/docs/node.endpoint.md"
   },
   {
+    "id": "pattern.background-jobs",
+    "kind": "pattern",
+    "title": "Background jobs on PostgreSQL",
+    "summary": "The API saves data and enqueues a job in the same transaction; a separate worker process runs the slow work later, with retries.",
+    "level": "beginner",
+    "tracks": [
+      "patterns",
+      "concurrency-and-parallelism"
+    ],
+    "tags": [
+      "jobs",
+      "pg-boss",
+      "graphile-worker",
+      "skip-locked",
+      "retries"
+    ],
+    "explain": {
+      "beginner": "Some work is too slow, or fails too often, to do while the user waits: sending\ne-mails, building PDFs, calling a slow partner. Instead:\n\n1. The API saves the order **and** adds a job (\"send confirmation for order 42\") in\n   the **same database transaction**, then answers at once.\n2. A separate **worker** process takes jobs from the queue and does the work.\n3. If the work fails, the worker tries again later. After the last attempt, the job\n   goes to a **dead-letter queue** where a person can look at it.\n\nWith PostgreSQL you do not need another system: libraries such as pg-boss and Graphile\nWorker keep the queue in tables.",
+      "intermediate": "- Workers pick jobs with `SELECT ... FOR UPDATE SKIP LOCKED`, so many workers can run\n  without taking the same job.\n- Set a concurrency per worker, and count it in your connection budget.\n- Jobs run **at least once**: make handlers idempotent (unique keys, \"already done\"\n  checks), and pass IDs in the payload, not whole objects that can go stale.\n- Use exponential backoff for retries, and a timeout per job.\n- Scheduled jobs (cron) are jobs too: the library enqueues them on a schedule.",
+      "senior": "A Postgres-backed queue is a great default up to hundreds of jobs per second. Beyond\nthat, table bloat, vacuum and index churn become the limit; then move hot queues to a\nbroker, often via the outbox pattern. Keep the queue in the producer's database so\nenqueue is transactional. For external side effects (charging a card), combine the\njob with an idempotency key at the provider, so a retry after a timeout does not charge\ntwice."
+    },
+    "analogy": "A restaurant ticket rail: the waiter pins the order ticket and goes back to the guests;\nthe cooks take tickets one by one. Nobody stands at the stove waiting.",
+    "mistakes": [
+      "Sending the e-mail inside the HTTP request.",
+      "Enqueuing after the commit (lost jobs on a crash), or with a different database connection than the data (not atomic).",
+      "Non-idempotent handlers that double-charge or double-send on retry.",
+      "Workers doing CPU-heavy work with high concurrency in one process."
+    ],
+    "examples": [
+      {
+        "title": "Enqueue in the same transaction (Graphile Worker, node-postgres)",
+        "language": "ts",
+        "code": "const client = await pool.connect();\ntry {\n  await client.query('BEGIN');\n  const { rows } = await client.query(\n    'INSERT INTO orders (customer_id, total_cents) VALUES ($1, $2) RETURNING id',\n    [customerId, totalCents],\n  );\n  await client.query(\n    \"SELECT graphile_worker.add_job('send_confirmation', json_build_object('orderId', $1::bigint))\",\n    [rows[0].id],\n  );\n  await client.query('COMMIT');\n} catch (error) {\n  await client.query('ROLLBACK');\n  throw error;\n} finally {\n  client.release();\n}"
+      },
+      {
+        "title": "How a worker takes one job safely",
+        "language": "sql",
+        "code": "WITH next AS (\n  SELECT id FROM jobs\n  WHERE run_at <= now() AND locked_at IS NULL\n  ORDER BY run_at\n  FOR UPDATE SKIP LOCKED\n  LIMIT 1\n)\nUPDATE jobs SET locked_at = now(), attempts = attempts + 1\nFROM next WHERE jobs.id = next.id\nRETURNING jobs.*;"
+      }
+    ],
+    "related": [
+      "pg.job-queue",
+      "node.worker",
+      "enqueues",
+      "processes",
+      "topic.transactions-and-isolation",
+      "topic.event-loop-and-parallelism",
+      "pattern.database-per-service"
+    ],
+    "references": [
+      {
+        "title": "pg-boss",
+        "url": "https://github.com/timgit/pg-boss"
+      },
+      {
+        "title": "Graphile Worker",
+        "url": "https://worker.graphile.org/"
+      },
+      {
+        "title": "PostgreSQL docs — SELECT ... FOR UPDATE SKIP LOCKED",
+        "url": "https://www.postgresql.org/docs/current/sql-select.html#SQL-FOR-UPDATE-SHARE"
+      },
+      {
+        "title": "microservices.io — Transactional outbox",
+        "url": "https://microservices.io/patterns/data/transactional-outbox.html"
+      }
+    ],
+    "quiz": [
+      {
+        "question": "Why enqueue the job in the same transaction as the order?",
+        "options": [
+          "It is faster",
+          "So a rolled-back order never sends an e-mail and a committed order always gets its job",
+          "PostgreSQL requires it",
+          "So the worker can run in the same process"
+        ],
+        "answer": 1,
+        "explanation": "Data and job commit or roll back together. Enqueuing after the commit can lose the job on a crash; enqueuing before can send e-mails for orders that never existed."
+      },
+      {
+        "question": "A job may run twice (for example after a worker crash). What must the handler be?",
+        "options": [
+          "Fast",
+          "Idempotent",
+          "Synchronous",
+          "Stateless"
+        ],
+        "answer": 1,
+        "explanation": "Queues deliver at least once. Idempotent handlers give the same result when they run again, for example by recording handled job IDs."
+      }
+    ],
+    "source": "content/docs/pattern.background-jobs.md"
+  },
+  {
+    "id": "pattern.bff",
+    "kind": "pattern",
+    "title": "Backend-for-frontend (BFF)",
+    "summary": "A small Node service made for one frontend. It holds the session, calls the backend services, and returns exactly the data each screen needs.",
+    "level": "intermediate",
+    "tracks": [
+      "patterns",
+      "api-design",
+      "auth"
+    ],
+    "tags": [
+      "bff",
+      "aggregation",
+      "oauth",
+      "sessions"
+    ],
+    "explain": {
+      "beginner": "When a screen needs data from several backend services, the React app would have to\ncall each of them, wait, and combine the answers. A **BFF** does that work on the\nserver instead:\n\n- The app makes **one** request: `GET /bff/order-page/42`.\n- The BFF calls Orders, Catalog and Shipping in parallel, combines the results, and\n  answers.\n- The BFF also handles sign-in and keeps the tokens. The browser only gets an\n  HttpOnly cookie.",
+      "intermediate": "- One BFF per kind of client (web, mobile), owned by the frontend team.\n- Call backend services in parallel (`Promise.all`) with timeouts; decide per field\n  what a partial failure shows.\n- Token handling: the BFF runs the OpenID Connect code flow, stores tokens server-side,\n  and adds them to backend calls. This keeps tokens out of reach of XSS.\n- Protect against CSRF: `SameSite` cookies plus a custom header or token on mutating\n  requests.",
+      "senior": "A BFF is an anti-corruption layer for the UI: backend teams can change their APIs\nwhile the BFF keeps the screens' contract stable. It is also a coupling point: with\nmany screens it grows, so keep it free of business rules and of its own database\n(cache only). GraphQL gateways and tRPC routers are BFFs too; the same rules apply."
+    },
+    "analogy": "A personal assistant who gathers the reports you need from different departments and\nhands you one summary.",
+    "mistakes": [
+      "Business logic in the BFF.",
+      "A BFF that writes to the services' databases.",
+      "One shared BFF for web and mobile that serves neither well."
+    ],
+    "examples": [
+      {
+        "title": "Fastify route that combines two services",
+        "language": "ts",
+        "code": "app.get('/bff/order-page/:id', { preHandler: requireSession }, async (req) => {\n  const headers = { authorization: `Bearer ${req.session.accessToken}` };\n  const [order, recommendations] = await Promise.all([\n    fetch(`${ORDERS_URL}/orders/${req.params.id}`, { headers, signal: AbortSignal.timeout(2000) }),\n    fetch(`${CATALOG_URL}/recommendations?order=${req.params.id}`, {\n      signal: AbortSignal.timeout(1000),\n    }).catch(() => undefined), // optional: the page still works without it\n  ]);\n  if (!order.ok) throw httpErrors.createError(order.status);\n  return {\n    order: toOrderView(await order.json()),\n    recommendations: recommendations?.ok ? await recommendations.json() : [],\n  };\n});"
+      }
+    ],
+    "related": [
+      "node.bff",
+      "react.app",
+      "topic.authentication",
+      "calls",
+      "pattern.database-per-service"
+    ],
+    "references": [
+      {
+        "title": "Sam Newman — Backends For Frontends",
+        "url": "https://samnewman.io/patterns/architectural/bff/"
+      },
+      {
+        "title": "Microsoft — Backends for Frontends pattern",
+        "url": "https://learn.microsoft.com/en-us/azure/architecture/patterns/backends-for-frontends"
+      },
+      {
+        "title": "IETF — OAuth 2.0 for Browser-Based Applications",
+        "url": "https://datatracker.ietf.org/doc/html/draft-ietf-oauth-browser-based-apps"
+      }
+    ],
+    "quiz": [
+      {
+        "question": "What should the BFF not contain?",
+        "options": [
+          "Session handling",
+          "Calls to several services for one screen",
+          "Business rules such as how discounts are computed",
+          "Response shaping for the React app"
+        ],
+        "answer": 2,
+        "explanation": "Business rules belong to the services that own the data. A BFF that grows rules becomes a second, hidden backend."
+      }
+    ],
+    "source": "content/docs/pattern.bff.md"
+  },
+  {
+    "id": "pattern.database-per-service",
+    "kind": "pattern",
+    "title": "Database per service",
+    "summary": "Each service owns its own database and nobody else connects to it. Services share data through APIs and events, not tables.",
+    "level": "intermediate",
+    "tracks": [
+      "patterns",
+      "data-and-models",
+      "operations"
+    ],
+    "tags": [
+      "microservices",
+      "gateway",
+      "eventual-consistency"
+    ],
+    "explain": {
+      "beginner": "In a microservice design, each service is a separate program that a team can change\nand deploy on its own. That only works if services do not share tables. So each\nservice gets **its own database**:\n\n- Orders writes only the Orders database; Payments only the Payments database.\n- If Payments needs to know about an order, it asks the Orders API or listens for an\n  event.\n- A **gateway** in front checks tokens and routes requests to the right service.",
+      "intermediate": "- \"Own database\" can be a separate database on a shared PostgreSQL server: cheap to\n  run, still separate. Use a separate database role per service, so access is enforced.\n- No cross-service transactions. Use a job or event enqueued in the **same\n  transaction** as the data, and make consumers idempotent.\n- Avoid chains of synchronous calls (A → B → C → D): each hop adds latency and a way to\n  fail. Prefer events for follow-up work.\n- Count connections: every instance of every service has a pool. Add PgBouncer before\n  you hit `max_connections`.",
+      "senior": "You trade joins and ACID transactions for independent deploys. Queries that span\nservices become read models built from events (CQRS) or API composition in a BFF.\nConsistency becomes eventual and needs design: idempotency keys, outbox, sagas with\ncompensations, and reconciliation jobs. If most features touch several services, the\nboundaries are wrong; a modular monolith is the better start."
+    },
+    "analogy": "Separate shops in a mall. Each has its own stockroom; if one shop needs something from\nanother, it asks at the counter instead of walking into the other stockroom.",
+    "mistakes": [
+      "\"Microservices\" that all connect to one database: a distributed monolith.",
+      "Synchronous call cycles between services.",
+      "Publishing events after the commit, outside the transaction (lost events)."
+    ],
+    "examples": [
+      {
+        "title": "An idempotent job handler (the job may run twice)",
+        "language": "sql",
+        "code": "-- Payments service, inside the job's transaction\nINSERT INTO processed_jobs (job_id) VALUES ($1)\nON CONFLICT (job_id) DO NOTHING\nRETURNING job_id;\n-- No row returned: the job was handled before. Commit and stop.\n-- A row returned: do the work in the same transaction, then commit."
+      }
+    ],
+    "related": [
+      "node.service",
+      "pg.database",
+      "gen.gateway",
+      "pg.job-queue",
+      "topic.transactions-and-isolation",
+      "pattern.modular-monolith",
+      "pattern.background-jobs"
+    ],
+    "references": [
+      {
+        "title": "microservices.io — Database per service",
+        "url": "https://microservices.io/patterns/data/database-per-service.html"
+      },
+      {
+        "title": "microservices.io — API gateway",
+        "url": "https://microservices.io/patterns/apigateway.html"
+      },
+      {
+        "title": "Martin Fowler — Microservices",
+        "url": "https://martinfowler.com/articles/microservices.html"
+      }
+    ],
+    "quiz": [
+      {
+        "question": "Orders needs the customer's name to show it on an order. Which choice keeps the services independent?",
+        "options": [
+          "Join the customers table from the Orders database",
+          "Copy the name into Orders when a customer.updated event arrives, or ask the Customers API",
+          "Give Orders read access to the Customers database",
+          "Move the customers table into the Orders database"
+        ],
+        "answer": 1,
+        "explanation": "Services keep their own copy of the data they need (updated by events) or ask the owner's API. Direct access to another database couples them again."
+      }
+    ],
+    "source": "content/docs/pattern.database-per-service.md"
+  },
+  {
+    "id": "pattern.feature-sliced",
+    "kind": "pattern",
+    "title": "Feature-Sliced Design",
+    "summary": "React code is split into layers (pages, widgets, features, entities, shared) and slices. Code imports only from layers below its own.",
+    "level": "intermediate",
+    "tracks": [
+      "patterns",
+      "state-management"
+    ],
+    "tags": [
+      "react",
+      "folders",
+      "boundaries",
+      "fsd"
+    ],
+    "explain": {
+      "beginner": "Big React apps get messy when any file can import any other. Feature-Sliced Design\ngives every piece of code a place, in layers from top to bottom:\n\n- **pages**: whole screens, composed of the layers below.\n- **widgets**: big blocks used on pages (header, sidebar).\n- **features**: things the user does (add to cart, search).\n- **entities**: business things (user, product) and how to show them.\n- **shared**: UI kit, API client, helpers.\n\nThe one rule: **import only from layers below you**. A feature may use entities and\nshared code, never a page or another feature.",
+      "intermediate": "- Each slice (`features/cart`) exposes a public API through `index.ts`; other code\n  imports only from it.\n- Server data lives in a server-state cache (TanStack Query) via entity hooks such as\n  `useProduct(id)`, not in a global store.\n- Features talk to each other through the page that composes them (props, callbacks),\n  or through shared state in an entity.\n- Enforce the direction with ESLint (`eslint-plugin-boundaries` or Steiger, the FSD\n  linter).",
+      "senior": "FSD makes deletion cheap: removing a feature folder should only break the pages that\nuse it. The cost is classification debates (feature or entity?); settle them with\nexamples in the team docs. Cross-imports between entities are sometimes unavoidable;\nFSD allows them only through an explicit `@x` public API, which keeps them visible.\nFor small apps, a plain `pages / components / api` split is enough."
+    },
+    "analogy": "A department store: floors (layers) and departments (slices). Staff take stock from the\nwarehouse floors below, never from another department's shelves.",
+    "mistakes": [
+      "`features/cart` importing from `features/checkout`.",
+      "A huge `shared` folder that holds business logic.",
+      "Deep imports into a slice's internals instead of its `index.ts`."
+    ],
+    "examples": [
+      {
+        "title": "A page composes features; features use entities",
+        "language": "tsx",
+        "code": "// pages/checkout/ui/CheckoutPage.tsx\nimport { CartSummary } from '@/features/cart';\nimport { PaymentForm } from '@/features/checkout';\n\nexport function CheckoutPage() {\n  return (\n    <>\n      <CartSummary />\n      <PaymentForm />\n    </>\n  );\n}\n\n// features/cart/ui/CartSummary.tsx\nimport { ProductPrice, useProduct } from '@/entities/product'; // lower layer: allowed"
+      }
+    ],
+    "related": [
+      "react.feature",
+      "react.app",
+      "react.server-state",
+      "react.api-client",
+      "depends-on"
+    ],
+    "references": [
+      {
+        "title": "Feature-Sliced Design — Overview",
+        "url": "https://feature-sliced.design/docs/get-started/overview"
+      },
+      {
+        "title": "Feature-Sliced Design — Layers",
+        "url": "https://feature-sliced.design/docs/reference/layers"
+      },
+      {
+        "title": "TanStack Query — Overview",
+        "url": "https://tanstack.com/query/latest/docs/framework/react/overview"
+      }
+    ],
+    "quiz": [
+      {
+        "question": "The Cart feature and the Checkout feature both need to show a product's price. Where should the price component go?",
+        "options": [
+          "In Cart, and Checkout imports it from Cart",
+          "In the Product entity (or shared), and both import it from there",
+          "Copied into both features",
+          "In the page"
+        ],
+        "answer": 1,
+        "explanation": "Features must not import each other. Shared things move down a layer, here to the Product entity."
+      }
+    ],
+    "source": "content/docs/pattern.feature-sliced.md"
+  },
+  {
+    "id": "pattern.hexagonal",
+    "kind": "pattern",
+    "title": "Hexagonal architecture (ports and adapters)",
+    "summary": "The domain sits in the middle and depends on nothing. It talks to the outside through ports (interfaces) that adapters implement.",
+    "level": "intermediate",
+    "tracks": [
+      "patterns",
+      "data-and-models"
+    ],
+    "tags": [
+      "ddd",
+      "ports-and-adapters",
+      "clean-architecture",
+      "testing"
+    ],
+    "explain": {
+      "beginner": "Picture the business rules as the center of the application. Everything technical\n(HTTP, the database, e-mail) is outside. The center does not know about the outside:\n\n- A **port** is an interface the center needs, such as `OrderRepository` with\n  `findById` and `save`.\n- An **adapter** implements the port with real technology, such as a Prisma\n  repository. Another adapter can implement the same port in memory for tests.\n- An **HTTP adapter** (route handler) calls a use case; so could a CLI or a queue\n  consumer.\n\nThe center can be tested in milliseconds, without a database.",
+      "intermediate": "- Dependencies point inwards: adapters → application → domain. The domain imports no\n  framework or ORM. Check it automatically (dependency-cruiser rule on\n  `src/domain/**`).\n- Use cases orchestrate: load through a port, call domain methods, save through a port,\n  publish events.\n- Map at the edges: request DTO → command, entity → row, entity → response. The\n  mapping code is the price of independence.\n- Transactions: a \"unit of work\" port, or a repository method that saves an aggregate\n  atomically.",
+      "senior": "Hexagonal pays off when the domain is rich: pricing, scheduling, workflows with\ninvariants. For CRUD it adds interfaces with one implementation and mapping layers that\nonly copy fields. Keep ports few and shaped by the domain's needs (`OrdersAwaitingPayment`),\nnot as generic `Repository<T>` wrappers around the ORM. Infrastructure concerns\n(retries, idempotency keys, outbox) live in adapters and the application layer, not in\nthe domain model."
+    },
+    "analogy": "A laptop's USB-C port: the laptop defines the shape; chargers, screens and drives from\nany brand plug in. The laptop does not change when you switch charger brands.",
+    "mistakes": [
+      "Domain classes decorated with ORM annotations, or importing Prisma types.",
+      "Ports that mirror the ORM one-to-one (`findMany(where: any)`).",
+      "Use cases that call adapters directly instead of ports."
+    ],
+    "examples": [
+      {
+        "title": "Port, adapter and use case",
+        "language": "ts",
+        "code": "// domain/ports/order-repository.ts\nexport interface OrderRepository {\n  findById(id: OrderId): Promise<Order | undefined>;\n  save(order: Order): Promise<void>;\n}\n\n// adapters/db/prisma-order-repository.ts\nexport class PrismaOrderRepository implements OrderRepository {\n  constructor(private readonly db: PrismaClient) {}\n  async findById(id: OrderId) {\n    const row = await this.db.order.findUnique({ where: { id }, include: { lines: true } });\n    return row ? Order.fromSnapshot(toSnapshot(row)) : undefined;\n  }\n  async save(order: Order) {\n    await this.db.order.upsert(toUpsert(order.snapshot()));\n  }\n}\n\n// application/place-order.ts\nexport const placeOrder = (orders: OrderRepository) => async (cmd: PlaceOrderCommand) => {\n  const order = Order.place(cmd.customerId, cmd.lines); // rules live in the domain\n  await orders.save(order);\n  return order.id;\n};"
+      }
+    ],
+    "related": [
+      "node.domain",
+      "node.port",
+      "node.repository",
+      "implements",
+      "uses-port",
+      "node.use-case",
+      "pattern.layered"
+    ],
+    "references": [
+      {
+        "title": "Alistair Cockburn — Hexagonal Architecture",
+        "url": "https://alistair.cockburn.us/hexagonal-architecture/"
+      },
+      {
+        "title": "Microsoft — Designing a DDD-oriented microservice",
+        "url": "https://learn.microsoft.com/en-us/dotnet/architecture/microservices/microservice-ddd-cqrs-patterns/ddd-oriented-microservice"
+      }
+    ],
+    "quiz": [
+      {
+        "question": "Which way does the dependency point between the repository adapter and its port?",
+        "options": [
+          "The port imports the adapter",
+          "The adapter imports and implements the port",
+          "The domain imports the adapter",
+          "They do not depend on each other"
+        ],
+        "answer": 1,
+        "explanation": "Dependencies point inwards. The adapter knows the port (and the database library); the domain and the port know nothing about the adapter."
+      }
+    ],
+    "source": "content/docs/pattern.hexagonal.md"
+  },
+  {
+    "id": "pattern.layered",
+    "kind": "pattern",
+    "title": "Layered architecture",
+    "summary": "Code is split into presentation, application and data-access layers. Each layer calls only the layer below it.",
+    "level": "beginner",
+    "tracks": [
+      "patterns",
+      "api-design"
+    ],
+    "tags": [
+      "layers",
+      "service-layer",
+      "repository"
+    ],
+    "explain": {
+      "beginner": "Every request goes **down** through three layers:\n\n1. **Route handler** (presentation): reads the HTTP request, validates it, calls a\n   use case, turns the result into a response.\n2. **Use case / service** (application): the business rules. \"Place order\", \"Cancel\n   order\".\n3. **Repository** (data access): runs the queries. Only this layer knows SQL or the ORM.\n\nA layer never skips the one below it, and never calls the one above it. When something\nbreaks, you know where to look.",
+      "intermediate": "- Handlers stay thin: no queries, no rules. If a handler is longer than the use case it\n  calls, rules are leaking upwards.\n- One repository per entity (or per aggregate). Use cases can call several\n  repositories inside one transaction; pass the transaction down.\n- Errors travel up as typed results or domain errors (`OrderNotFound`), and only the\n  handler maps them to HTTP status codes.\n- Test use cases with fake repositories; test repositories against a real PostgreSQL\n  (Testcontainers or a test database).",
+      "senior": "Plain layering lets the application layer depend on data-access types, for example\nPrisma models returned from repositories. That couples rules to the schema. Map rows to\nyour own types at the repository boundary, or move to ports and adapters\n(hexagonal) when the domain is complex. Organize folders by feature first and by layer\nsecond (`orders/http`, `orders/application`, `orders/db`) so a feature's code stays\ntogether as the service grows."
+    },
+    "analogy": "A post office: the counter (handler) takes your parcel, the sorting room (use case)\ndecides where it goes, and the warehouse (repository) stores it. Customers never walk\ninto the warehouse.",
+    "mistakes": [
+      "Calling the ORM from route handlers \"just this once\".",
+      "Use cases that receive `req` and `res`: they then only work over HTTP.",
+      "Repositories with business rules (`if (order.status === 'shipped') ...`)."
+    ],
+    "examples": [
+      {
+        "title": "Handler → use case → repository",
+        "language": "ts",
+        "code": "// http/orders.routes.ts\nrouter.post('/orders/:id/cancel', async (req, res) => {\n  const result = await cancelOrder(req.params.id, req.user.id);\n  if (result === 'not-found') return res.status(404).end();\n  if (result === 'already-shipped') return res.status(409).json({ error: 'Already shipped' });\n  res.status(204).end();\n});\n\n// application/cancel-order.ts\nexport async function cancelOrder(orderId: string, userId: string) {\n  const order = await orders.findById(orderId);\n  if (!order || order.customerId !== userId) return 'not-found';\n  if (order.status === 'shipped') return 'already-shipped';\n  await orders.updateStatus(orderId, 'cancelled');\n  return 'ok';\n}"
+      }
+    ],
+    "related": [
+      "node.route-handler",
+      "node.use-case",
+      "node.repository",
+      "pg.table",
+      "topic.models",
+      "pattern.hexagonal"
+    ],
+    "references": [
+      {
+        "title": "Martin Fowler — Presentation Domain Data Layering",
+        "url": "https://martinfowler.com/bliki/PresentationDomainDataLayering.html"
+      },
+      {
+        "title": "Martin Fowler — Service Layer (P of EAA)",
+        "url": "https://martinfowler.com/eaaCatalog/serviceLayer.html"
+      },
+      {
+        "title": "Martin Fowler — Repository (P of EAA)",
+        "url": "https://martinfowler.com/eaaCatalog/repository.html"
+      }
+    ],
+    "quiz": [
+      {
+        "question": "Where does the rule \"an order cannot be cancelled after it has shipped\" belong?",
+        "options": [
+          "In the route handler",
+          "In the use case (application layer)",
+          "In the repository",
+          "In a database trigger only"
+        ],
+        "answer": 1,
+        "explanation": "Route handlers translate HTTP, repositories store data. Business rules belong in the use case, so every entry point (HTTP, jobs, scripts) applies them."
+      }
+    ],
+    "source": "content/docs/pattern.layered.md"
+  },
+  {
+    "id": "pattern.modular-monolith",
+    "kind": "pattern",
+    "title": "Modular monolith",
+    "summary": "One deployable, split into modules with clear owners. Each module owns its tables and offers a public API to the others.",
+    "level": "intermediate",
+    "tracks": [
+      "patterns",
+      "data-and-models"
+    ],
+    "tags": [
+      "nestjs",
+      "modules",
+      "boundaries"
+    ],
+    "explain": {
+      "beginner": "A **monolith** is one application that you deploy as one unit. A **modular** monolith\nis still one application, but its code is split into modules (Orders, Catalog,\nBilling) with walls between them:\n\n- Each module has its own folder, its own tables, and an owner.\n- A module only uses another module through what it **exports**, such as an\n  `OrdersService`.\n- Nobody reads another module's tables.\n\nYou get one deploy and real database transactions, without the tangle of a\n\"big ball of mud\".",
+      "intermediate": "- Give each module its own PostgreSQL **schema** (`orders`, `billing`). It makes\n  ownership visible, and lets you grant privileges per schema later.\n- In NestJS, `@Module({ exports: [...] })` defines the public API. Keep repositories\n  and entities out of `exports`.\n- Enforce the walls in CI: dependency-cruiser or ESLint boundaries rules that forbid\n  imports from another module's internals.\n- Cross-module workflows: call the other module's service, or emit an in-process event\n  that the other module handles.",
+      "senior": "The modular monolith is the cheapest way to find the right boundaries. Extracting a\nmodule into a service later is mostly mechanical if the module already owns its data\nand talks through an API: the in-process call becomes HTTP or a queue. The hard part is\ntransactions that span modules today; list them, because each one becomes a saga or an\noutbox when you split. Shared \"common\" modules tend to grow into a second monolith;\nkeep them to technical utilities."
+    },
+    "analogy": "An apartment building: one structure and one address, but each flat has its own door\nand key. Neighbours knock; they do not walk in.",
+    "mistakes": [
+      "Importing another module's repository \"because it is faster\".",
+      "One shared `entities` folder for all modules.",
+      "Foreign keys across module schemas that make every module depend on the others."
+    ],
+    "examples": [
+      {
+        "title": "A NestJS module with a narrow public API",
+        "language": "ts",
+        "code": "@Module({\n  imports: [PrismaModule],\n  providers: [OrdersService, OrdersRepository],\n  controllers: [OrdersController],\n  exports: [OrdersService], // the repository stays private\n})\nexport class OrdersModule {}\n\n@Module({ imports: [OrdersModule], providers: [BillingService] })\nexport class BillingModule {}\n\n@Injectable()\nexport class BillingService {\n  constructor(private readonly orders: OrdersService) {}\n  async invoiceFor(orderId: string) {\n    const total = await this.orders.totalOf(orderId); // through the public API\n    return this.createInvoice(orderId, total);\n  }\n}"
+      }
+    ],
+    "related": [
+      "node.module",
+      "node.service",
+      "pg.schema",
+      "migrates",
+      "pattern.database-per-service",
+      "pattern.layered"
+    ],
+    "references": [
+      {
+        "title": "Shopify Engineering — Deconstructing the Monolith",
+        "url": "https://shopify.engineering/deconstructing-monolith-designing-software-maximizes-developer-productivity"
+      },
+      {
+        "title": "Martin Fowler — MonolithFirst",
+        "url": "https://martinfowler.com/bliki/MonolithFirst.html"
+      },
+      {
+        "title": "NestJS — Modules",
+        "url": "https://docs.nestjs.com/modules"
+      }
+    ],
+    "quiz": [
+      {
+        "question": "The Billing module needs an order's total. What should it do?",
+        "options": [
+          "Query the orders table directly",
+          "Call the OrdersService that the Orders module exports",
+          "Copy the Orders repository into Billing",
+          "Add a trigger on the orders table"
+        ],
+        "answer": 1,
+        "explanation": "Only the owning module touches its tables. Others use its public API, so Orders can change its tables without breaking Billing."
+      }
+    ],
+    "source": "content/docs/pattern.modular-monolith.md"
+  },
+  {
+    "id": "pattern.starter",
+    "kind": "pattern",
+    "title": "Starter: React app, Node API, PostgreSQL",
+    "summary": "The smallest complete web application. A React app in the browser, one Node.js API, and one PostgreSQL database that only the API touches.",
+    "level": "beginner",
+    "tracks": [
+      "foundations",
+      "patterns"
+    ],
+    "tags": [
+      "full-stack",
+      "rest",
+      "prisma"
+    ],
+    "explain": {
+      "beginner": "Three parts, each with one job:\n\n- **React app** (runs in the browser): shows screens and sends requests.\n- **Node.js API** (runs on a server): checks who is calling, applies the business\n  rules, and reads and writes data.\n- **PostgreSQL** (the database): stores the data safely.\n\nThe browser never talks to the database. It sends `POST /api/orders` to the API; the\nAPI checks the session, validates the input, writes rows in one transaction, and\nanswers with JSON.\n\nOne component owns the database schema: the API runs the migrations (the scripts that\ncreate and change tables). Nobody else changes the tables.",
+      "intermediate": "- Keep the API **stateless**: sessions live in a cookie plus a session table, not in\n  process memory, so you can run two instances later.\n- Configuration comes from environment variables (`DATABASE_URL`, `SESSION_SECRET`),\n  never from the code (Twelve-Factor).\n- Validate every request at the API boundary (zod), and share the request and response\n  types with React through a small shared package.\n- Migrations run in CI or at deploy time, before the new API version starts.",
+      "senior": "This shape scales further than most teams expect: add modules inside the API, read\nreplicas, a job queue and a CDN before you add services. The decisions that are hard\nto undo are the data model and the API contract, not the number of processes. Watch\nfor the API growing without internal boundaries; apply the layered or modular-monolith\ntemplates inside it when it does."
+    },
+    "analogy": "A restaurant: guests (browser) order from the waiter (API), and only the kitchen staff\n(API code) go into the storeroom (database).",
+    "mistakes": [
+      "Putting the database URL in a `VITE_` variable: it ends up in the browser bundle.",
+      "Checking permissions only by hiding buttons in React.",
+      "Two apps running migrations on the same schema."
+    ],
+    "examples": [
+      {
+        "title": "An Express route with validation and a transaction (Prisma)",
+        "language": "ts",
+        "code": "const PlaceOrder = z.object({\n  productId: z.string().uuid(),\n  quantity: z.number().int().positive(),\n});\n\napp.post('/api/orders', requireUser, async (req, res) => {\n  const input = PlaceOrder.parse(req.body);\n  const order = await prisma.$transaction(async (tx) => {\n    const created = await tx.order.create({ data: { customerId: req.user.id, ...input } });\n    await tx.auditLog.create({ data: { action: 'order.placed', orderId: created.id } });\n    return created;\n  });\n  res.status(201).json({ id: order.id });\n});"
+      }
+    ],
+    "related": [
+      "react.app",
+      "node.service",
+      "pg.schema",
+      "migrates",
+      "topic.authentication",
+      "topic.models",
+      "pattern.layered"
+    ],
+    "references": [
+      {
+        "title": "React — Quick Start",
+        "url": "https://react.dev/learn"
+      },
+      {
+        "title": "Express — Routing",
+        "url": "https://expressjs.com/en/guide/routing.html"
+      },
+      {
+        "title": "Prisma — Prisma Migrate",
+        "url": "https://www.prisma.io/docs/orm/prisma-migrate"
+      },
+      {
+        "title": "The Twelve-Factor App",
+        "url": "https://12factor.net/"
+      }
+    ],
+    "quiz": [
+      {
+        "question": "Why does the React app call the API instead of querying PostgreSQL itself?",
+        "options": [
+          "Browsers cannot send SQL",
+          "Code in the browser is public, so database credentials and checks would be public too",
+          "PostgreSQL only accepts connections from Node.js",
+          "It is faster"
+        ],
+        "answer": 1,
+        "explanation": "Anyone can read and change code that runs in the browser. The API keeps the credentials secret and checks every request on the server."
+      }
+    ],
+    "source": "content/docs/pattern.starter.md"
+  },
+  {
     "id": "pg.function",
     "kind": "concept",
     "title": "Stored functions and procedures",
