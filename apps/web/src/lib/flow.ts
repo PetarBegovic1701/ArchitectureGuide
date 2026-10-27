@@ -21,7 +21,11 @@ export type ShapeNodeData = {
   issue?: Issue;
   /** Part of the finding the user is looking at. */
   highlighted: boolean;
+  /** New or changed since the snapshot the canvas is compared with. */
+  diff?: DiffMark;
 };
+
+export type DiffMark = 'added' | 'changed';
 
 export type RelationEdgeData = {
   relation: Relation;
@@ -32,6 +36,7 @@ export type RelationEdgeData = {
   parallelCount: number;
   issue?: Issue;
   highlighted: boolean;
+  diff?: DiffMark;
 };
 
 export type ShapeFlowNode = Node<ShapeNodeData, 'shape'>;
@@ -44,6 +49,7 @@ export interface FlowOptions {
   connecting?: { sourceId: Id; validTargets: ReadonlySet<Id> } | null;
   issues?: ReadonlyMap<Id, Issue>;
   highlightIds?: ReadonlySet<Id>;
+  compare?: { added: ReadonlySet<Id>; changed: ReadonlySet<Id> } | null;
 }
 
 /**
@@ -102,6 +108,7 @@ export function toFlowNodes(p: Project, view: View, options: FlowOptions = {}): 
           editing: options.editingId === el.id,
           ...withIssue(options.issues?.get(el.id)),
           highlighted: options.highlightIds?.has(el.id) ?? false,
+          ...diffMark(options, el.id),
         },
       };
     });
@@ -134,6 +141,7 @@ export function toFlowEdges(p: Project, view: View, options: FlowOptions = {}): 
         parallelCount: group.length,
         ...withIssue(options.issues?.get(r.id)),
         highlighted: options.highlightIds?.has(r.id) ?? false,
+        ...diffMark(options, r.id),
       },
     };
   });
@@ -141,3 +149,9 @@ export function toFlowEdges(p: Project, view: View, options: FlowOptions = {}): 
 
 /** Leaves `issue` out of the data when there is none. */
 const withIssue = (issue: Issue | undefined) => (issue ? { issue } : {});
+
+function diffMark(options: FlowOptions, id: Id): { diff?: DiffMark } {
+  if (options.compare?.added.has(id)) return { diff: 'added' };
+  if (options.compare?.changed.has(id)) return { diff: 'changed' };
+  return {};
+}

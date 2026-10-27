@@ -37,6 +37,10 @@ interface ProjectState {
   select(selection: Selection): void;
   /** Records a finished save. Does not count as a change or touch history. */
   markSaved(revision: number, updatedAt: string): void;
+  /** Changes data that is not part of the undo history (the snapshot list); saved as usual. */
+  patchSilently(patch: Pick<Partial<Project>, 'snapshots'>): void;
+  /** Replaces the whole project (restoring a snapshot). History starts over. */
+  replace(project: Project): void;
 }
 
 export const useProject = create<ProjectState>((set, get) => ({
@@ -123,6 +127,21 @@ export const useProject = create<ProjectState>((set, get) => ({
 
   select(selection) {
     set({ selection });
+  },
+
+  patchSilently(patch) {
+    const { project, version } = get();
+    if (project) set({ project: { ...project, ...patch }, version: version + 1 });
+  },
+
+  replace(project) {
+    set({
+      project,
+      past: [],
+      future: [],
+      selection: { elements: [], relations: [] },
+      version: get().version + 1,
+    });
   },
 
   markSaved(revision, updatedAt) {

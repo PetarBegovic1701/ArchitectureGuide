@@ -24,6 +24,15 @@ export interface Toast {
   actions?: ToastAction[];
 }
 
+export interface CompareState {
+  snapshotName: string;
+  createdAt: string;
+  added: ReadonlySet<Id>;
+  changed: ReadonlySet<Id>;
+  /** Removed items, with their names from the snapshot. */
+  removed: { id: Id; name: string }[];
+}
+
 export interface RelationPickerState {
   sourceId: Id;
   targetId: Id;
@@ -57,6 +66,8 @@ interface UiState {
   /** The finding the suppress dialog is open for. */
   suppressing: Finding | null;
   showSuppressed: boolean;
+  /** Snapshot the canvas is compared with: what is new or changed since then. */
+  compare: CompareState | null;
   /** Open dialog in the editor, if any. */
   dialog: 'templates' | 'save-template' | 'snapshots' | null;
 
@@ -111,6 +122,7 @@ export const useUi = create<UiState>()(
       suppressing: null,
       showSuppressed: false,
       dialog: null,
+      compare: null,
 
       setLevel: (level) => set(level === 'beginner' ? { level, paletteMode: 'basic' } : { level }),
       setPaletteMode: (paletteMode) => set({ paletteMode }),

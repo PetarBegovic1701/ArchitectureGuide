@@ -19,6 +19,8 @@ const ICON_CORNER: ReadonlySet<string> = new Set([
   'document',
 ]);
 
+export const DIFF_COLOR = { added: 'var(--ag-valid)', changed: 'var(--ag-warning)' } as const;
+
 const SIDES = [
   { id: 't', position: Position.Top },
   { id: 'r', position: Position.Right },
@@ -104,6 +106,22 @@ function ShapeNodeImpl({ data, selected }: NodeProps<ShapeFlowNode>) {
         </>
       )}
       {data.issue && <IssueBadge id={data.elementId} issue={data.issue} />}
+      {data.diff && (
+        <>
+          <div
+            className="pointer-events-none absolute -inset-1.5 rounded-xl border-2"
+            style={{ borderColor: DIFF_COLOR[data.diff] }}
+            aria-hidden
+          />
+          <span
+            className="pointer-events-none absolute -top-5 left-0 rounded px-1 text-[10px] font-semibold text-white"
+            style={{ background: DIFF_COLOR[data.diff] }}
+            data-testid={`diff-${data.elementId}`}
+          >
+            {data.diff === 'added' ? 'new' : 'changed'}
+          </span>
+        </>
+      )}
       {SIDES.map((s) => (
         <Handle key={s.id} id={s.id} type="source" position={s.position} className="ag-handle" />
       ))}

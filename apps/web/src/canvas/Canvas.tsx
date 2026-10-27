@@ -66,6 +66,7 @@ export function Canvas() {
   );
   const level = useUi((s) => s.level);
   const activeFinding = useUi((s) => s.activeFinding);
+  const compare = useUi((s) => s.compare);
   const findings = project ? findingsOf(project) : NO_FINDINGS;
   const issues = useMemo(() => issuesByItem(findings, level), [findings, level]);
   const highlightIds = useMemo(() => {
@@ -75,14 +76,23 @@ export function Canvas() {
   const derivedNodes = useMemo(
     () =>
       project && view
-        ? toFlowNodes(project, view, { selectedIds, editingId, connecting, issues, highlightIds })
+        ? toFlowNodes(project, view, {
+            selectedIds,
+            editingId,
+            connecting,
+            issues,
+            highlightIds,
+            compare,
+          })
         : [],
-    [project, view, selectedIds, editingId, connecting, issues, highlightIds],
+    [project, view, selectedIds, editingId, connecting, issues, highlightIds, compare],
   );
   const derivedEdges = useMemo(
     () =>
-      project && view ? toFlowEdges(project, view, { selectedIds, issues, highlightIds }) : [],
-    [project, view, selectedIds, issues, highlightIds],
+      project && view
+        ? toFlowEdges(project, view, { selectedIds, issues, highlightIds, compare })
+        : [],
+    [project, view, selectedIds, issues, highlightIds, compare],
   );
 
   // Local copies, so dragging and selecting are smooth. The model changes once, on drag

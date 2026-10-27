@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { ReactFlowProvider } from '@xyflow/react';
 import {
   ArrowLeft,
+  History,
   Command,
   Download,
   LayoutTemplate,
@@ -17,8 +18,10 @@ import { CommandPalette, Legend, RelationPicker } from '../panels/Overlays';
 import { Palette } from '../panels/Palette';
 import { ProblemsButton, ProblemsPanel, SuppressDialog } from '../panels/Problems';
 import { SaveTemplateDialog, TemplatePicker } from '../panels/Templates';
+import { CompareBanner, SnapshotsDialog } from '../panels/Snapshots';
 import { dispatch, exportJson, redo, stampTemplate, undo } from '../actions';
-import { useAutosave, useShortcuts } from '../hooks';
+import { useAutosave, useFolder, useShortcuts } from '../hooks';
+import { folder } from '../persistence/folder';
 import type { SaveStatus } from '../hooks';
 import { loadProject } from '../persistence/db';
 import { useProject } from '../store/project';
@@ -39,6 +42,7 @@ export function Editor({ projectId }: { projectId: string }) {
     return () => {
       cancelled = true;
       useProject.getState().unload();
+      useUi.getState().set({ compare: null, dialog: null, activeFinding: null });
     };
   }, [projectId]);
 
@@ -72,6 +76,7 @@ function EditorLoaded() {
             <main className="relative min-h-0 flex-1">
               <Canvas />
               <Legend />
+              <CompareBanner />
             </main>
             <ProblemsPanel />
           </div>
@@ -101,6 +106,7 @@ function EditorDialogs() {
       />
     );
   if (dialog === 'save-template') return <SaveTemplateDialog onClose={close} />;
+  if (dialog === 'snapshots') return <SnapshotsDialog onClose={close} />;
   return null;
 }
 
@@ -119,6 +125,8 @@ function TopBar({ status }: { status: SaveStatus }) {
   const theme = useUi((s) => s.theme);
   const setTheme = useUi((s) => s.setTheme);
   const iconButton = 'rounded p-1.5 hover:bg-[var(--ag-panel-2)] disabled:opacity-40';
+  const folderState = useFolder();
+  const inFolder = folderState.open && folder.isLinked(project.id);
   return (
     <header className="flex h-11 shrink-0 items-center gap-2 border-b border-[var(--ag-border)] bg-[var(--ag-panel)] px-2">
       <a href="#/" className={iconButton} aria-label="Back to projects" title="Back to projects">
@@ -138,6 +146,7 @@ function TopBar({ status }: { status: SaveStatus }) {
       />
       <span className="text-xs text-[var(--ag-muted)]" data-testid="save-status" aria-live="polite">
         {STATUS_TEXT[status]}
+        {inFolder && status === 'saved' && ` to folder ${folderState.name}`}
       </span>
       <div className="ml-2 flex">
         <button
@@ -168,6 +177,14 @@ function TopBar({ status }: { status: SaveStatus }) {
         title="Insert a template"
       >
         <LayoutTemplate size={14} aria-hidden /> Templates
+      </button>
+      <button
+        type="button"
+        className="flex items-center gap-1 rounded px-2 py-1 text-xs hover:bg-[var(--ag-panel-2)]"
+        onClick={() => useUi.getState().set({ dialog: 'snapshots' })}
+        title="Snapshots: save, compare and restore versions"
+      >
+        <History size={14} aria-hidden /> Snapshots
       </button>
       <div className="ml-auto flex items-center gap-2">
         <ProblemsButton />

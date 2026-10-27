@@ -9,6 +9,7 @@ import {
 import type { EdgeProps, InternalNode } from '@xyflow/react';
 import type { RelationFlowEdge } from '../lib/flow';
 import { SEVERITY_COLOR } from '../lib/findings';
+import { DIFF_COLOR } from './ShapeNode';
 
 /**
  * A relation drawn between the borders of its two shapes ("floating" edge), so handles
@@ -42,8 +43,9 @@ function RelationEdgeImpl({ id, source, target, data, selected }: EdgeProps<Rela
   });
   const { line, relation, typeName } = data;
   const issueColor = data.issue ? SEVERITY_COLOR[data.issue.severity] : undefined;
-  const stroke = selected ? 'var(--ag-accent)' : (issueColor ?? 'var(--ag-edge)');
-  const width = line.width + (selected ? 1 : 0) + (data.highlighted ? 2 : 0);
+  const diffColor = data.diff ? DIFF_COLOR[data.diff] : undefined;
+  const stroke = selected ? 'var(--ag-accent)' : (diffColor ?? issueColor ?? 'var(--ag-edge)');
+  const width = line.width + (selected ? 1 : 0) + (data.highlighted || data.diff ? 2 : 0);
   const marker = MARKER_IDS[line.marker];
   const label = relation.label ? `${typeName}: ${relation.label}` : typeName;
 

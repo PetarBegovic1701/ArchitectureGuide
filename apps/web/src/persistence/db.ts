@@ -82,6 +82,16 @@ export async function saveProject(project: Project): Promise<Project> {
   return saved;
 }
 
+/** Stores a project as it is (no new revision), for example a copy read from a folder. */
+export async function cacheProject(project: Project): Promise<void> {
+  await db.projects.put({
+    id: project.id,
+    name: project.name,
+    updatedAt: project.updatedAt,
+    json: serializeProject(project),
+  });
+}
+
 export async function deleteProject(id: string): Promise<void> {
   await db.transaction('rw', db.projects, db.snapshots, async () => {
     await db.projects.delete(id);

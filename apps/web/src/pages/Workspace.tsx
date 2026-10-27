@@ -6,9 +6,18 @@ import { sampleProject } from '../lib/sample';
 import { projectFromTemplate } from '../lib/templates';
 import { TemplatePicker } from '../panels/Templates';
 import { readProjectFile } from '../actions';
-import { deleteProject, listProjects, loadProject, saveProject } from '../persistence/db';
+import {
+  cacheProject,
+  deleteProject,
+  listProjects,
+  loadProject,
+  saveProject,
+} from '../persistence/db';
+import { canOpenFolders, folder } from '../persistence/folder';
+import type { FolderProject } from '../persistence/folder';
+import { closeFolder, lastFolder, pickFolder, reopenFolder } from '../persistence/handles';
 import type { StoredProject } from '../persistence/db';
-import { navigate } from '../hooks';
+import { navigate, useFolder } from '../hooks';
 import { useUi } from '../store/ui';
 
 /** Project list: create, open, import, duplicate, delete (§14.4). */
@@ -18,6 +27,37 @@ export function Workspace() {
   const fileInput = useRef<HTMLInputElement>(null);
   const toast = useUi((s) => s.toast);
   const [picking, setPicking] = useState(false);
+  const folderState = useFolder();
+  const [folderProjects, setFolderProjects] = useState<FolderProject[]>([]);
+  const [previous, setPrevious] = useState<{ name: string } | undefined>();
+  useEffect(() => void lastFolder().then(setPrevious), [folderState.revision]);
+  useEffect(() => {
+    if (folderState.open) void folder.listProjects().then(setFolderProjects);
+    else setFolderProjects([]);
+  }, [folderState.open, folderState.revision]);
+
+  const folderAction = async (work: () => Promise<void>) => {
+    try {
+      await work();
+    } catch (error) {
+      if ((error as Error).name === 'AbortError') return; // the user closed the picker
+      toast({ tone: 'error', message: (error as Error).message });
+    }
+  };
+
+  const openFromFolder = (id: string) =>
+    folderAction(async () => {
+      await cacheProject(await folder.readProject(id));
+      navigate({ page: 'editor', projectId: id });
+    });
+
+  const saveToFolder = (id: string) =>
+    folderAction(async () => {
+      const project = await loadProject(id);
+      if (!project) return;
+      await folder.writeProject(project);
+      toast({ tone: 'success', message: `Saved “${project.name}” to the folder ${folder.name}.` });
+    });
 
   const refresh = useCallback(async () => setProjects(await listProjects()), []);
   useEffect(() => void refresh(), [refresh]);
@@ -150,6 +190,74 @@ export function Workspace() {
         </div>
       </section>
 
+      {canOpenFolders() && (
+        <section
+          className="mb-8 rounded-lg border border-[var(--ag-border)] bg-[var(--ag-panel)] p-4"
+          aria-label="Folder"
+        >
+          {folderState.open ? (
+            <>
+              <div className="mb-2 flex items-center gap-3">
+                <h2 className="font-semibold">Folder: {folderState.name}</h2>
+                <button
+                  type="button"
+                  className="ml-auto text-sm text-[var(--ag-accent)] hover:underline"
+                  onClick={closeFolder}
+                >
+                  Close folder
+                </button>
+              </div>
+              {folderProjects.length === 0 ? (
+                <p className="text-sm text-[var(--ag-muted)]">
+                  No projects in this folder yet. Use “Save to folder” on a project below.
+                </p>
+              ) : (
+                <ul className="space-y-1">
+                  {folderProjects.map((p) => (
+                    <li key={p.id} className="flex items-center gap-3 text-sm">
+                      <button
+                        type="button"
+                        className="font-medium hover:underline"
+                        onClick={() => void openFromFolder(p.id)}
+                      >
+                        {p.name}
+                      </button>
+                      <span className="text-xs text-[var(--ag-muted)]">{p.file}</span>
+                      {folder.config.defaultProject === p.id && (
+                        <span className="text-xs text-[var(--ag-muted)]">(default)</span>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </>
+          ) : (
+            <div className="flex flex-wrap items-center gap-3">
+              <p className="flex-1 text-sm text-[var(--ag-muted)]">
+                Keep projects as files in your repository (for example in <code>architecture/</code>
+                ), so they are reviewed and versioned with the code.
+              </p>
+              <button
+                type="button"
+                className="rounded border border-[var(--ag-border)] px-3 py-1.5 text-sm font-semibold"
+                onClick={() => void folderAction(pickFolder)}
+              >
+                Open folder…
+              </button>
+              {previous && (
+                <button
+                  type="button"
+                  className="text-sm text-[var(--ag-accent)] hover:underline"
+                  onClick={() => void folderAction(reopenFolder)}
+                >
+                  Reopen “{previous.name}”
+                </button>
+              )}
+            </div>
+          )}
+        </section>
+      )}
+
       <section>
         <div className="mb-2 flex items-center justify-between">
           <h2 className="font-semibold">Your projects</h2>
@@ -197,6 +305,18 @@ export function Workspace() {
                 <span className="text-xs text-[var(--ag-muted)]">
                   {new Date(p.updatedAt).toLocaleString()}
                 </span>
+                {folderState.open && !folder.isLinked(p.id) && (
+                  <button
+                    type="button"
+                    className="text-xs text-[var(--ag-accent)]"
+                    onClick={() => void saveToFolder(p.id)}
+                  >
+                    Save to folder
+                  </button>
+                )}
+                {folder.isLinked(p.id) && (
+                  <span className="text-xs text-[var(--ag-muted)]">in folder</span>
+                )}
                 <button
                   type="button"
                   className="text-xs text-[var(--ag-accent)]"

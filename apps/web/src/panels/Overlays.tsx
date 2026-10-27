@@ -151,6 +151,7 @@ export function CommandPalette() {
       })),
       ...(project ? [{ id: 'export', label: 'Export JSON', run: () => exportJson(project) }] : []),
       { id: 'templates', label: 'Insert template…', run: () => ui.set({ dialog: 'templates' }) },
+      { id: 'snapshots', label: 'Snapshots…', run: () => ui.set({ dialog: 'snapshots' }) },
       {
         id: 'save-template',
         label: 'Save selection as template…',

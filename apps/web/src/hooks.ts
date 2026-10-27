@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { copy, deleteSelection, duplicate, paste, redo, undo } from './actions';
 import { saveProject } from './persistence/db';
+import { folder } from './persistence/folder';
 import { useProject } from './store/project';
 import { useUi } from './store/ui';
 
@@ -98,6 +99,15 @@ export function useShortcuts(): void {
 
 export type SaveStatus = 'saved' | 'saving' | 'error';
 
+/** Re-renders when a folder is opened or closed, or its files change. */
+export function useFolder(): { open: boolean; name: string; revision: number } {
+  const revision = useSyncExternalStore(
+    (listener) => folder.subscribe(listener),
+    () => folder.revision,
+  );
+  return { open: folder.isOpen, name: folder.name, revision };
+}
+
 /**
  * Saves the open project to IndexedDB 500 ms after the last change, at the latest 5 s
  * after the first unsaved change, and when the editor closes (§14.3).
@@ -114,6 +124,8 @@ export function useAutosave(): SaveStatus {
     if (!project) return;
     try {
       const saved = await saveProject(project);
+      // Folder mode: the file in the folder is the real copy (§14.3).
+      if (folder.isLinked(saved.id)) await folder.writeProject(saved);
       useProject.getState().markSaved(saved.revision, saved.updatedAt);
       if (!pending.current) setStatus('saved');
     } catch {
