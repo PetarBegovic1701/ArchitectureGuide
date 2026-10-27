@@ -70,12 +70,16 @@ export function resolveParams(
   return { values, errors };
 }
 
-/** Replaces `{key}` placeholders with parameter values (lists joined with ", "). */
+/**
+ * Replaces `{key}` placeholders with parameter values (lists joined with ", ").
+ * `{key:slug}` gives the value as a slug, for paths ("Order Items" → "order-items").
+ */
 export function fillPlaceholders(text: string, values: ParamValues): string {
-  return text.replace(/\{(\w+)\}/g, (match, key: string) => {
+  return text.replace(/\{(\w+)(:slug)?\}/g, (match, key: string, slug?: string) => {
     const v: ParamValue | undefined = values[key];
     if (v === undefined) return match;
-    return Array.isArray(v) ? v.join(', ') : String(v);
+    const items = Array.isArray(v) ? v.map(String) : [String(v)];
+    return items.map((x) => (slug ? slugify(x) : x)).join(', ');
   });
 }
 
@@ -232,7 +236,14 @@ export function instantiateTemplate(
     patch: {
       derivedFrom: [
         ...(project.derivedFrom ?? []),
-        { templateId: template.id, templateVersion: template.version, rootIds },
+        {
+          templateId: template.id,
+          templateVersion: template.version,
+          rootIds,
+          ...(template.invariants.length > 0
+            ? { invariants: renderInvariants(template, values) }
+            : {}),
+        },
       ],
     },
   });

@@ -108,6 +108,9 @@ const sharedTables: Rule = {
   learnId: 'pg.table',
   rationale:
     'When two services write the same tables, a migration in one can break the other, and neither can be deployed alone. Separate databases, or separate schemas on one Postgres server, are fine. Give each schema one owning service; other services get the data through its API or its events. Background workers of the same service do not count as other writers.',
+  invariant:
+    'Each PostgreSQL schema MUST have one writing service; other services use its API or events.',
+  appliesTo: ['pg.schema', 'pg.database'],
   check: ({ graph: g }) => {
     const byUnit = new Map<Id, Relation[]>();
     for (const r of g.relations.filter((r) => g.typeIs(r, 'writes'))) {
@@ -142,6 +145,8 @@ const migrationOwners: Rule = {
   learnId: 'pg.table',
   rationale:
     "Migrations change the shape of tables. When two codebases run migrations on the same schema, they overwrite each other's changes and the order of deploys decides what the database looks like. Pick one owner per schema; others read through a view or an API.",
+  invariant: 'Each schema MUST have exactly one migration owner.',
+  appliesTo: ['pg.schema', 'pg.database'],
   check: ({ graph: g }) =>
     g.ofKind('pg.schema', 'pg.database').flatMap((target) => {
       // Migrations of the database also change every schema in it.
@@ -174,6 +179,9 @@ const handlerUsesOrm: Rule = {
   learnId: 'topic.models',
   rationale:
     'A route handler should turn HTTP into a call and back. When it also runs queries, business rules end up in controllers, are copied between endpoints, and cannot be tested without HTTP. Put a use case and a repository between the handler and Postgres.',
+  invariant:
+    'Route handlers MUST NOT query PostgreSQL directly; they call a use case, which uses a repository.',
+  appliesTo: ['node.route-handler'],
   check: ({ graph: g }) =>
     g.ofKind('node.route-handler').flatMap((h) =>
       g
@@ -196,6 +204,8 @@ const domainOnInfrastructure: Rule = {
   learnId: 'topic.models',
   rationale:
     'The domain holds the business rules. If it imports the ORM, a repository class or HTTP code, every infrastructure change touches the rules, and the rules cannot be tested alone. Let the domain depend on a port (an interface) that a repository implements.',
+  invariant: 'Domain code MUST NOT import the ORM, repositories or HTTP code; it depends on ports.',
+  appliesTo: ['node.domain'],
   check: ({ graph: g }) =>
     g.relations
       .filter((r) => g.typeIs(r, 'depends-on', 'calls', 'reads', 'writes'))
@@ -230,6 +240,9 @@ const dualWrite: Rule = {
   learnId: 'topic.transactions-and-isolation',
   rationale:
     'Writing to Postgres and then publishing a message are two separate actions. If the process crashes between them, the data and the message disagree. With a Postgres job queue (pg-boss, graphile-worker) add the job in the same transaction as the data. With another broker, write the message to an outbox table in the transaction and publish it from there. NOTIFY is sent on commit, so it is not a dual write.',
+  invariant:
+    'Jobs MUST be enqueued in the same transaction as their data; messages to other brokers go through an outbox.',
+  appliesTo: ['category:data-in-motion'],
   check: ({ graph: g }) =>
     g.elements
       .filter((d) => g.category(d) === 'deployable')
@@ -315,6 +328,9 @@ const noPooling: Rule = {
   learnId: 'topic.event-loop-and-parallelism',
   rationale:
     'Every instance of a service opens its own pool of Postgres connections. With many instances, or serverless functions that start and stop all the time, Postgres runs out of connections. Put a pooler (PgBouncer in transaction mode, or a managed pooler) between the service and the database.',
+  invariant:
+    'Horizontally scaled or serverless services MUST connect to PostgreSQL through a connection pooler.',
+  appliesTo: ['node.service', 'node.bff'],
   check: ({ graph: g }) =>
     g
       .ofKind(...SERVING)
@@ -334,6 +350,8 @@ const notifyForDurableWork: Rule = {
   learnId: 'pg.function',
   rationale:
     'LISTEN/NOTIFY only reaches listeners that are connected at that moment. If the worker is restarting, the notification is lost and the work is never done. Use NOTIFY to wake things up, and a job queue (pg-boss, graphile-worker) for work that must happen.',
+  invariant: 'Work that must happen MUST go through a job queue, not LISTEN/NOTIFY.',
+  appliesTo: ['pg.channel'],
   check: ({ graph: g }) =>
     g.ofKind('pg.channel').flatMap((ch) => {
       const workers = g
@@ -360,6 +378,9 @@ const frontendFanOut: Rule = {
   replaces: ['AP-009'],
   rationale:
     'When the React app calls many Node services directly, it has to know all of them, make many requests per page, and handle each partial failure. Add a Node backend-for-frontend that combines the calls for the app.',
+  invariant: (s) =>
+    `The React app MUST call at most ${s.thresholds.frontendDirectServices} Node services directly; use a BFF beyond that.`,
+  appliesTo: ['react.app'],
   check: ({ graph: g, settings }) =>
     g.ofKind('react.app').flatMap((app) => {
       const services = new Set(
@@ -393,6 +414,8 @@ const fsdDirection: Rule = {
   packs: ['fsd'],
   rationale:
     'In Feature-Sliced Design a layer only imports layers below it: app → pages → widgets → features → entities → shared. An import upwards creates hidden cycles. Move the shared code down, or pass it in through props or slots.',
+  invariant: 'Feature-Sliced code MUST only import from layers below its own.',
+  appliesTo: ['react.feature'],
   check: ({ graph: g }) =>
     g.relations
       .filter((r) => g.typeIs(r, 'depends-on'))
@@ -414,6 +437,8 @@ const featureToFeature: Rule = {
   packs: ['fsd'],
   rationale:
     'Features that import each other cannot be changed or removed alone. Move the shared part down to an entity or to shared code, or compose the features in a page or widget.',
+  invariant: 'Features MUST NOT import other features.',
+  appliesTo: ['react.feature'],
   check: ({ graph: g }) =>
     g.relations
       .filter((r) => g.typeIs(r, 'depends-on') && r.sourceId !== r.targetId)
@@ -441,6 +466,8 @@ const noValidation: Rule = {
   learnId: 'node.endpoint',
   rationale:
     'Data from the network can be anything. TypeScript types disappear at run time, so a handler that trusts its input crashes, or writes bad data. Validate every request with a schema (zod, TypeBox, class-validator); share the schema with the frontend through a contract.',
+  invariant: 'Route handlers MUST validate every request with a schema (zod or similar).',
+  appliesTo: ['node.route-handler'],
   check: ({ graph: g }) =>
     g
       .ofKind('node.route-handler')
@@ -478,6 +505,9 @@ const publicWithoutAuth: Rule = {
   learnId: 'topic.authentication',
   rationale:
     'Anything the browser can reach, anyone on the internet can reach. Show how the service checks who is calling: an auth middleware, a gateway that checks tokens, or a link to an auth provider. If an endpoint is public on purpose, mark it with `auth: none` and suppress the finding with a reason.',
+  invariant:
+    'Services reachable from the browser MUST authenticate callers (auth middleware, gateway or auth provider).',
+  appliesTo: ['node.service', 'node.bff'],
   check: ({ graph: g }) =>
     publicEntries(g)
       .filter((e) => !hasAuth(g, e))
@@ -538,6 +568,9 @@ const lostUpdate: Rule = {
   learnId: 'topic.concurrency-control',
   rationale:
     'Two requests read the same row, both change it, and the second write silently replaces the first: one sale of the last item is lost, or a balance is wrong. When several writers can change the same rows, lock the row (`SELECT … FOR UPDATE`), or check a version column in the `UPDATE`.',
+  invariant:
+    'Writes to rows that several writers change MUST use a row lock or an optimistic version check.',
+  appliesTo: ['pg.table', 'pg.schema'],
   check: ({ graph: g }) => {
     const out: RawFinding[] = [];
     for (const r of g.relations.filter((r) => g.typeIs(r, 'writes'))) {
@@ -579,6 +612,9 @@ const connectionExhaustion: Rule = {
   learnId: 'topic.event-loop-and-parallelism',
   rationale:
     'Each instance of each service keeps its own pool of connections. Add them up: when the total gets close to `max_connections`, new connections fail under load, and deploys (old and new instances at once) fail first. Use smaller pools, or put PgBouncer in transaction mode in front of the database.',
+  invariant:
+    'The connection pools of all services together MUST stay below 80% of max_connections, or go through a pooler.',
+  appliesTo: ['pg.database'],
   check: ({ graph: g }) =>
     g.ofKind('pg.database').flatMap((db) => {
       const pooled = g
@@ -618,6 +654,9 @@ const cpuOnEventLoop: Rule = {
   learnId: 'topic.event-loop-and-parallelism',
   rationale:
     'Node runs your JavaScript on one thread. While it resizes an image or builds a PDF, no other request of that process is answered. More processes (cluster) do not help the requests stuck behind it. Move the work to `worker_threads`, or to a background worker.',
+  invariant:
+    'CPU-heavy work MUST NOT run on the event loop of a request-serving process; use worker threads or a worker.',
+  appliesTo: ['node.service', 'node.bff'],
   check: ({ graph: g }) =>
     g.elements
       .filter(
@@ -646,6 +685,8 @@ const serializableWithoutRetry: Rule = {
   learnId: 'topic.transactions-and-isolation',
   rationale:
     'Postgres keeps serializable transactions correct by aborting one of two that conflict, with SQLSTATE 40001. That is expected, not a bug: the application must run the whole transaction again. Without a retry loop, users see random errors under load.',
+  invariant: 'Serializable transactions MUST be retried on SQLSTATE 40001.',
+  appliesTo: ['pg.schema', 'pg.database', 'pg.table'],
   check: ({ graph: g }) =>
     g.relations
       .filter((r) => g.typeIs(r, 'writes') && prop(r, 'isolation') === 'serializable')
@@ -670,6 +711,9 @@ const retriedNotIdempotent: Rule = {
   learnId: 'node.endpoint',
   rationale:
     'A timeout does not tell you whether the server did the work. When the client retries a POST, the order may be created twice, or the card charged twice. Send an `Idempotency-Key` header and store it with a unique constraint, so a repeated request returns the first result.',
+  invariant:
+    'Retried POST and PATCH calls MUST send an Idempotency-Key that the server stores with a unique constraint.',
+  appliesTo: ['node.endpoint'],
   check: ({ graph: g }) =>
     g.relations
       .filter((r) => g.typeIs(r, 'calls') && Number(prop(r, 'retries') ?? 0) > 0)
@@ -709,6 +753,9 @@ const mutatingWithoutAuth: Rule = {
   learnId: 'topic.authentication',
   rationale:
     'An endpoint that changes data and does not check who is calling lets anyone change that data. Require authentication. If it must be public (a sign-up or a webhook), suppress the finding and write down how it is protected (rate limit, signature, CAPTCHA).',
+  invariant:
+    'Endpoints that change data MUST require authentication, unless a suppression documents why not.',
+  appliesTo: ['node.endpoint'],
   check: ({ graph: g }) => {
     const entries = new Set(publicEntries(g).map((e) => e.id));
     return g
@@ -731,6 +778,8 @@ const unpaginatedList: Rule = {
   learnId: 'node.endpoint',
   rationale:
     'A list that returns every row is fast with test data and slow, or out of memory, in production. Return pages: cursor pagination (`?after=<id>&limit=50`) stays fast on large tables; offset pagination is simpler but slows down on deep pages.',
+  invariant: 'Endpoints that return lists MUST paginate.',
+  appliesTo: ['node.endpoint'],
   check: ({ graph: g }) =>
     g
       .ofKind('node.endpoint')
@@ -751,6 +800,8 @@ const tokensInWebStorage: Rule = {
   learnId: 'topic.authentication',
   rationale:
     'Any script on the page can read `localStorage` and `sessionStorage`, so one XSS bug, or one bad npm package, leaks every token. Keep tokens in an HttpOnly, Secure, SameSite cookie, or let a backend-for-frontend hold them.',
+  invariant: 'Auth tokens MUST NOT be stored in localStorage or sessionStorage.',
+  appliesTo: ['react.app', 'react.client-store'],
   check: ({ graph: g }) => [
     ...g
       .ofKind('react.app')
@@ -810,6 +861,9 @@ const crossModuleWrite: Rule = {
   learnId: 'pattern.modular-monolith',
   rationale:
     "In a modular monolith each module owns its tables. When one module writes another module's schema, the two can no longer change, test or move into a service on their own. Call the owning module's public service instead. The owner is the schema's `ownedBy` property (module name or ID).",
+  invariant:
+    'A module MUST only write its own schema; it uses other modules through their public services.',
+  appliesTo: ['node.module'],
   check: ({ graph: g }) =>
     g.relations
       .filter((r) => g.typeIs(r, 'writes'))

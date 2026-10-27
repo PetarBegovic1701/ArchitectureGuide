@@ -1,0 +1,22 @@
+flowchart LR
+  actor__api_client(["API client<br/><small>User / actor</small>"])
+  subgraph db__shop_db["Shop DB"]
+    schema__billing[("billing<br/><small>Schema</small>")]
+    schema__catalog[("catalog<br/><small>Schema</small>")]
+    schema__orders[("orders<br/><small>Schema</small>")]
+  end
+  subgraph svc__shop["Shop"]
+    mod__billing("Billing<br/><small>Module</small>")
+    mod__catalog("Catalog<br/><small>Module</small>")
+    mod__orders("Orders<br/><small>Module</small>")
+    mw__auth_middleware("Auth middleware<br/><small>Middleware</small>")
+  end
+  actor__api_client -->|"calls"| svc__shop
+  mod__billing -->|"depends on: public API"| mod__orders
+  mod__billing ==>|"writes"| schema__billing
+  mod__catalog ==>|"writes"| schema__catalog
+  mod__orders -->|"depends on: public API"| mod__catalog
+  mod__orders ==>|"writes"| schema__orders
+  svc__shop -->|"migrates"| schema__billing
+  svc__shop -->|"migrates"| schema__catalog
+  svc__shop -->|"migrates"| schema__orders

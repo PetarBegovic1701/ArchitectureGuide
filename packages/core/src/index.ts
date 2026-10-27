@@ -10,3 +10,5 @@ export * from './graph';
 export * from './rules';
 export * from './templates';
 export * from './diff';
+export * from './export';
+export * from './tours';

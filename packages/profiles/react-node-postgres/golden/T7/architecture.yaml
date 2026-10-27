@@ -1,0 +1,48 @@
+archguide: 1
+project: background-jobs
+profile: react-node-postgres
+patterns:
+  - background-jobs
+revision: 0
+elements:
+  - { id: actor.customer, kind: gen.actor, name: Customer }
+  - { id: ctl.order-routes, kind: node.route-handler, name: Order routes, parent: svc.shop-api, layer: application }
+  - { id: mw.auth-middleware, kind: node.middleware, name: Auth middleware, parent: svc.shop-api, layer: application, does: [ Read the session cookie, Reject calls without a valid session ] }
+  - { id: svc.shop-api, kind: node.service, name: Shop API, layer: application }
+  - { id: uc.place-order, kind: node.use-case, name: Place order, parent: svc.shop-api, layer: application }
+  - { id: wrk.worker, kind: node.worker, name: Worker, layer: application, does: [ Send confirmation email, Generate invoice PDF ] }
+  - { id: db.shop-db, kind: pg.database, name: Shop DB, layer: data }
+  - { id: jobs.jobs, kind: pg.job-queue, name: jobs, parent: db.shop-db, layer: data }
+  - { id: schema.public, kind: pg.schema, name: public, parent: db.shop-db, layer: data, ownedBy: svc.shop-api }
+  - { id: ext.e-mail-provider, kind: gen.external, name: E-mail provider, layer: external }
+relations:
+  - [ actor.customer, calls, svc.shop-api, { protocol: http } ]
+  - [ ctl.order-routes, calls, uc.place-order ]
+  - [ svc.shop-api, migrates, schema.public ]
+  - [ uc.place-order, enqueues, jobs.jobs, { inTransaction: true } ]
+  - [ uc.place-order, writes, schema.public, { via: prisma } ]
+  - [ wrk.worker, calls, ext.e-mail-provider, { protocol: http, retries: 3, timeoutMs: 10000 } ]
+  - [ wrk.worker, processes, jobs.jobs ]
+  - [ wrk.worker, reads, schema.public, { via: prisma } ]
+invariants:
+  - Jobs MUST be enqueued in the same transaction as the data they belong to. (T7)
+  - "Job handlers MUST be idempotent: a job can run more than once. (T7)"
+  - Jobs that keep failing MUST move to a dead-letter queue after the last retry. (T7)
+  - Only `svc.shop-api` MAY write `schema.public`. Only `svc.shop-api` MAY run migrations on it. (ownership)
+  - Modules MUST NOT depend on each other in a cycle. (AP-003)
+  - Services MUST NOT call each other synchronously in a cycle. (AP-006)
+  - Synchronous call chains between services MUST stay at most 4 services long. (AP-007)
+  - Consumers MUST move messages that keep failing to a dead-letter queue. (AP-012)
+  - Sensitive data (PII, secrets) MUST NOT be reachable from browser code. (AP-015)
+  - Consumers MUST NOT call the publisher of a message back synchronously. (AP-017)
+  - Each PostgreSQL schema MUST have one writing service; other services use its API or events. (RNP-001)
+  - Each schema MUST have exactly one migration owner. (RNP-002)
+  - Jobs MUST be enqueued in the same transaction as their data; messages to other brokers go through an outbox. (RNP-007)
+  - Horizontally scaled or serverless services MUST connect to PostgreSQL through a connection pooler. (RNP-009)
+  - Route handlers MUST validate every request with a schema (zod or similar). (RNP-015)
+  - Services reachable from the browser MUST authenticate callers (auth middleware, gateway or auth provider). (RNP-016)
+  - Writes to rows that several writers change MUST use a row lock or an optimistic version check. (RNP-019)
+  - The connection pools of all services together MUST stay below 80% of max_connections, or go through a pooler. (RNP-020)
+  - CPU-heavy work MUST NOT run on the event loop of a request-serving process; use worker threads or a worker. (RNP-021)
+  - Serializable transactions MUST be retried on SQLSTATE 40001. (RNP-022)
+known_issues: []

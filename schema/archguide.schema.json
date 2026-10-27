@@ -75,6 +75,13 @@
               "maxLength": 128,
               "pattern": "^[a-z0-9]+(?:[.-][a-z0-9]+)*$"
             }
+          },
+          "invariants": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
           }
         },
         "required": [

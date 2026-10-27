@@ -1,0 +1,41 @@
+archguide: 1
+project: starter
+profile: react-node-postgres
+patterns:
+  - starter
+revision: 0
+elements:
+  - { id: actor.customer, kind: gen.actor, name: Customer }
+  - { id: app.shop, kind: react.app, name: Shop, layer: presentation, code: [ apps/web/** ] }
+  - { id: route.home, kind: react.route, name: Home, parent: app.shop, layer: presentation }
+  - { id: mw.auth-middleware, kind: node.middleware, name: Auth middleware, parent: svc.shop-api, layer: application, does: [ Read the session cookie, Reject calls without a valid session ] }
+  - { id: svc.shop-api, kind: node.service, name: Shop API, layer: application, code: [ apps/api/** ] }
+  - { id: db.shop-db, kind: pg.database, name: Shop DB, layer: data }
+  - { id: schema.public, kind: pg.schema, name: public, parent: db.shop-db, layer: data, code: [ apps/api/prisma/** ], ownedBy: svc.shop-api }
+relations:
+  - [ actor.customer, calls, app.shop, { label: uses } ]
+  - [ app.shop, calls, svc.shop-api, { protocol: http, label: REST /api } ]
+  - [ svc.shop-api, migrates, schema.public ]
+  - [ svc.shop-api, reads, schema.public, { via: prisma } ]
+  - [ svc.shop-api, writes, schema.public, { via: prisma } ]
+invariants:
+  - The Shop React app MUST NOT connect to PostgreSQL; it calls Shop API over HTTP. (T1)
+  - Only Shop API MAY write and migrate the "public" schema of Shop DB. (T1)
+  - Auth tokens MUST live in an HttpOnly cookie, not in localStorage. (T1)
+  - Only `svc.shop-api` MAY write `schema.public`. Only `svc.shop-api` MAY run migrations on it. (ownership)
+  - Browser code MUST NOT read or write a database directly. (AP-002)
+  - Modules MUST NOT depend on each other in a cycle. (AP-003)
+  - Services MUST NOT call each other synchronously in a cycle. (AP-006)
+  - Synchronous call chains between services MUST stay at most 4 services long. (AP-007)
+  - Sensitive data (PII, secrets) MUST NOT be reachable from browser code. (AP-015)
+  - Each PostgreSQL schema MUST have one writing service; other services use its API or events. (RNP-001)
+  - Each schema MUST have exactly one migration owner. (RNP-002)
+  - Horizontally scaled or serverless services MUST connect to PostgreSQL through a connection pooler. (RNP-009)
+  - The React app MUST call at most 2 Node services directly; use a BFF beyond that. (RNP-011)
+  - Services reachable from the browser MUST authenticate callers (auth middleware, gateway or auth provider). (RNP-016)
+  - Writes to rows that several writers change MUST use a row lock or an optimistic version check. (RNP-019)
+  - The connection pools of all services together MUST stay below 80% of max_connections, or go through a pooler. (RNP-020)
+  - CPU-heavy work MUST NOT run on the event loop of a request-serving process; use worker threads or a worker. (RNP-021)
+  - Serializable transactions MUST be retried on SQLSTATE 40001. (RNP-022)
+  - Auth tokens MUST NOT be stored in localStorage or sessionStorage. (RNP-026)
+known_issues: []

@@ -1,0 +1,48 @@
+archguide: 1
+project: fsd-app
+profile: react-node-postgres
+patterns:
+  - fsd-app
+revision: 0
+elements:
+  - { id: apic.api-client, kind: react.api-client, name: API client, parent: app.web, layer: presentation }
+  - { id: app.web, kind: react.app, name: Web, layer: presentation }
+  - { id: feat.cart, kind: react.feature, name: Cart, parent: layer.features, layer: presentation, code: [ src/** ] }
+  - { id: feat.checkout, kind: react.feature, name: Checkout, parent: layer.features, layer: presentation, code: [ src/** ] }
+  - { id: feat.home-page, kind: react.feature, name: Home page, parent: layer.pages, layer: presentation, code: [ src/** ] }
+  - { id: feat.product, kind: react.feature, name: Product, parent: layer.entities, layer: presentation, code: [ src/** ] }
+  - { id: feat.search, kind: react.feature, name: Search, parent: layer.features, layer: presentation, code: [ src/** ] }
+  - { id: feat.storefront, kind: react.feature, name: Storefront, parent: layer.widgets, layer: presentation, code: [ src/** ] }
+  - { id: feat.ui-kit, kind: react.feature, name: UI kit, parent: layer.shared, layer: presentation, code: [ src/** ] }
+  - { id: feat.user, kind: react.feature, name: User, parent: layer.entities, layer: presentation, code: [ src/** ] }
+  - { id: qcache.server-state-cache, kind: react.server-state, name: Server-state cache, parent: app.web, layer: presentation }
+  - { id: layer.entities, kind: group.layer, name: entities, parent: app.web }
+  - { id: layer.features, kind: group.layer, name: features, parent: app.web }
+  - { id: layer.pages, kind: group.layer, name: pages, parent: app.web }
+  - { id: layer.shared, kind: group.layer, name: shared, parent: app.web }
+  - { id: layer.widgets, kind: group.layer, name: widgets, parent: app.web }
+relations:
+  - [ feat.cart, depends-on, feat.user ]
+  - [ feat.checkout, depends-on, feat.product ]
+  - [ feat.home-page, depends-on, feat.storefront ]
+  - [ feat.product, depends-on, feat.ui-kit ]
+  - [ feat.product, fetches-via, apic.api-client ]
+  - [ feat.product, uses-state, qcache.server-state-cache ]
+  - [ feat.search, depends-on, feat.user ]
+  - [ feat.storefront, depends-on, feat.cart ]
+  - [ feat.storefront, depends-on, feat.checkout ]
+  - [ feat.storefront, depends-on, feat.search ]
+  - [ feat.user, depends-on, feat.ui-kit ]
+  - [ feat.user, fetches-via, apic.api-client ]
+invariants:
+  - "Code MUST only import from layers below its own: pages → widgets → features → entities → shared. (T11)"
+  - Features (Cart, Checkout, Search) MUST NOT import each other. (T11)
+  - Browser code MUST NOT read or write a database directly. (AP-002)
+  - Modules MUST NOT depend on each other in a cycle. (AP-003)
+  - Services MUST NOT call each other synchronously in a cycle. (AP-006)
+  - Synchronous call chains between services MUST stay at most 4 services long. (AP-007)
+  - The React app MUST call at most 2 Node services directly; use a BFF beyond that. (RNP-011)
+  - Feature-Sliced code MUST only import from layers below its own. (RNP-013)
+  - Features MUST NOT import other features. (RNP-014)
+  - Auth tokens MUST NOT be stored in localStorage or sessionStorage. (RNP-026)
+known_issues: []

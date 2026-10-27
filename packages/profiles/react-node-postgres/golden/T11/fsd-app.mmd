@@ -1,0 +1,35 @@
+flowchart LR
+  subgraph app__web["Web"]
+    apic__api_client[["API client<br/><small>API client</small>"]]
+    subgraph layer__entities["entities"]
+      feat__product("Product<br/><small>Feature module</small>")
+      feat__user("User<br/><small>Feature module</small>")
+    end
+    subgraph layer__features["features"]
+      feat__cart("Cart<br/><small>Feature module</small>")
+      feat__checkout("Checkout<br/><small>Feature module</small>")
+      feat__search("Search<br/><small>Feature module</small>")
+    end
+    subgraph layer__pages["pages"]
+      feat__home_page("Home page<br/><small>Feature module</small>")
+    end
+    subgraph layer__shared["shared"]
+      feat__ui_kit("UI kit<br/><small>Feature module</small>")
+    end
+    subgraph layer__widgets["widgets"]
+      feat__storefront("Storefront<br/><small>Feature module</small>")
+    end
+    qcache__server_state_cache[("Server-state cache<br/><small>Server-state cache</small>")]
+  end
+  feat__cart -->|"depends on"| feat__user
+  feat__checkout -->|"depends on"| feat__product
+  feat__home_page -->|"depends on"| feat__storefront
+  feat__product -->|"depends on"| feat__ui_kit
+  feat__product -->|"fetches via"| apic__api_client
+  feat__product -->|"uses state"| qcache__server_state_cache
+  feat__search -->|"depends on"| feat__user
+  feat__storefront -->|"depends on"| feat__cart
+  feat__storefront -->|"depends on"| feat__checkout
+  feat__storefront -->|"depends on"| feat__search
+  feat__user -->|"depends on"| feat__ui_kit
+  feat__user -->|"fetches via"| apic__api_client

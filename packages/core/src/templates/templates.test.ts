@@ -127,6 +127,7 @@ describe('instantiateTemplate', () => {
         templateId: 'test.services',
         templateVersion: '1.2.0',
         rootIds: ['app.shop-web', 'svc.orders', 'db.orders-db', 'svc.billing', 'db.billing-db'],
+        invariants: ['Only Orders, Billing may write their own databases in Shop.'],
       },
     ]);
     expect(p.settings.rulePacks).toEqual(['core', 'microservices', 'hexagonal']);

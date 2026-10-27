@@ -12,6 +12,8 @@ export const DerivedFromSchema = z.object({
   templateId: z.string().min(1),
   templateVersion: z.string().min(1),
   rootIds: z.array(IdSchema),
+  /** The template's invariants with its parameters filled in; exported to agents. */
+  invariants: z.array(z.string().min(1)).optional(),
 });
 
 export const ProjectSchema = z.object({

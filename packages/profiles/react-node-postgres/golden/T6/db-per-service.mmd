@@ -1,0 +1,30 @@
+flowchart LR
+  actor__client(["Client<br/><small>User / actor</small>"])
+  auth__identity_provider{{"Identity provider<br/><small>Auth provider</small>"}}
+  gw__api_gateway{"API gateway<br/><small>API gateway / reverse proxy</small>"}
+  subgraph pgc__postgresql_server["PostgreSQL server"]
+    subgraph db__orders_db["Orders DB"]
+      jobs__orders_jobs>"Orders jobs<br/><small>Postgres job queue</small>"]
+    end
+    db__payments_db[("Payments DB<br/><small>Database</small>")]
+    db__shipping_db[("Shipping DB<br/><small>Database</small>")]
+  end
+  svc__orders_service["Orders service<br/><small>Node service</small>"]
+  svc__payments_service["Payments service<br/><small>Node service</small>"]
+  svc__shipping_service["Shipping service<br/><small>Node service</small>"]
+  actor__client -->|"calls"| gw__api_gateway
+  gw__api_gateway -->|"authenticates with"| auth__identity_provider
+  gw__api_gateway -->|"calls"| svc__orders_service
+  gw__api_gateway -->|"calls"| svc__payments_service
+  gw__api_gateway -->|"calls"| svc__shipping_service
+  svc__orders_service -.->|"enqueues"| jobs__orders_jobs
+  svc__orders_service -->|"migrates"| db__orders_db
+  svc__orders_service -->|"reads"| db__orders_db
+  svc__orders_service ==>|"writes"| db__orders_db
+  svc__payments_service -->|"migrates"| db__payments_db
+  svc__payments_service -.->|"processes"| jobs__orders_jobs
+  svc__payments_service -->|"reads"| db__payments_db
+  svc__payments_service ==>|"writes"| db__payments_db
+  svc__shipping_service -->|"migrates"| db__shipping_db
+  svc__shipping_service -->|"reads"| db__shipping_db
+  svc__shipping_service ==>|"writes"| db__shipping_db

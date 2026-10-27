@@ -1,0 +1,27 @@
+flowchart LR
+  actor__api_client(["API client<br/><small>User / actor</small>"])
+  subgraph db__database["Database"]
+    subgraph schema__app["app"]
+      tbl__customers["customers<br/><small>Table</small>"]
+      tbl__orders["orders<br/><small>Table</small>"]
+    end
+  end
+  subgraph svc__orders_api["Orders API"]
+    ctl__customer_routes("Customer routes<br/><small>Controller / route handler</small>")
+    ctl__order_routes("Order routes<br/><small>Controller / route handler</small>")
+    mw__auth_middleware("Auth middleware<br/><small>Middleware</small>")
+    repo__customer_repository[["Customer repository<br/><small>Repository / data access</small>"]]
+    repo__order_repository[["Order repository<br/><small>Repository / data access</small>"]]
+    uc__customer_service("Customer service<br/><small>Use case / application service</small>")
+    uc__order_service("Order service<br/><small>Use case / application service</small>")
+  end
+  actor__api_client -->|"calls"| svc__orders_api
+  ctl__customer_routes -->|"calls"| uc__customer_service
+  ctl__order_routes -->|"calls"| uc__order_service
+  repo__customer_repository -->|"reads"| tbl__customers
+  repo__customer_repository ==>|"writes"| tbl__customers
+  repo__order_repository -->|"reads"| tbl__orders
+  repo__order_repository ==>|"writes"| tbl__orders
+  svc__orders_api -->|"migrates"| schema__app
+  uc__customer_service -->|"calls"| repo__customer_repository
+  uc__order_service -->|"calls"| repo__order_repository

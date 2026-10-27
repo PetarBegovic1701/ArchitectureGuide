@@ -1,0 +1,56 @@
+archguide: 1
+project: db-per-service
+profile: react-node-postgres
+patterns:
+  - db-per-service
+revision: 0
+elements:
+  - { id: actor.client, kind: gen.actor, name: Client }
+  - { id: svc.orders-service, kind: node.service, name: Orders service, layer: application }
+  - { id: svc.payments-service, kind: node.service, name: Payments service, layer: application }
+  - { id: svc.shipping-service, kind: node.service, name: Shipping service, layer: application }
+  - { id: auth.identity-provider, kind: gen.auth-provider, name: Identity provider, layer: infrastructure }
+  - { id: gw.api-gateway, kind: gen.gateway, name: API gateway, layer: infrastructure, tech: nginx }
+  - { id: db.orders-db, kind: pg.database, name: Orders DB, parent: pgc.postgresql-server, layer: data, ownedBy: svc.orders-service }
+  - { id: db.payments-db, kind: pg.database, name: Payments DB, parent: pgc.postgresql-server, layer: data, ownedBy: svc.payments-service }
+  - { id: db.shipping-db, kind: pg.database, name: Shipping DB, parent: pgc.postgresql-server, layer: data, ownedBy: svc.shipping-service }
+  - { id: jobs.orders-jobs, kind: pg.job-queue, name: Orders jobs, parent: db.orders-db, layer: data }
+  - { id: pgc.postgresql-server, kind: pg.cluster, name: PostgreSQL server, layer: data }
+relations:
+  - [ actor.client, calls, gw.api-gateway, { protocol: http } ]
+  - [ gw.api-gateway, authenticates-with, auth.identity-provider ]
+  - [ gw.api-gateway, calls, svc.orders-service, { protocol: http } ]
+  - [ gw.api-gateway, calls, svc.payments-service, { protocol: http } ]
+  - [ gw.api-gateway, calls, svc.shipping-service, { protocol: http } ]
+  - [ svc.orders-service, enqueues, jobs.orders-jobs, { inTransaction: true } ]
+  - [ svc.orders-service, migrates, db.orders-db ]
+  - [ svc.orders-service, reads, db.orders-db, { via: prisma } ]
+  - [ svc.orders-service, writes, db.orders-db, { via: prisma } ]
+  - [ svc.payments-service, migrates, db.payments-db ]
+  - [ svc.payments-service, processes, jobs.orders-jobs ]
+  - [ svc.payments-service, reads, db.payments-db, { via: prisma } ]
+  - [ svc.payments-service, writes, db.payments-db, { via: prisma } ]
+  - [ svc.shipping-service, migrates, db.shipping-db ]
+  - [ svc.shipping-service, reads, db.shipping-db, { via: prisma } ]
+  - [ svc.shipping-service, writes, db.shipping-db, { via: prisma } ]
+invariants:
+  - Each of Orders, Payments, Shipping MUST only connect to its own database. (T6)
+  - Services MUST NOT call each other in a cycle; follow-up work goes through the job queue. (T6)
+  - All external traffic MUST pass the gateway, which checks tokens. (T6)
+  - Only `svc.orders-service` MAY write `db.orders-db`. Only `svc.orders-service` MAY run migrations on it. (ownership)
+  - Only `svc.payments-service` MAY write `db.payments-db`. Only `svc.payments-service` MAY run migrations on it. (ownership)
+  - Only `svc.shipping-service` MAY write `db.shipping-db`. Only `svc.shipping-service` MAY run migrations on it. (ownership)
+  - Services MUST NOT call each other synchronously in a cycle. (AP-006)
+  - Synchronous call chains between services MUST stay at most 4 services long. (AP-007)
+  - Consumers MUST move messages that keep failing to a dead-letter queue. (AP-012)
+  - Sensitive data (PII, secrets) MUST NOT be reachable from browser code. (AP-015)
+  - Consumers MUST NOT call the publisher of a message back synchronously. (AP-017)
+  - Each PostgreSQL schema MUST have one writing service; other services use its API or events. (RNP-001)
+  - Each schema MUST have exactly one migration owner. (RNP-002)
+  - Jobs MUST be enqueued in the same transaction as their data; messages to other brokers go through an outbox. (RNP-007)
+  - Horizontally scaled or serverless services MUST connect to PostgreSQL through a connection pooler. (RNP-009)
+  - Services reachable from the browser MUST authenticate callers (auth middleware, gateway or auth provider). (RNP-016)
+  - The connection pools of all services together MUST stay below 80% of max_connections, or go through a pooler. (RNP-020)
+  - CPU-heavy work MUST NOT run on the event loop of a request-serving process; use worker threads or a worker. (RNP-021)
+  - Serializable transactions MUST be retried on SQLSTATE 40001. (RNP-022)
+known_issues: []

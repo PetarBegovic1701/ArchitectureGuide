@@ -1,0 +1,16 @@
+flowchart LR
+  actor__customer(["Customer<br/><small>User / actor</small>"])
+  subgraph app__shop["Shop"]
+    route__home["Home<br/><small>Route / page</small>"]
+  end
+  subgraph db__shop_db["Shop DB"]
+    schema__public[("public<br/><small>Schema</small>")]
+  end
+  subgraph svc__shop_api["Shop API"]
+    mw__auth_middleware("Auth middleware<br/><small>Middleware</small>")
+  end
+  actor__customer -->|"calls: uses"| app__shop
+  app__shop -->|"calls: REST /api"| svc__shop_api
+  svc__shop_api -->|"migrates"| schema__public
+  svc__shop_api -->|"reads"| schema__public
+  svc__shop_api ==>|"writes"| schema__public

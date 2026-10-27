@@ -1,0 +1,52 @@
+archguide: 1
+project: layered-api
+profile: react-node-postgres
+patterns:
+  - layered-api
+revision: 0
+elements:
+  - { id: actor.api-client, kind: gen.actor, name: API client }
+  - { id: ctl.customer-routes, kind: node.route-handler, name: Customer routes, parent: svc.orders-api, layer: presentation, code: [ src/http/** ] }
+  - { id: ctl.order-routes, kind: node.route-handler, name: Order routes, parent: svc.orders-api, layer: presentation, code: [ src/http/** ] }
+  - { id: mw.auth-middleware, kind: node.middleware, name: Auth middleware, parent: svc.orders-api, layer: application, does: [ Read the session cookie, Reject calls without a valid session ] }
+  - { id: svc.orders-api, kind: node.service, name: Orders API, layer: application }
+  - { id: uc.customer-service, kind: node.use-case, name: Customer service, parent: svc.orders-api, layer: application, code: [ src/application/** ] }
+  - { id: uc.order-service, kind: node.use-case, name: Order service, parent: svc.orders-api, layer: application, code: [ src/application/** ] }
+  - { id: repo.customer-repository, kind: node.repository, name: Customer repository, parent: svc.orders-api, layer: infrastructure, code: [ src/repositories/** ] }
+  - { id: repo.order-repository, kind: node.repository, name: Order repository, parent: svc.orders-api, layer: infrastructure, code: [ src/repositories/** ] }
+  - { id: db.database, kind: pg.database, name: Database, layer: data }
+  - { id: schema.app, kind: pg.schema, name: app, parent: db.database, layer: data, ownedBy: svc.orders-api }
+  - { id: tbl.customers, kind: pg.table, name: customers, parent: schema.app, layer: data }
+  - { id: tbl.orders, kind: pg.table, name: orders, parent: schema.app, layer: data }
+relations:
+  - [ actor.api-client, calls, svc.orders-api, { protocol: http } ]
+  - [ ctl.customer-routes, calls, uc.customer-service ]
+  - [ ctl.order-routes, calls, uc.order-service ]
+  - [ repo.customer-repository, reads, tbl.customers, { via: prisma } ]
+  - [ repo.customer-repository, writes, tbl.customers, { via: prisma } ]
+  - [ repo.order-repository, reads, tbl.orders, { via: prisma } ]
+  - [ repo.order-repository, writes, tbl.orders, { via: prisma } ]
+  - [ svc.orders-api, migrates, schema.app ]
+  - [ uc.customer-service, calls, repo.customer-repository ]
+  - [ uc.order-service, calls, repo.order-repository ]
+invariants:
+  - A node.route-handler in Orders API MUST call a node.use-case, never a repository or the database. (T2)
+  - Only node.repository code MAY import the database client. (T2)
+  - Each of Order, Customer has exactly one repository. (T2)
+  - Only `svc.orders-api` MAY write `schema.app`. Only `svc.orders-api` MAY run migrations on it. (ownership)
+  - Modules MUST NOT depend on each other in a cycle. (AP-003)
+  - Presentation code MUST NOT reach the data or infrastructure layer without the application layer. (AP-005)
+  - Services MUST NOT call each other synchronously in a cycle. (AP-006)
+  - Synchronous call chains between services MUST stay at most 4 services long. (AP-007)
+  - Sensitive data (PII, secrets) MUST NOT be reachable from browser code. (AP-015)
+  - Each PostgreSQL schema MUST have one writing service; other services use its API or events. (RNP-001)
+  - Each schema MUST have exactly one migration owner. (RNP-002)
+  - Route handlers MUST NOT query PostgreSQL directly; they call a use case, which uses a repository. (RNP-005)
+  - Horizontally scaled or serverless services MUST connect to PostgreSQL through a connection pooler. (RNP-009)
+  - Route handlers MUST validate every request with a schema (zod or similar). (RNP-015)
+  - Services reachable from the browser MUST authenticate callers (auth middleware, gateway or auth provider). (RNP-016)
+  - Writes to rows that several writers change MUST use a row lock or an optimistic version check. (RNP-019)
+  - The connection pools of all services together MUST stay below 80% of max_connections, or go through a pooler. (RNP-020)
+  - CPU-heavy work MUST NOT run on the event loop of a request-serving process; use worker threads or a worker. (RNP-021)
+  - Serializable transactions MUST be retried on SQLSTATE 40001. (RNP-022)
+known_issues: []

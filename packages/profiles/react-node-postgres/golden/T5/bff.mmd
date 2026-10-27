@@ -1,0 +1,22 @@
+flowchart LR
+  actor__customer(["Customer<br/><small>User / actor</small>"])
+  app__web["Web<br/><small>React app</small>"]
+  subgraph bff__web_bff["Web BFF"]
+    mw__auth_middleware("Auth middleware<br/><small>Middleware</small>")
+  end
+  subgraph db__services_db["Services DB"]
+    schema__catalog[("catalog<br/><small>Schema</small>")]
+    schema__orders[("orders<br/><small>Schema</small>")]
+  end
+  svc__catalog_service["Catalog service<br/><small>Node service</small>"]
+  svc__orders_service["Orders service<br/><small>Node service</small>"]
+  actor__customer -->|"calls: uses"| app__web
+  app__web -->|"calls: one call per screen"| bff__web_bff
+  bff__web_bff -->|"calls"| svc__catalog_service
+  bff__web_bff -->|"calls"| svc__orders_service
+  svc__catalog_service -->|"migrates"| schema__catalog
+  svc__catalog_service -->|"reads"| schema__catalog
+  svc__catalog_service ==>|"writes"| schema__catalog
+  svc__orders_service -->|"migrates"| schema__orders
+  svc__orders_service -->|"reads"| schema__orders
+  svc__orders_service ==>|"writes"| schema__orders

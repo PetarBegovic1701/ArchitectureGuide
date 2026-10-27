@@ -110,6 +110,8 @@ const frontendToDatabase: Rule = {
   packs: ['frontend'],
   rationale:
     'Code in the browser can be read and changed by anyone. If it talks to a database directly, the credentials are public and nothing checks what the user may do. Put a backend in between.',
+  invariant: 'Browser code MUST NOT read or write a database directly.',
+  appliesTo: ['group:Frontend', 'category:ui', 'category:client-state'],
   check: ({ graph: g }) =>
     g.relations
       .filter((r) => g.typeIs(r, 'reads', 'writes'))
@@ -131,6 +133,8 @@ const cycles: Rule = {
   packs: ['core'],
   rationale:
     'Parts that depend on each other in a circle cannot be changed, tested or deployed one at a time. Break the cycle: move the shared part into its own module, depend on an interface, or send an event instead of a call.',
+  invariant: 'Modules MUST NOT depend on each other in a cycle.',
+  appliesTo: ['category:module'],
   check: ({ graph: g }) => {
     const modules = (id: Id) => (g.category(g.element(id)!) === 'module' ? id : undefined);
     const found = [...g.cycles(['depends-on']), ...g.cycles(['calls'], modules)];
@@ -152,6 +156,8 @@ const dependencyRule: Rule = {
   learnId: 'topic.models',
   rationale:
     'The domain holds the business rules. If it imports database, HTTP or framework code, every infrastructure change touches the rules, and the rules cannot be tested alone. Let the domain depend on a port (an interface) and let an adapter implement it.',
+  invariant: 'Domain code MUST NOT depend on infrastructure, presentation or data code.',
+  appliesTo: ['category:domain-core'],
   check: ({ graph: g }) =>
     g.relations
       .filter((r) => g.typeIs(r, 'depends-on', 'calls', 'reads', 'writes'))
@@ -173,6 +179,9 @@ const layerSkipping: Rule = {
   packs: ['layered'],
   rationale:
     'In a layered design each layer only talks to the one below it. When presentation code reaches the data layer directly, business rules get duplicated or skipped. Go through the application layer.',
+  invariant:
+    'Presentation code MUST NOT reach the data or infrastructure layer without the application layer.',
+  appliesTo: ['category:module'],
   check: ({ graph: g }) =>
     g.relations
       .filter((r) => g.typeIs(r, 'calls', 'reads', 'writes', 'depends-on'))
@@ -195,6 +204,8 @@ const distributedMonolith: Rule = {
   packs: ['microservices'],
   rationale:
     'Services that call each other synchronously in a circle fail together and must be deployed together: you pay for separate services without getting their independence. Make one direction asynchronous (events), or merge them.',
+  invariant: 'Services MUST NOT call each other synchronously in a cycle.',
+  appliesTo: ['category:deployable'],
   check: ({ graph: g }) =>
     g
       .cycles(['calls'], (id) => runner(g, id), isSync)
@@ -213,6 +224,9 @@ const chattyChain: Rule = {
   learnId: 'topic.event-loop-and-parallelism',
   rationale:
     'Every synchronous hop adds latency and another way to fail: the user waits for the slowest service in the chain, and one outage breaks the whole request. Shorten the chain with events, caching or by merging services.',
+  invariant: (s) =>
+    `Synchronous call chains between services MUST stay at most ${s.thresholds.syncDepth} services long.`,
+  appliesTo: ['category:deployable'],
   check: ({ graph: g, settings }) => {
     const limit = settings.thresholds.syncDepth;
     const entries = g.elements.filter(
@@ -273,6 +287,9 @@ const frontendFanOut: Rule = {
   packs: ['microservices'],
   rationale:
     'When the browser calls many backend services directly, it has to know all of them, make many slow requests, and handle every partial failure. Add a backend-for-frontend or an API gateway.',
+  invariant: (s) =>
+    `Frontend apps MUST call at most ${s.thresholds.frontendDirectServices} backend services directly; add a BFF or gateway beyond that.`,
+  appliesTo: ['group:Frontend'],
   check: ({ graph: g, settings }) =>
     g.elements
       .filter((e) => g.category(e) === 'deployable' && isFrontend(g, e))
@@ -329,6 +346,8 @@ const publicWithoutAuth: Rule = {
   learnId: 'topic.authentication',
   rationale:
     'Anything the browser can reach, anyone on the internet can reach. Show how the entry point checks who is calling: an auth provider, a gateway that checks tokens, or an auth middleware.',
+  invariant: 'Every entry point that the browser can reach MUST authenticate its callers.',
+  appliesTo: ['category:deployable', 'category:routing'],
   check: ({ graph: g }) =>
     publicEntries(g)
       .filter((e) => !hasAuth(g, e))
@@ -385,6 +404,8 @@ const missingDeadLetter: Rule = {
   packs: ['event-driven'],
   rationale:
     'Some messages always fail (bad data, a bug). Without a dead-letter queue they are retried forever or dropped silently. Send them to a dead-letter queue where someone can inspect and replay them.',
+  invariant: 'Consumers MUST move messages that keep failing to a dead-letter queue.',
+  appliesTo: ['category:data-in-motion'],
   check: ({ graph: g }) =>
     g.elements
       .filter((e) => g.category(e) === 'data-in-motion' && g.incoming(e.id, 'consumes').length > 0)
@@ -429,6 +450,9 @@ const dualWrite: Rule = {
   learnId: 'topic.transactions-and-isolation',
   rationale:
     'Writing to the database and then publishing a message are two separate actions. If the process crashes between them, the database and the message disagree. Use a transactional outbox: write the message to an outbox table in the same transaction, and publish it from there.',
+  invariant:
+    'A data write and the messages about it MUST be committed together (outbox, or enqueue in the same transaction).',
+  appliesTo: ['category:data-in-motion'],
   check: ({ graph: g }) =>
     dualWrites(g).map(({ deployable, writes, publishes }) => ({
       targetIds: [deployable.id],
@@ -444,6 +468,8 @@ const cacheAsTruth: Rule = {
   packs: ['core'],
   rationale:
     'A cache can be emptied at any time. If data is only written to the cache, it is lost on a restart or an eviction. Write to a durable store and use the cache only to speed up reads.',
+  invariant: 'A cache MUST NOT be the only copy of any data.',
+  appliesTo: ['gen.other-store'],
   check: ({ graph: g }) =>
     g.elements
       .filter((e) => e.properties?.kind === 'cache' || e.tags?.includes('cache'))
@@ -478,6 +504,8 @@ const sensitiveLeak: Rule = {
   learnId: 'topic.authentication',
   rationale:
     'Personal or secret data must only be read by your own backend code. A browser app, an actor or an external system that reads it directly bypasses every access check.',
+  invariant: 'Sensitive data (PII, secrets) MUST NOT be reachable from browser code.',
+  appliesTo: ['category:data-at-rest'],
   check: ({ graph: g }) =>
     g.elements
       .filter((e) => g.category(e) === 'data-at-rest')
@@ -529,6 +557,8 @@ const callbackToPublisher: Rule = {
   packs: ['event-driven'],
   rationale:
     'Events decouple the publisher from its consumers. If a consumer then calls the publisher synchronously, the two are coupled again, and the call can arrive while the publisher is still busy with the original request. Publish a reply event instead.',
+  invariant: 'Consumers MUST NOT call the publisher of a message back synchronously.',
+  appliesTo: ['category:data-in-motion'],
   check: ({ graph: g }) => {
     const out: RawFinding[] = [];
     const channels = g.elements.filter((e) =>

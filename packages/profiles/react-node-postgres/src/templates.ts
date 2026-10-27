@@ -18,6 +18,19 @@ const tableName = (entity: string) => {
   return s.endsWith('s') ? s : `${s}s`;
 };
 
+/** Columns every entity table starts with: a UUID key and timestamps. */
+function entityTable(extra: { name: string; type: string; nullable: boolean }[] = []) {
+  return {
+    columns: [
+      { name: 'id', type: 'uuid', nullable: false },
+      ...extra,
+      { name: 'created_at', type: 'timestamptz', nullable: false },
+      { name: 'updated_at', type: 'timestamptz', nullable: false },
+    ],
+    primaryKey: ['id'],
+  };
+}
+
 /** An auth middleware inside a service: how the service checks who is calling. */
 function authMiddleware(b: TemplateBuilder, key: string, parent: string, x: number, y: number) {
   return b.el(key, 'node.middleware', 'Auth middleware', {
@@ -194,7 +207,12 @@ const layered: Template = {
         layer: 'infrastructure',
         properties: { dataAccess: 'prisma' },
       });
-      b.el(`tbl${i}`, 'pg.table', table, { parent: 'schema', x: IN.x, y: IN.y + i * (80 + 16) });
+      b.el(`tbl${i}`, 'pg.table', table, {
+        parent: 'schema',
+        x: IN.x,
+        y: IN.y + i * (80 + 16),
+        properties: entityTable(),
+      });
       b.rel(`ctl${i}`, 'calls', `uc${i}`);
       b.rel(`uc${i}`, 'calls', `repo${i}`);
       b.rel(`repo${i}`, 'reads', `tbl${i}`, { via: 'prisma' });
@@ -252,16 +270,16 @@ const hexagonal: Template = {
   ],
   rulePacks: ['core', 'hexagonal', 'security'],
   invariants: [
-    '{serviceName}/domain MUST NOT import @prisma/client, drizzle-orm, kysely, express or any adapter.',
+    '`services/{serviceName:slug}/src/domain` MUST NOT import @prisma/client, drizzle-orm, kysely, express or any adapter.',
     'Persistence MUST go through a node.port; node.repository implements it.',
     'node.route-handler MUST call a node.use-case, never a node.repository.',
   ],
   folderLayout: {
-    'node.domain': 'services/{serviceName}/src/domain/**',
-    'node.use-case': 'services/{serviceName}/src/application/**',
-    'node.port': 'services/{serviceName}/src/domain/ports/**',
-    'node.repository': 'services/{serviceName}/src/adapters/db/**',
-    'node.route-handler': 'services/{serviceName}/src/adapters/http/**',
+    'node.domain': 'services/{serviceName:slug}/src/domain/**',
+    'node.use-case': 'services/{serviceName:slug}/src/application/**',
+    'node.port': 'services/{serviceName:slug}/src/domain/ports/**',
+    'node.repository': 'services/{serviceName:slug}/src/adapters/db/**',
+    'node.route-handler': 'services/{serviceName:slug}/src/adapters/http/**',
   },
   learnId: 'pattern.hexagonal',
   build(p, b) {
@@ -306,7 +324,15 @@ const hexagonal: Template = {
       parent: 'db',
       ...IN,
     });
-    b.el('table', 'pg.table', tableName(agg), { parent: 'schema', ...IN });
+    b.el('table', 'pg.table', tableName(agg), {
+      parent: 'schema',
+      ...IN,
+      properties: entityTable([
+        { name: 'status', type: 'text', nullable: false },
+        { name: 'total_cents', type: 'bigint', nullable: false },
+        { name: 'version', type: 'integer', nullable: false },
+      ]),
+    });
     b.rel('client', 'calls', 'svc', { protocol: 'http' });
     b.rel('http', 'calls', 'uc');
     b.rel('uc', 'depends-on', 'domain');
@@ -656,7 +682,7 @@ const backgroundJobs: Template = {
   invariants: [
     'Jobs MUST be enqueued in the same transaction as the data they belong to.',
     'Job handlers MUST be idempotent: a job can run more than once.',
-    'Failed jobs go to a dead-letter queue after the last retry.',
+    'Jobs that keep failing MUST move to a dead-letter queue after the last retry.',
   ],
   learnId: 'pattern.background-jobs',
   build(p, b) {

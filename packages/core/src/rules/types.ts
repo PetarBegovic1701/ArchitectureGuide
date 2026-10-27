@@ -48,6 +48,10 @@ export interface Rule {
   /** Markdown: why this is a problem and what to do instead. */
   rationale: string;
   learnId?: string;
+  /** The rule as a MUST / MUST NOT sentence for agent exports (§18.1). */
+  invariant?: string | ((settings: ProjectSettings) => string);
+  /** Concept selectors the rule is about; the invariant is exported only when one matches. */
+  appliesTo?: string[];
   check(ctx: RuleContext): RawFinding[];
 }
 

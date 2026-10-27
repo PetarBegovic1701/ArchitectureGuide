@@ -87,17 +87,23 @@ With the React + Node.js + PostgreSQL profile, [RNP-001](#rnp-001) runs instead.
 
 Code in the browser can be read and changed by anyone. If it talks to a database directly, the credentials are public and nothing checks what the user may do. Put a backend in between.
 
+**As a rule for agents:** Browser code MUST NOT read or write a database directly.
+
 ### AP-003
 
 **Cyclic dependency** · warning · packs: Core
 
 Parts that depend on each other in a circle cannot be changed, tested or deployed one at a time. Break the cycle: move the shared part into its own module, depend on an interface, or send an event instead of a call.
 
+**As a rule for agents:** Modules MUST NOT depend on each other in a cycle.
+
 ### AP-004
 
 **Domain depends on infrastructure** · warning · packs: Hexagonal
 
 The domain holds the business rules. If it imports database, HTTP or framework code, every infrastructure change touches the rules, and the rules cannot be tested alone. Let the domain depend on a port (an interface) and let an adapter implement it.
+
+**As a rule for agents:** Domain code MUST NOT depend on infrastructure, presentation or data code.
 
 With the React + Node.js + PostgreSQL profile, [RNP-006](#rnp-006) runs instead. Learn: `topic.models`.
 
@@ -107,17 +113,23 @@ With the React + Node.js + PostgreSQL profile, [RNP-006](#rnp-006) runs instead.
 
 In a layered design each layer only talks to the one below it. When presentation code reaches the data layer directly, business rules get duplicated or skipped. Go through the application layer.
 
+**As a rule for agents:** Presentation code MUST NOT reach the data or infrastructure layer without the application layer.
+
 ### AP-006
 
 **Distributed monolith** · warning · packs: Microservices
 
 Services that call each other synchronously in a circle fail together and must be deployed together: you pay for separate services without getting their independence. Make one direction asynchronous (events), or merge them.
 
+**As a rule for agents:** Services MUST NOT call each other synchronously in a cycle.
+
 ### AP-007
 
 **Long synchronous call chain** · warning · packs: Microservices
 
 Every synchronous hop adds latency and another way to fail: the user waits for the slowest service in the chain, and one outage breaks the whole request. Shorten the chain with events, caching or by merging services.
+
+**As a rule for agents:** Synchronous call chains between services MUST stay at most 4 services long.
 
 Learn: `topic.event-loop-and-parallelism`.
 
@@ -133,6 +145,8 @@ An element connected to almost everything, or with a long list of responsibiliti
 
 When the browser calls many backend services directly, it has to know all of them, make many slow requests, and handle every partial failure. Add a backend-for-frontend or an API gateway.
 
+**As a rule for agents:** Frontend apps MUST call at most 2 backend services directly; add a BFF or gateway beyond that.
+
 With the React + Node.js + PostgreSQL profile, [RNP-011](#rnp-011) runs instead.
 
 ### AP-010
@@ -140,6 +154,8 @@ With the React + Node.js + PostgreSQL profile, [RNP-011](#rnp-011) runs instead.
 **Public entry point without authentication** · warning · packs: Security
 
 Anything the browser can reach, anyone on the internet can reach. Show how the entry point checks who is calling: an auth provider, a gateway that checks tokens, or an auth middleware.
+
+**As a rule for agents:** Every entry point that the browser can reach MUST authenticate its callers.
 
 With the React + Node.js + PostgreSQL profile, [RNP-016](#rnp-016) runs instead. Learn: `topic.authentication`.
 
@@ -155,11 +171,15 @@ A queue that nobody reads fills up and its messages are lost to the business; a 
 
 Some messages always fail (bad data, a bug). Without a dead-letter queue they are retried forever or dropped silently. Send them to a dead-letter queue where someone can inspect and replay them.
 
+**As a rule for agents:** Consumers MUST move messages that keep failing to a dead-letter queue.
+
 ### AP-013
 
 **Dual write** · warning · packs: Event-driven
 
 Writing to the database and then publishing a message are two separate actions. If the process crashes between them, the database and the message disagree. Use a transactional outbox: write the message to an outbox table in the same transaction, and publish it from there.
+
+**As a rule for agents:** A data write and the messages about it MUST be committed together (outbox, or enqueue in the same transaction).
 
 With the React + Node.js + PostgreSQL profile, [RNP-007](#rnp-007) runs instead. Learn: `topic.transactions-and-isolation`.
 
@@ -169,11 +189,15 @@ With the React + Node.js + PostgreSQL profile, [RNP-007](#rnp-007) runs instead.
 
 A cache can be emptied at any time. If data is only written to the cache, it is lost on a restart or an eviction. Write to a durable store and use the cache only to speed up reads.
 
+**As a rule for agents:** A cache MUST NOT be the only copy of any data.
+
 ### AP-015
 
 **Sensitive data reachable from outside** · error · packs: Security
 
 Personal or secret data must only be read by your own backend code. A browser app, an actor or an external system that reads it directly bypasses every access check.
+
+**As a rule for agents:** Sensitive data (PII, secrets) MUST NOT be reachable from browser code.
 
 Learn: `topic.authentication`.
 
@@ -189,6 +213,8 @@ An element with no relations tells the reader nothing about how it fits in. Conn
 
 Events decouple the publisher from its consumers. If a consumer then calls the publisher synchronously, the two are coupled again, and the call can arrive while the publisher is still busy with the original request. Publish a reply event instead.
 
+**As a rule for agents:** Consumers MUST NOT call the publisher of a message back synchronously.
+
 ### AP-018
 
 **Call without label or protocol** · info · packs: Core
@@ -203,6 +229,8 @@ A call between two services says more when it names the operation ("POST /orders
 
 When two services write the same tables, a migration in one can break the other, and neither can be deployed alone. Separate databases, or separate schemas on one Postgres server, are fine. Give each schema one owning service; other services get the data through its API or its events. Background workers of the same service do not count as other writers.
 
+**As a rule for agents:** Each PostgreSQL schema MUST have one writing service; other services use its API or events.
+
 Replaces [AP-001](#ap-001) for this stack. Learn: `pg.table`.
 
 ### RNP-002
@@ -210,6 +238,8 @@ Replaces [AP-001](#ap-001) for this stack. Learn: `pg.table`.
 **Several migration owners** · error · packs: React + Node.js + PostgreSQL (always on)
 
 Migrations change the shape of tables. When two codebases run migrations on the same schema, they overwrite each other's changes and the order of deploys decides what the database looks like. Pick one owner per schema; others read through a view or an API.
+
+**As a rule for agents:** Each schema MUST have exactly one migration owner.
 
 Learn: `pg.table`.
 
@@ -219,6 +249,8 @@ Learn: `pg.table`.
 
 A route handler should turn HTTP into a call and back. When it also runs queries, business rules end up in controllers, are copied between endpoints, and cannot be tested without HTTP. Put a use case and a repository between the handler and Postgres.
 
+**As a rule for agents:** Route handlers MUST NOT query PostgreSQL directly; they call a use case, which uses a repository.
+
 Learn: `topic.models`.
 
 ### RNP-006
@@ -227,6 +259,8 @@ Learn: `topic.models`.
 
 The domain holds the business rules. If it imports the ORM, a repository class or HTTP code, every infrastructure change touches the rules, and the rules cannot be tested alone. Let the domain depend on a port (an interface) that a repository implements.
 
+**As a rule for agents:** Domain code MUST NOT import the ORM, repositories or HTTP code; it depends on ports.
+
 Replaces [AP-004](#ap-004) for this stack. Learn: `topic.models`.
 
 ### RNP-007
@@ -234,6 +268,8 @@ Replaces [AP-004](#ap-004) for this stack. Learn: `topic.models`.
 **Dual write** · warning · packs: Event-driven
 
 Writing to Postgres and then publishing a message are two separate actions. If the process crashes between them, the data and the message disagree. With a Postgres job queue (pg-boss, graphile-worker) add the job in the same transaction as the data. With another broker, write the message to an outbox table in the transaction and publish it from there. NOTIFY is sent on commit, so it is not a dual write.
+
+**As a rule for agents:** Jobs MUST be enqueued in the same transaction as their data; messages to other brokers go through an outbox.
 
 Replaces [AP-013](#ap-013) for this stack. Learn: `topic.transactions-and-isolation`.
 
@@ -251,6 +287,8 @@ Learn: `topic.event-loop-and-parallelism`.
 
 Every instance of a service opens its own pool of Postgres connections. With many instances, or serverless functions that start and stop all the time, Postgres runs out of connections. Put a pooler (PgBouncer in transaction mode, or a managed pooler) between the service and the database.
 
+**As a rule for agents:** Horizontally scaled or serverless services MUST connect to PostgreSQL through a connection pooler.
+
 Learn: `topic.event-loop-and-parallelism`.
 
 ### RNP-010
@@ -258,6 +296,8 @@ Learn: `topic.event-loop-and-parallelism`.
 **NOTIFY used for durable work** · info · packs: Event-driven
 
 LISTEN/NOTIFY only reaches listeners that are connected at that moment. If the worker is restarting, the notification is lost and the work is never done. Use NOTIFY to wake things up, and a job queue (pg-boss, graphile-worker) for work that must happen.
+
+**As a rule for agents:** Work that must happen MUST go through a job queue, not LISTEN/NOTIFY.
 
 Learn: `pg.function`.
 
@@ -267,6 +307,8 @@ Learn: `pg.function`.
 
 When the React app calls many Node services directly, it has to know all of them, make many requests per page, and handle each partial failure. Add a Node backend-for-frontend that combines the calls for the app.
 
+**As a rule for agents:** The React app MUST call at most 2 Node services directly; use a BFF beyond that.
+
 Replaces [AP-009](#ap-009) for this stack.
 
 ### RNP-013
@@ -275,17 +317,23 @@ Replaces [AP-009](#ap-009) for this stack.
 
 In Feature-Sliced Design a layer only imports layers below it: app → pages → widgets → features → entities → shared. An import upwards creates hidden cycles. Move the shared code down, or pass it in through props or slots.
 
+**As a rule for agents:** Feature-Sliced code MUST only import from layers below its own.
+
 ### RNP-014
 
 **Feature imports another feature** · warning · packs: Feature-Sliced Design
 
 Features that import each other cannot be changed or removed alone. Move the shared part down to an entity or to shared code, or compose the features in a page or widget.
 
+**As a rule for agents:** Features MUST NOT import other features.
+
 ### RNP-015
 
 **No validation at the boundary** · info · packs: API design
 
 Data from the network can be anything. TypeScript types disappear at run time, so a handler that trusts its input crashes, or writes bad data. Validate every request with a schema (zod, TypeBox, class-validator); share the schema with the frontend through a contract.
+
+**As a rule for agents:** Route handlers MUST validate every request with a schema (zod or similar).
 
 Learn: `node.endpoint`.
 
@@ -295,6 +343,8 @@ Learn: `node.endpoint`.
 
 Anything the browser can reach, anyone on the internet can reach. Show how the service checks who is calling: an auth middleware, a gateway that checks tokens, or a link to an auth provider. If an endpoint is public on purpose, mark it with `auth: none` and suppress the finding with a reason.
 
+**As a rule for agents:** Services reachable from the browser MUST authenticate callers (auth middleware, gateway or auth provider).
+
 Replaces [AP-010](#ap-010) for this stack. Learn: `topic.authentication`.
 
 ### RNP-019
@@ -302,6 +352,8 @@ Replaces [AP-010](#ap-010) for this stack. Learn: `topic.authentication`.
 **Lost-update risk** · warning · packs: Concurrency and parallelism
 
 Two requests read the same row, both change it, and the second write silently replaces the first: one sale of the last item is lost, or a balance is wrong. When several writers can change the same rows, lock the row (`SELECT … FOR UPDATE`), or check a version column in the `UPDATE`.
+
+**As a rule for agents:** Writes to rows that several writers change MUST use a row lock or an optimistic version check.
 
 Learn: `topic.concurrency-control`.
 
@@ -311,6 +363,8 @@ Learn: `topic.concurrency-control`.
 
 Each instance of each service keeps its own pool of connections. Add them up: when the total gets close to `max_connections`, new connections fail under load, and deploys (old and new instances at once) fail first. Use smaller pools, or put PgBouncer in transaction mode in front of the database.
 
+**As a rule for agents:** The connection pools of all services together MUST stay below 80% of max_connections, or go through a pooler.
+
 Learn: `topic.event-loop-and-parallelism`.
 
 ### RNP-021
@@ -318,6 +372,8 @@ Learn: `topic.event-loop-and-parallelism`.
 **CPU-heavy work on the event loop** · info · packs: Concurrency and parallelism
 
 Node runs your JavaScript on one thread. While it resizes an image or builds a PDF, no other request of that process is answered. More processes (cluster) do not help the requests stuck behind it. Move the work to `worker_threads`, or to a background worker.
+
+**As a rule for agents:** CPU-heavy work MUST NOT run on the event loop of a request-serving process; use worker threads or a worker.
 
 Learn: `topic.event-loop-and-parallelism`.
 
@@ -327,6 +383,8 @@ Learn: `topic.event-loop-and-parallelism`.
 
 Postgres keeps serializable transactions correct by aborting one of two that conflict, with SQLSTATE 40001. That is expected, not a bug: the application must run the whole transaction again. Without a retry loop, users see random errors under load.
 
+**As a rule for agents:** Serializable transactions MUST be retried on SQLSTATE 40001.
+
 Learn: `topic.transactions-and-isolation`.
 
 ### RNP-023
@@ -334,6 +392,8 @@ Learn: `topic.transactions-and-isolation`.
 **Retried call is not idempotent** · warning · packs: API design, Concurrency and parallelism
 
 A timeout does not tell you whether the server did the work. When the client retries a POST, the order may be created twice, or the card charged twice. Send an `Idempotency-Key` header and store it with a unique constraint, so a repeated request returns the first result.
+
+**As a rule for agents:** Retried POST and PATCH calls MUST send an Idempotency-Key that the server stores with a unique constraint.
 
 Learn: `node.endpoint`.
 
@@ -343,6 +403,8 @@ Learn: `node.endpoint`.
 
 An endpoint that changes data and does not check who is calling lets anyone change that data. Require authentication. If it must be public (a sign-up or a webhook), suppress the finding and write down how it is protected (rate limit, signature, CAPTCHA).
 
+**As a rule for agents:** Endpoints that change data MUST require authentication, unless a suppression documents why not.
+
 Learn: `topic.authentication`.
 
 ### RNP-025
@@ -351,6 +413,8 @@ Learn: `topic.authentication`.
 
 A list that returns every row is fast with test data and slow, or out of memory, in production. Return pages: cursor pagination (`?after=<id>&limit=50`) stays fast on large tables; offset pagination is simpler but slows down on deep pages.
 
+**As a rule for agents:** Endpoints that return lists MUST paginate.
+
 Learn: `node.endpoint`.
 
 ### RNP-026
@@ -358,6 +422,8 @@ Learn: `node.endpoint`.
 **Tokens in web storage** · warning · packs: Security
 
 Any script on the page can read `localStorage` and `sessionStorage`, so one XSS bug, or one bad npm package, leaks every token. Keep tokens in an HttpOnly, Secure, SameSite cookie, or let a backend-for-frontend hold them.
+
+**As a rule for agents:** Auth tokens MUST NOT be stored in localStorage or sessionStorage.
 
 Learn: `topic.authentication`.
 
@@ -374,5 +440,7 @@ Learn: `pg.function`.
 **Module writes another module's schema** · warning · packs: Modular monolith
 
 In a modular monolith each module owns its tables. When one module writes another module's schema, the two can no longer change, test or move into a service on their own. Call the owning module's public service instead. The owner is the schema's `ownedBy` property (module name or ID).
+
+**As a rule for agents:** A module MUST only write its own schema; it uses other modules through their public services.
 
 Learn: `pattern.modular-monolith`.

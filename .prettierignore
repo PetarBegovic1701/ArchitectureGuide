@@ -4,3 +4,4 @@ Implementation.md
 packages/profiles/react-node-postgres/src/content.generated.ts
 packages/profiles/*/content/lessons/*.yaml
 docs/RULES.md
+packages/profiles/*/golden/

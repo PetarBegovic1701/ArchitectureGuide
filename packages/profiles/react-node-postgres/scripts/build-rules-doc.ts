@@ -3,7 +3,13 @@
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { DEFAULT_RULE_PACKS, RULE_PACKS, allRules, createCatalog } from '@archguide/core';
+import {
+  DEFAULT_RULE_PACKS,
+  RULE_PACKS,
+  allRules,
+  createCatalog,
+  createProject,
+} from '@archguide/core';
 import type { Rule } from '@archguide/core';
 import { PROFILE_ID, profile } from '../src';
 
@@ -30,6 +36,11 @@ function section(rule: Rule): string {
     '',
     rule.rationale,
   ];
+  if (rule.invariant) {
+    const settings = createProject({ id: 'x', name: 'x', profile: PROFILE_ID }).settings;
+    const text = typeof rule.invariant === 'string' ? rule.invariant : rule.invariant(settings);
+    lines.push('', `**As a rule for agents:** ${text}`);
+  }
   const notes: string[] = [];
   if (rule.replaces?.length)
     notes.push(`Replaces ${rule.replaces.map(ruleLink).join(', ')} for this stack.`);

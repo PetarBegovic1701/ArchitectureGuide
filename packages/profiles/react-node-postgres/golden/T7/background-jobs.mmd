@@ -1,0 +1,21 @@
+flowchart LR
+  actor__customer(["Customer<br/><small>User / actor</small>"])
+  subgraph db__shop_db["Shop DB"]
+    jobs__jobs>"jobs<br/><small>Postgres job queue</small>"]
+    schema__public[("public<br/><small>Schema</small>")]
+  end
+  ext__e_mail_provider("E-mail provider<br/><small>External system</small>")
+  subgraph svc__shop_api["Shop API"]
+    ctl__order_routes("Order routes<br/><small>Controller / route handler</small>")
+    mw__auth_middleware("Auth middleware<br/><small>Middleware</small>")
+    uc__place_order("Place order<br/><small>Use case / application service</small>")
+  end
+  wrk__worker["Worker<br/><small>Background worker</small>"]
+  actor__customer -->|"calls"| svc__shop_api
+  ctl__order_routes -->|"calls"| uc__place_order
+  svc__shop_api -->|"migrates"| schema__public
+  uc__place_order -.->|"enqueues"| jobs__jobs
+  uc__place_order ==>|"writes"| schema__public
+  wrk__worker -->|"calls"| ext__e_mail_provider
+  wrk__worker -.->|"processes"| jobs__jobs
+  wrk__worker -->|"reads"| schema__public

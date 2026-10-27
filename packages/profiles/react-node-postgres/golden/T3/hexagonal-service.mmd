@@ -1,0 +1,23 @@
+flowchart LR
+  actor__api_client(["API client<br/><small>User / actor</small>"])
+  subgraph db__database["Database"]
+    subgraph schema__orders["orders"]
+      tbl__orders["orders<br/><small>Table</small>"]
+    end
+  end
+  subgraph svc__orders["Orders"]
+    ctl__order_http_adapter("Order HTTP adapter<br/><small>Controller / route handler</small>")
+    dom__order{{"Order<br/><small>Domain model / aggregate</small>"}}
+    mw__auth_middleware("Auth middleware<br/><small>Middleware</small>")
+    port__order_repository_port(("Order repository port<br/><small>Port (interface)</small>"))
+    repo__order_repository_prisma[["Order repository (prisma)<br/><small>Repository / data access</small>"]]
+    uc__place_order("Place order<br/><small>Use case / application service</small>")
+  end
+  actor__api_client -->|"calls"| svc__orders
+  ctl__order_http_adapter -->|"calls"| uc__place_order
+  repo__order_repository_prisma -->|"implements"| port__order_repository_port
+  repo__order_repository_prisma -->|"reads"| tbl__orders
+  repo__order_repository_prisma ==>|"writes"| tbl__orders
+  svc__orders -->|"migrates"| schema__orders
+  uc__place_order -->|"depends on"| dom__order
+  uc__place_order -->|"uses port"| port__order_repository_port

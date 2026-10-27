@@ -1,0 +1,47 @@
+archguide: 1
+project: modular-monolith
+profile: react-node-postgres
+patterns:
+  - modular-monolith
+revision: 0
+elements:
+  - { id: actor.api-client, kind: gen.actor, name: API client }
+  - { id: mod.billing, kind: node.module, name: Billing, parent: svc.shop, layer: application, code: [ src/modules/** ] }
+  - { id: mod.catalog, kind: node.module, name: Catalog, parent: svc.shop, layer: application, code: [ src/modules/** ] }
+  - { id: mod.orders, kind: node.module, name: Orders, parent: svc.shop, layer: application, code: [ src/modules/** ] }
+  - { id: mw.auth-middleware, kind: node.middleware, name: Auth middleware, parent: svc.shop, layer: application, does: [ Read the session cookie, Reject calls without a valid session ] }
+  - { id: svc.shop, kind: node.service, name: Shop, layer: application }
+  - { id: db.shop-db, kind: pg.database, name: Shop DB, layer: data }
+  - { id: schema.billing, kind: pg.schema, name: billing, parent: db.shop-db, layer: data, ownedBy: svc.shop }
+  - { id: schema.catalog, kind: pg.schema, name: catalog, parent: db.shop-db, layer: data, ownedBy: svc.shop }
+  - { id: schema.orders, kind: pg.schema, name: orders, parent: db.shop-db, layer: data, ownedBy: svc.shop }
+relations:
+  - [ actor.api-client, calls, svc.shop, { protocol: http } ]
+  - [ mod.billing, depends-on, mod.orders, { label: public API } ]
+  - [ mod.billing, writes, schema.billing, { via: prisma } ]
+  - [ mod.catalog, writes, schema.catalog, { via: prisma } ]
+  - [ mod.orders, depends-on, mod.catalog, { label: public API } ]
+  - [ mod.orders, writes, schema.orders, { via: prisma } ]
+  - [ svc.shop, migrates, schema.billing ]
+  - [ svc.shop, migrates, schema.catalog ]
+  - [ svc.shop, migrates, schema.orders ]
+invariants:
+  - Each of Orders, Catalog, Billing MUST only write its own schema. (T4)
+  - A module MUST use another module only through its exported service, never its repositories or tables. (T4)
+  - Only `svc.shop` MAY write `schema.billing`. Only `svc.shop` MAY run migrations on it. (ownership)
+  - Only `svc.shop` MAY write `schema.catalog`. Only `svc.shop` MAY run migrations on it. (ownership)
+  - Only `svc.shop` MAY write `schema.orders`. Only `svc.shop` MAY run migrations on it. (ownership)
+  - Modules MUST NOT depend on each other in a cycle. (AP-003)
+  - Services MUST NOT call each other synchronously in a cycle. (AP-006)
+  - Synchronous call chains between services MUST stay at most 4 services long. (AP-007)
+  - Sensitive data (PII, secrets) MUST NOT be reachable from browser code. (AP-015)
+  - Each PostgreSQL schema MUST have one writing service; other services use its API or events. (RNP-001)
+  - Each schema MUST have exactly one migration owner. (RNP-002)
+  - Horizontally scaled or serverless services MUST connect to PostgreSQL through a connection pooler. (RNP-009)
+  - Services reachable from the browser MUST authenticate callers (auth middleware, gateway or auth provider). (RNP-016)
+  - Writes to rows that several writers change MUST use a row lock or an optimistic version check. (RNP-019)
+  - The connection pools of all services together MUST stay below 80% of max_connections, or go through a pooler. (RNP-020)
+  - CPU-heavy work MUST NOT run on the event loop of a request-serving process; use worker threads or a worker. (RNP-021)
+  - Serializable transactions MUST be retried on SQLSTATE 40001. (RNP-022)
+  - A module MUST only write its own schema; it uses other modules through their public services. (RNP-028)
+known_issues: []
