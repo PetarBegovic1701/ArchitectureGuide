@@ -1,13 +1,23 @@
 import { useEffect, useState } from 'react';
 import { ReactFlowProvider } from '@xyflow/react';
-import { ArrowLeft, Command, Download, Moon, Redo2, Sun, Undo2 } from 'lucide-react';
+import {
+  ArrowLeft,
+  Command,
+  Download,
+  LayoutTemplate,
+  Moon,
+  Redo2,
+  Sun,
+  Undo2,
+} from 'lucide-react';
 import type { Level } from '@archguide/core';
 import { Canvas } from '../canvas/Canvas';
 import { Inspector } from '../panels/Inspector';
 import { CommandPalette, Legend, RelationPicker } from '../panels/Overlays';
 import { Palette } from '../panels/Palette';
 import { ProblemsButton, ProblemsPanel, SuppressDialog } from '../panels/Problems';
-import { dispatch, exportJson, redo, undo } from '../actions';
+import { SaveTemplateDialog, TemplatePicker } from '../panels/Templates';
+import { dispatch, exportJson, redo, stampTemplate, undo } from '../actions';
 import { useAutosave, useShortcuts } from '../hooks';
 import type { SaveStatus } from '../hooks';
 import { loadProject } from '../persistence/db';
@@ -71,8 +81,27 @@ function EditorLoaded() {
       <RelationPicker />
       <CommandPalette />
       <SuppressDialog />
+      <EditorDialogs />
     </ReactFlowProvider>
   );
+}
+
+function EditorDialogs() {
+  const dialog = useUi((s) => s.dialog);
+  const close = () => useUi.getState().set({ dialog: null });
+  if (dialog === 'templates')
+    return (
+      <TemplatePicker
+        mode="stamp"
+        onClose={close}
+        onUse={(template, params) => {
+          close();
+          stampTemplate(template, params);
+        }}
+      />
+    );
+  if (dialog === 'save-template') return <SaveTemplateDialog onClose={close} />;
+  return null;
 }
 
 const STATUS_TEXT: Record<SaveStatus, string> = {
@@ -132,6 +161,14 @@ function TopBar({ status }: { status: SaveStatus }) {
           <Redo2 size={16} />
         </button>
       </div>
+      <button
+        type="button"
+        className="ml-2 flex items-center gap-1 rounded px-2 py-1 text-xs hover:bg-[var(--ag-panel-2)]"
+        onClick={() => useUi.getState().set({ dialog: 'templates' })}
+        title="Insert a template"
+      >
+        <LayoutTemplate size={14} aria-hidden /> Templates
+      </button>
       <div className="ml-auto flex items-center gap-2">
         <ProblemsButton />
         <div

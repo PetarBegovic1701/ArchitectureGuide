@@ -6,7 +6,7 @@ import type { Template, TemplateBuilder } from '@archguide/core';
 // Default shape sizes (core SHAPES) used to lay templates out on a grid.
 const M = 140; // rounded: modules, handlers, use cases
 const MH = 64;
-const GAP = 24;
+const GAP = 48;
 /** Top-left of the first child inside a container (below its header). */
 const IN = { x: 16, y: 40 };
 
@@ -77,12 +77,12 @@ const starter: Template = {
     });
     b.el('home', 'react.route', 'Home', { parent: 'app', ...IN, properties: { path: '/' } });
     b.el('api', 'node.service', str(p.apiName), {
-      x: 400,
+      x: 440,
       y: 0,
       properties: { framework: 'express', transport: ['rest'], dataAccess: 'prisma' },
     });
     authMiddleware(b, 'auth', 'api', IN.x, IN.y);
-    b.el('db', 'pg.database', str(p.dbName), { x: 680, y: 0 });
+    b.el('db', 'pg.database', str(p.dbName), { x: 780, y: 0 });
     b.el('schema', 'pg.schema', 'public', {
       parent: 'db',
       ...IN,
@@ -267,43 +267,41 @@ const hexagonal: Template = {
   build(p, b) {
     const agg = str(p.aggregate);
     const orm = str(p.orm);
-    b.el('client', 'gen.actor', 'API client', { x: 0, y: 100 });
+    b.el('client', 'gen.actor', 'API client', { x: 0, y: 120 });
     b.el('svc', 'node.service', str(p.serviceName), {
       x: 120,
       y: 0,
       properties: { framework: 'fastify', transport: ['rest'], dataAccess: orm },
     });
     authMiddleware(b, 'auth', 'svc', IN.x, IN.y);
+    // Driving side on the left, the core in the middle, the driven side on the right.
     const row = IN.y + MH + GAP;
+    const col = (i: number) => IN.x + i * (M + GAP);
     b.el('http', 'node.route-handler', `${agg} HTTP adapter`, {
       parent: 'svc',
-      x: IN.x,
+      x: col(0),
       y: row,
       properties: { validation: 'zod' },
     });
-    b.el('uc', 'node.use-case', `Place ${agg.toLowerCase()}`, {
-      parent: 'svc',
-      x: IN.x + M + GAP,
-      y: row,
-    });
-    b.el('domain', 'node.domain', agg, {
-      parent: 'svc',
-      x: IN.x + 2 * (M + GAP) + 10,
-      y: row + MH + GAP,
-      responsibilities: [`Keep ${agg.toLowerCase()} totals and states valid`],
-    });
+    b.el('uc', 'node.use-case', `Place ${agg.toLowerCase()}`, { parent: 'svc', x: col(1), y: row });
     b.el('port', 'node.port', `${agg} repository port`, {
       parent: 'svc',
-      x: IN.x + M + GAP + 42,
-      y: row + 2 * (MH + GAP) + 40,
+      x: col(2) + (M - 56) / 2,
+      y: row + 4,
     });
     b.el('repo', 'node.repository', `${agg} repository (${orm})`, {
       parent: 'svc',
-      x: IN.x,
-      y: row + 2 * (MH + GAP) + 36,
+      x: col(3),
+      y: row,
       properties: { dataAccess: orm },
     });
-    b.el('db', 'pg.database', 'Database', { x: 720, y: 0 });
+    b.el('domain', 'node.domain', agg, {
+      parent: 'svc',
+      x: col(1) + 10,
+      y: row + MH + GAP,
+      responsibilities: [`Keep ${agg.toLowerCase()} totals and states valid`],
+    });
+    b.el('db', 'pg.database', 'Database', { x: 120 + col(4) + 120, y: 0 });
     b.el('schema', 'pg.schema', slugify(str(p.serviceName)).replace(/-/g, '_'), {
       parent: 'db',
       ...IN,
@@ -381,29 +379,37 @@ const modularMonolith: Template = {
       properties: { framework: 'nestjs', transport: ['rest'], dataAccess: 'prisma' },
     });
     authMiddleware(b, 'auth', 'app', IN.x, IN.y);
-    const appWidth = IN.x + modules.length * (M + GAP) + 16;
-    b.el('db', 'pg.database', `${str(p.appName)} DB`, { x: 120 + appWidth + 80, y: 0 });
+    // The first module on the left; the modules it works with in a column on the right.
+    const right = IN.x + M + 2 * GAP;
+    const rowY = (i: number) => IN.y + i * (MH + GAP);
+    const modulePos = (i: number) =>
+      i === 0 ? { x: IN.x, y: rowY(1) } : { x: right, y: rowY(i - 1) };
+    const appWidth = (modules.length > 1 ? right + M : IN.x + M) + 16;
+    b.el('db', 'pg.database', `${str(p.appName)} DB`, { x: 120 + appWidth + 140, y: 0 });
+    // Schemas in the same order as the modules on the right, the first module's last.
+    const schemaRow = (i: number) => (i === 0 ? modules.length - 1 : i - 1);
     modules.forEach((name, i) => {
       const slug = slugify(name);
       const mod = b.el(`mod${i}`, 'node.module', name, {
         parent: 'app',
-        x: IN.x + i * (M + GAP),
-        y: IN.y + MH + GAP,
+        ...modulePos(i),
         properties: { exports: [`${name.replace(/\W/g, '')}Service`] },
       });
       b.el(`schema${i}`, 'pg.schema', slug.replace(/-/g, '_'), {
         parent: 'db',
         x: IN.x,
-        y: IN.y + i * (90 + 32),
+        y: IN.y + schemaRow(i) * (90 + 24),
         // Records the owning module; RNP-028 checks it.
         properties: { ownedBy: name },
       });
-      b.rel(mod, 'reads', `schema${i}`, { via: 'prisma' });
       b.rel(mod, 'writes', `schema${i}`, { via: 'prisma' });
       b.rel('app', 'migrates', `schema${i}`);
     });
-    for (let i = 1; i < modules.length; i++)
-      b.rel('mod0', 'depends-on', `mod${i}`, { label: 'public API' });
+    // The first module uses the second; the others use the first (for example Billing reads
+    // order totals through the Orders module).
+    if (modules.length > 1) b.rel('mod0', 'depends-on', 'mod1', { label: 'public API' });
+    for (let i = 2; i < modules.length; i++)
+      b.rel(`mod${i}`, 'depends-on', 'mod0', { label: 'public API' });
     b.rel('client', 'calls', 'app', { protocol: 'http' });
     b.step({
       title: 'One deployable, many modules',
@@ -557,26 +563,23 @@ const dbPerService: Template = {
   learnId: 'pattern.database-per-service',
   build(p, b) {
     const services = list(p.services);
-    b.el('client', 'gen.actor', 'Client', { x: 0, y: 70 });
+    const rowY = (i: number) => IN.y + i * 150;
+    b.el('client', 'gen.actor', 'Client', { x: 0, y: rowY(0) + 10 });
     b.el('gw', 'gen.gateway', 'API gateway', {
       x: 120,
-      y: 60,
+      y: rowY(0),
       properties: { product: str(p.gateway) },
       tech: str(p.gateway),
     });
-    b.el('idp', 'gen.auth-provider', 'Identity provider', { x: 125, y: 240 });
-    b.el('cluster', 'pg.cluster', 'PostgreSQL server', { x: 560, y: 0 });
+    b.el('idp', 'gen.auth-provider', 'Identity provider', { x: 125, y: rowY(1) + 40 });
+    b.el('cluster', 'pg.cluster', 'PostgreSQL server', { x: 600, y: 0 });
     services.forEach((name, i) => {
       b.el(`svc${i}`, 'node.service', `${name} service`, {
-        x: 300,
-        y: i * (80 + 40),
+        x: 320,
+        y: rowY(i) + 5,
         properties: { framework: 'fastify', dataAccess: 'prisma' },
       });
-      b.el(`db${i}`, 'pg.database', `${name} DB`, {
-        parent: 'cluster',
-        x: IN.x,
-        y: IN.y + i * (90 + 40),
-      });
+      b.el(`db${i}`, 'pg.database', `${name} DB`, { parent: 'cluster', x: IN.x, y: rowY(i) });
       b.rel('gw', 'calls', `svc${i}`, { protocol: 'http' });
       b.rel(`svc${i}`, 'reads', `db${i}`, { via: 'prisma' });
       b.rel(`svc${i}`, 'writes', `db${i}`, { via: 'prisma' });
@@ -585,8 +588,7 @@ const dbPerService: Template = {
     if (services.length > 1) {
       b.el('jobs', 'pg.job-queue', `${services[0]} jobs`, {
         parent: 'db0',
-        x: IN.x,
-        y: IN.y + 70,
+        ...IN,
         properties: { lib: 'pg-boss', deadLetter: true },
       });
       b.rel('svc0', 'enqueues', 'jobs', { inTransaction: true });
@@ -758,7 +760,7 @@ const featureSliced: Template = {
     const features = list(p.features);
     const slices: Record<(typeof FSD_LAYERS)[number], string[]> = {
       pages: ['Home page'],
-      widgets: ['Header'],
+      widgets: ['Storefront'],
       features,
       entities: ['User', 'Product'],
       shared: ['UI kit'],
@@ -774,7 +776,7 @@ const featureSliced: Template = {
       b.el(`layer-${layer}`, 'group.layer', layer, {
         parent: 'app',
         x: IN.x,
-        y: IN.y + i * (MH + 40 + 16 + 16),
+        y: IN.y + i * (160 + 24),
       });
       slices[layer].forEach((name, j) => {
         b.el(`${layer}${j}`, 'react.feature', name, {
@@ -785,29 +787,29 @@ const featureSliced: Template = {
         });
       });
     });
-    const side = IN.x + layerWidth + 40;
+    // Entities load data through the shared API client and keep it in the server-state cache.
+    const side = IN.x + layerWidth + 60;
     b.el('api', 'react.api-client', 'API client', {
       parent: 'app',
       x: side,
-      y: IN.y + 2 * (MH + 72) + 20,
+      y: IN.y + 3 * (160 + 24) + IN.y,
       properties: { kind: 'fetch' },
     });
     b.el('cache', 'react.server-state', 'Server-state cache', {
       parent: 'app',
       x: side + 15,
-      y: IN.y + 3 * (MH + 72) + 20,
+      y: IN.y + 4 * (160 + 24) + IN.y - 4,
       properties: { lib: 'tanstack-query' },
     });
     b.rel('pages0', 'depends-on', 'widgets0');
     features.forEach((_, j) => {
-      b.rel('pages0', 'depends-on', `features${j}`);
+      b.rel('widgets0', 'depends-on', `features${j}`);
       b.rel(`features${j}`, 'depends-on', `entities${j % 2}`);
-      b.rel(`features${j}`, 'fetches-via', 'api');
     });
-    b.rel('widgets0', 'depends-on', 'entities0');
     b.rel('entities0', 'depends-on', 'shared0');
     b.rel('entities1', 'depends-on', 'shared0');
-    b.rel('entities0', 'uses-state', 'cache');
+    b.rel('entities1', 'fetches-via', 'api');
+    b.rel('entities0', 'fetches-via', 'api');
     b.rel('entities1', 'uses-state', 'cache');
     b.step({
       title: 'Layers',
@@ -816,9 +818,9 @@ const featureSliced: Template = {
     });
     b.step({
       title: 'Features stay apart',
-      body: '{features} never import each other. A page composes them; what they share moves down to an entity.',
+      body: '{features} never import each other. A widget or a page composes them; what they share moves down to an entity.',
       elements: ['layer-features'],
-      relations: ['pages0>depends-on>features0'],
+      relations: ['widgets0>depends-on>features0'],
       conceptIds: ['react.server-state'],
     });
   },

@@ -150,6 +150,12 @@ export function CommandPalette() {
         run: () => ui.setTheme(t),
       })),
       ...(project ? [{ id: 'export', label: 'Export JSON', run: () => exportJson(project) }] : []),
+      { id: 'templates', label: 'Insert template…', run: () => ui.set({ dialog: 'templates' }) },
+      {
+        id: 'save-template',
+        label: 'Save selection as template…',
+        run: () => ui.set({ dialog: 'save-template' }),
+      },
       ...[...catalog.concepts.values()].map((c) => ({
         id: `add-${c.id}`,
         label: `Add ${c.name}`,

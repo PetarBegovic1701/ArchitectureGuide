@@ -1,15 +1,27 @@
 import {
+  RULE_PACKS,
   checkNesting,
   explainPair,
   makeElementId,
   parseProject,
   serializeProject,
+  serializeTemplateFile,
   validRelationTypes,
 } from '@archguide/core';
-import type { Finding, Id, Op, OpError, Project, QuickFix } from '@archguide/core';
+import type {
+  Finding,
+  Id,
+  Op,
+  OpError,
+  Project,
+  QuickFix,
+  Template,
+  TemplateFile,
+} from '@archguide/core';
 import { catalog, conceptOf, defaultSize } from './lib/catalog';
 import { copySelection, pasteOps } from './lib/clipboard';
 import { findingKey, findingsOf, focusIds, quickFixOps } from './lib/findings';
+import { stampOps, stampOrigin } from './lib/templates';
 import {
   absolutePosition,
   activeView,
@@ -309,6 +321,40 @@ export function setRulePack(pack: string, on: boolean): void {
   dispatch([{ op: 'updateSettings', patch: { rulePacks: [...packs] } }], {
     label: on ? `Turn on ${pack} rules` : `Turn off ${pack} rules`,
   });
+}
+
+// --- templates ---------------------------------------------------------------------
+
+/** Adds a template to the open canvas as one undo step, right of the existing diagram. */
+export function stampTemplate(template: Template, params: Record<string, unknown>): void {
+  const { project: p, viewId } = project();
+  if (!p) return;
+  const view = activeView(p, viewId);
+  const origin = stampOrigin(p, view, canvasApi.center?.() ?? { x: 80, y: 80 });
+  let result: { ops: Op[]; rootIds: Id[] };
+  try {
+    result = stampOps(p, view, template, params, origin);
+  } catch (error) {
+    ui().toast({ tone: 'error', message: (error as Error).message });
+    return;
+  }
+  const newPacks = template.rulePacks.filter((id) => !p.settings.rulePacks.includes(id));
+  if (!dispatch(result.ops, { label: `Insert ${template.name}` })) return;
+  project().select({ elements: result.rootIds, relations: [] });
+  setTimeout(() => canvasApi.focus?.(result.rootIds), 60);
+  const packNames = newPacks
+    .map((id) => RULE_PACKS.find((x) => x.id === id)?.name)
+    .filter(Boolean)
+    .join(', ');
+  ui().toast({
+    tone: 'success',
+    message: `Inserted ${template.name}.${packNames ? ` Rule packs turned on: ${packNames}.` : ''}`,
+    actions: [{ label: 'Undo', run: undo }],
+  });
+}
+
+export function exportTemplateFile(file: TemplateFile): void {
+  download(`${file.id}.archguide-template.json`, serializeTemplateFile(file), 'application/json');
 }
 
 export function undo(): void {

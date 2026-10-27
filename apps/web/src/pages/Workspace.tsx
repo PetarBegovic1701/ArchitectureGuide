@@ -1,7 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { createProject, slugify, uniqueId } from '@archguide/core';
+import type { Template } from '@archguide/core';
 import { DEFAULT_PROFILE } from '../lib/catalog';
 import { sampleProject } from '../lib/sample';
+import { projectFromTemplate } from '../lib/templates';
+import { TemplatePicker } from '../panels/Templates';
 import { readProjectFile } from '../actions';
 import { deleteProject, listProjects, loadProject, saveProject } from '../persistence/db';
 import type { StoredProject } from '../persistence/db';
@@ -14,6 +17,7 @@ export function Workspace() {
   const [name, setName] = useState('');
   const fileInput = useRef<HTMLInputElement>(null);
   const toast = useUi((s) => s.toast);
+  const [picking, setPicking] = useState(false);
 
   const refresh = useCallback(async () => setProjects(await listProjects()), []);
   useEffect(() => void refresh(), [refresh]);
@@ -37,6 +41,23 @@ export function Workspace() {
     const project = sampleProject(freeId('starter'));
     await saveProject(project);
     navigate({ page: 'editor', projectId: project.id });
+  };
+
+  const createFromTemplate = async (
+    template: Template,
+    params: Record<string, unknown>,
+    projectName: string,
+  ) => {
+    try {
+      const project = projectFromTemplate(template, params, {
+        id: freeId(projectName),
+        name: projectName,
+      });
+      await saveProject(project);
+      navigate({ page: 'editor', projectId: project.id });
+    } catch (error) {
+      toast({ tone: 'error', message: (error as Error).message });
+    }
   };
 
   const importFile = async (file: File) => {
@@ -97,12 +118,21 @@ export function Workspace() {
             placeholder="e.g. Shop"
             className="mb-3 w-full rounded border border-[var(--ag-border)] bg-[var(--ag-bg)] px-2 py-1 outline-none focus:border-[var(--ag-accent)]"
           />
-          <button
-            type="submit"
-            className="rounded bg-[var(--ag-accent)] px-3 py-1.5 text-sm font-semibold text-[var(--ag-accent-text)]"
-          >
-            Create
-          </button>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="submit"
+              className="rounded bg-[var(--ag-accent)] px-3 py-1.5 text-sm font-semibold text-[var(--ag-accent-text)]"
+            >
+              Create
+            </button>
+            <button
+              type="button"
+              className="rounded border border-[var(--ag-border)] px-3 py-1.5 text-sm font-semibold"
+              onClick={() => setPicking(true)}
+            >
+              From a template…
+            </button>
+          </div>
         </form>
         <div className="rounded-lg border border-[var(--ag-border)] bg-[var(--ag-panel)] p-4">
           <h2 className="mb-2 font-semibold">New to this?</h2>
@@ -186,6 +216,16 @@ export function Workspace() {
           </ul>
         )}
       </section>
+      {picking && (
+        <TemplatePicker
+          mode="project"
+          onClose={() => setPicking(false)}
+          onUse={(template, params, projectName) => {
+            setPicking(false);
+            void createFromTemplate(template, params, projectName);
+          }}
+        />
+      )}
     </main>
   );
 }

@@ -57,6 +57,8 @@ interface UiState {
   /** The finding the suppress dialog is open for. */
   suppressing: Finding | null;
   showSuppressed: boolean;
+  /** Open dialog in the editor, if any. */
+  dialog: 'templates' | 'save-template' | 'snapshots' | null;
 
   setLevel(level: Level): void;
   setPaletteMode(mode: 'basic' | 'full'): void;
@@ -108,6 +110,7 @@ export const useUi = create<UiState>()(
       activeFinding: null,
       suppressing: null,
       showSuppressed: false,
+      dialog: null,
 
       setLevel: (level) => set(level === 'beginner' ? { level, paletteMode: 'basic' } : { level }),
       setPaletteMode: (paletteMode) => set({ paletteMode }),
