@@ -4,7 +4,10 @@ import type { Layer } from '@archguide/core';
 import { catalog, defaultLayer } from '../lib/catalog';
 import { LAYERS, layerColor } from '../lib/model';
 import {
+  addAnchored,
   addElementFromPalette,
+  addRegion,
+  addSticky,
   alignSelection,
   canvasApi,
   createRelation,
@@ -156,6 +159,15 @@ export function CommandPalette() {
       { id: 'templates', label: 'Insert template…', run: () => ui.set({ dialog: 'templates' }) },
       { id: 'snapshots', label: 'Snapshots…', run: () => ui.set({ dialog: 'snapshots' }) },
       { id: 'tidy', label: 'Tidy up (automatic layout)', run: () => void tidyUp() },
+      { id: 'sticky', label: 'Add sticky note', run: addSticky },
+      { id: 'region', label: 'Add region around the selection', run: addRegion },
+      { id: 'callout', label: 'Add callout to the selection', run: () => addAnchored('callout') },
+      { id: 'comment', label: 'Add comment', run: () => addAnchored('comment') },
+      {
+        id: 'resolved',
+        label: ui.showResolvedComments ? 'Hide resolved comments' : 'Show resolved comments',
+        run: () => ui.set({ showResolvedComments: !ui.showResolvedComments }),
+      },
       ...(['left', 'center', 'right', 'top', 'middle', 'bottom'] as const).map((how) => ({
         id: `align-${how}`,
         label: `Align ${how}`,

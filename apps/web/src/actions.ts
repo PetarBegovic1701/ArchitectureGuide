@@ -9,6 +9,7 @@ import {
   validRelationTypes,
 } from '@archguide/core';
 import type {
+  Annotation,
   Finding,
   Id,
   Op,
@@ -22,6 +23,7 @@ import { catalog, conceptOf, defaultSize } from './lib/catalog';
 import { copySelection, pasteOps } from './lib/clipboard';
 import { findingKey, findingsOf, focusIds, quickFixOps } from './lib/findings';
 import { stampOps, stampOrigin } from './lib/templates';
+import { STICKY_SIZE, anchoredOps, regionOps, stickyOps } from './lib/annotations';
 import { layoutOps, toElkGraph } from './lib/layout';
 import { alignOps, alignProblem, distributeOps } from './lib/align';
 import type { Alignment, Distribution } from './lib/align';
@@ -34,8 +36,10 @@ import {
   deleteOps,
   nodeSize,
   elementById,
+  freeSpot,
   newElementOps,
   newRelationOps,
+  snap,
   takenIds,
 } from './lib/model';
 import type { Point } from './lib/model';
@@ -232,6 +236,11 @@ export function startConnecting(sourceId: Id): void {
 export function deleteSelection(): void {
   const { project: p, selection } = project();
   if (!p) return;
+  const annotation = ui().selectedAnnotation;
+  if (annotation && selection.elements.length + selection.relations.length === 0) {
+    removeAnnotation(annotation);
+    return;
+  }
   const ops = deleteOps(p, selection.elements, selection.relations);
   if (ops.length > 0) dispatch(ops, { label: 'Delete' });
 }
@@ -327,6 +336,115 @@ export function setRulePack(pack: string, on: boolean): void {
   dispatch([{ op: 'updateSettings', patch: { rulePacks: [...packs] } }], {
     label: on ? `Turn on ${pack} rules` : `Turn off ${pack} rules`,
   });
+}
+
+// --- annotations -------------------------------------------------------------------
+
+const now = () => new Date().toISOString();
+
+function annotationOf(
+  id: Id,
+): { view: ReturnType<typeof activeView>; annotation: Annotation } | undefined {
+  const { project: p, viewId } = project();
+  if (!p) return undefined;
+  const view = activeView(p, viewId);
+  const annotation = view.annotations.find((a) => a.id === id);
+  return annotation ? { view, annotation } : undefined;
+}
+
+function startEditing(id: Id) {
+  project().select({ elements: [], relations: [] });
+  ui().set({ selectedAnnotation: id, editingAnnotation: id });
+}
+
+export function addSticky(): void {
+  const { project: p, viewId } = project();
+  if (!p) return;
+  const view = activeView(p, viewId);
+  const center = canvasApi.center?.() ?? { x: 0, y: 0 };
+  // Next to the diagram, not on top of a shape.
+  const at = freeSpot(
+    p,
+    view,
+    { x: center.x - STICKY_SIZE.w / 2, y: center.y - STICKY_SIZE.h / 2 },
+    STICKY_SIZE,
+  );
+  const { id, ops } = stickyOps(view, at, now());
+  if (dispatch(ops, { label: 'Add sticky note' })) startEditing(id);
+}
+
+/** A region around the selected shapes, or in the middle of the canvas. */
+export function addRegion(): void {
+  const { project: p, viewId, selection } = project();
+  if (!p) return;
+  const view = activeView(p, viewId);
+  const around = selection.elements
+    .filter((id) => view.nodes.some((n) => n.elementId === id))
+    .map((id) => ({ ...absolutePosition(p, view, id), ...nodeSize(p, view, id) }));
+  const { id, ops } = regionOps(view, canvasApi.center?.() ?? { x: 0, y: 0 }, around, now());
+  if (dispatch(ops, { label: 'Add region' })) startEditing(id);
+}
+
+/** A callout or comment on the selected element or relation (a comment can also float). */
+export function addAnchored(kind: 'callout' | 'comment'): void {
+  const { project: p, viewId, selection } = project();
+  if (!p) return;
+  const view = activeView(p, viewId);
+  const elementId = selection.elements[0];
+  const relationId = selection.relations[0];
+  if (!elementId && !relationId && kind === 'callout')
+    return void ui().toast({
+      tone: 'info',
+      message: 'Select a shape or an arrow to add a callout to it.',
+    });
+  // A comment without a selection floats where the canvas is centered.
+  const at = canvasApi.center?.() ?? { x: 0, y: 0 };
+  const anchor = elementId
+    ? { elementId }
+    : relationId
+      ? { relationId }
+      : { x: snap(at.x), y: snap(at.y) };
+  const { id, ops } = anchoredOps(view, kind, anchor, '', now());
+  if (dispatch(ops, { label: kind === 'callout' ? 'Add callout' : 'Add comment' })) {
+    startEditing(id);
+    if (kind === 'comment') ui().set({ openComment: id });
+  }
+}
+
+export function updateAnnotation(id: Id, patch: Partial<Annotation>, label = 'Edit note'): void {
+  const found = annotationOf(id);
+  if (!found) return;
+  dispatch(
+    [
+      {
+        op: 'upsertAnnotation',
+        viewId: found.view.id,
+        annotation: { ...found.annotation, ...patch },
+      },
+    ],
+    { label, mergeKey: `annotation:${id}:${label}` },
+  );
+}
+
+export function removeAnnotation(id: Id): void {
+  const found = annotationOf(id);
+  if (!found) return;
+  if (
+    dispatch([{ op: 'removeAnnotation', viewId: found.view.id, id }], {
+      label: `Delete ${found.annotation.kind}`,
+    })
+  )
+    ui().set({ selectedAnnotation: null, editingAnnotation: null, openComment: null });
+}
+
+export function replyToComment(id: Id, text: string): void {
+  const found = annotationOf(id);
+  if (!found || !text.trim()) return;
+  updateAnnotation(
+    id,
+    { replies: [...(found.annotation.replies ?? []), { text: text.trim(), createdAt: now() }] },
+    'Reply',
+  );
 }
 
 // --- templates ---------------------------------------------------------------------

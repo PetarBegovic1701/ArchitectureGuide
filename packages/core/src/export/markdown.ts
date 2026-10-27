@@ -157,6 +157,20 @@ function notesSection(f: Facts): string {
       return `- ${on ? `On \`${on}\`: ` : ''}${a.text.replace(/\n+/g, ' ')}${replies}`;
     });
   if (comments.length) parts.push(`### Open comments\n\n${comments.join('\n')}`);
+  const name = (id: string) => f.graph.element(id)?.name ?? id;
+  const canvasNotes = f.project.views
+    .flatMap((v) => v.annotations)
+    .filter((a) => a.kind !== 'comment' && a.text.trim())
+    .sort((a, b) => (a.id < b.id ? -1 : 1))
+    .map((a) => {
+      const text = a.text.trim().replace(/\n+/g, ' ');
+      if (a.kind === 'region') return `- Region “${text}”`;
+      if ('elementId' in a.anchor)
+        return `- On \`${a.anchor.elementId}\` (${name(a.anchor.elementId)}): ${text}`;
+      if ('relationId' in a.anchor) return `- On \`${a.anchor.relationId}\`: ${text}`;
+      return `- ${text}`;
+    });
+  if (canvasNotes.length) parts.push(`### On the canvas\n\n${canvasNotes.join('\n')}`);
   return parts.join('\n\n');
 }
 

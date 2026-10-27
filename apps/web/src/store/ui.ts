@@ -68,6 +68,13 @@ interface UiState {
   showSuppressed: boolean;
   /** Snapshot the canvas is compared with: what is new or changed since then. */
   compare: CompareState | null;
+  /** The selected annotation (sticky note, region, callout, comment). */
+  selectedAnnotation: Id | null;
+  /** The annotation whose text is being edited on the canvas. */
+  editingAnnotation: Id | null;
+  /** The comment whose thread is open. */
+  openComment: Id | null;
+  showResolvedComments: boolean;
   /** Open dialog in the editor, if any. */
   dialog: 'templates' | 'save-template' | 'snapshots' | null;
 
@@ -123,6 +130,10 @@ export const useUi = create<UiState>()(
       showSuppressed: false,
       dialog: null,
       compare: null,
+      selectedAnnotation: null,
+      editingAnnotation: null,
+      openComment: null,
+      showResolvedComments: false,
 
       setLevel: (level) => set(level === 'beginner' ? { level, paletteMode: 'basic' } : { level }),
       setPaletteMode: (paletteMode) => set({ paletteMode }),

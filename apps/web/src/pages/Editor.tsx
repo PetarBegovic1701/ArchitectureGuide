@@ -6,6 +6,7 @@ import {
   Command,
   Download,
   LayoutTemplate,
+  StickyNote,
   Wand2,
   Moon,
   Redo2,
@@ -20,7 +21,18 @@ import { Palette } from '../panels/Palette';
 import { ProblemsButton, ProblemsPanel, SuppressDialog } from '../panels/Problems';
 import { SaveTemplateDialog, TemplatePicker } from '../panels/Templates';
 import { CompareBanner, SnapshotsDialog } from '../panels/Snapshots';
-import { dispatch, exportJson, redo, stampTemplate, tidyUp, undo } from '../actions';
+import {
+  addAnchored,
+  addRegion,
+  addSticky,
+  dispatch,
+  exportJson,
+  redo,
+  stampTemplate,
+  tidyUp,
+  undo,
+} from '../actions';
+import { Menu } from '../panels/Menu';
 import { useAutosave, useFolder, useShortcuts } from '../hooks';
 import { folder } from '../persistence/folder';
 import type { SaveStatus } from '../hooks';
@@ -187,6 +199,16 @@ function TopBar({ status }: { status: SaveStatus }) {
       >
         <History size={14} aria-hidden /> Snapshots
       </button>
+      <Menu
+        label="Annotate"
+        icon={<StickyNote size={14} aria-hidden />}
+        items={[
+          { label: 'Sticky note', run: addSticky },
+          { label: 'Region (around the selection)', run: addRegion },
+          { label: 'Callout on the selection', run: () => addAnchored('callout') },
+          { label: 'Comment', run: () => addAnchored('comment') },
+        ]}
+      />
       <button
         type="button"
         className="flex items-center gap-1 rounded px-2 py-1 text-xs hover:bg-[var(--ag-panel-2)]"

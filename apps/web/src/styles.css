@@ -145,6 +145,15 @@ body {
   cursor: grab;
 }
 
+/* Regions sit behind the shapes: only the title and the resize handles catch the pointer. */
+.react-flow__node.ag-region {
+  pointer-events: none !important;
+}
+.react-flow__node.ag-region .ag-region-header,
+.react-flow__node.ag-region .react-flow__resize-control {
+  pointer-events: all;
+}
+
 /* The elements of the finding the user is looking at. */
 .ag-halo {
   border: 3px solid;

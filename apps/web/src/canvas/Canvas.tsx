@@ -20,9 +20,11 @@ import type {
 import { checkNesting, validRelationTypes } from '@archguide/core';
 import type { Id, Op } from '@archguide/core';
 import { catalog } from '../lib/catalog';
-import { toFlowEdges, toFlowNodes } from '../lib/flow';
+import { toAnnotationNodes, toFlowEdges, toFlowNodes } from '../lib/flow';
+import { annIdOf } from '../lib/annotations';
+import { annotationNodeTypes } from './AnnotationNodes';
 import { findingKey, findingsOf, issuesByItem } from '../lib/findings';
-import type { RelationFlowEdge, ShapeFlowNode } from '../lib/flow';
+import type { CanvasNode, RelationFlowEdge, ShapeFlowNode } from '../lib/flow';
 import {
   activeView,
   descendantIds,
@@ -44,7 +46,7 @@ import { useUi } from '../store/ui';
 import { EdgeMarkers, RelationEdge } from './RelationEdge';
 import { ShapeNode } from './ShapeNode';
 
-const nodeTypes = { shape: ShapeNode };
+const nodeTypes = { shape: ShapeNode, ...annotationNodeTypes };
 const NO_FINDINGS: never[] = [];
 const edgeTypes = { relation: RelationEdge };
 export const DRAG_MIME = 'application/archguide-kind';
@@ -67,26 +69,49 @@ export function Canvas() {
   const level = useUi((s) => s.level);
   const activeFinding = useUi((s) => s.activeFinding);
   const compare = useUi((s) => s.compare);
+  const selectedAnnotation = useUi((s) => s.selectedAnnotation);
+  const editingAnnotation = useUi((s) => s.editingAnnotation);
+  const showResolved = useUi((s) => s.showResolvedComments);
   const findings = project ? findingsOf(project) : NO_FINDINGS;
   const issues = useMemo(() => issuesByItem(findings, level), [findings, level]);
   const highlightIds = useMemo(() => {
     const f = activeFinding ? findings.find((x) => findingKey(x) === activeFinding) : undefined;
     return new Set<Id>(f ? [...f.targetIds, ...f.relatedIds] : []);
   }, [findings, activeFinding]);
-  const derivedNodes = useMemo(
-    () =>
-      project && view
-        ? toFlowNodes(project, view, {
-            selectedIds,
-            editingId,
-            connecting,
-            issues,
-            highlightIds,
-            compare,
-          })
-        : [],
-    [project, view, selectedIds, editingId, connecting, issues, highlightIds, compare],
-  );
+  const derivedNodes = useMemo((): CanvasNode[] => {
+    if (!project || !view) return [];
+    const shapes = toFlowNodes(project, view, {
+      selectedIds,
+      editingId,
+      connecting,
+      issues,
+      highlightIds,
+      compare,
+    });
+    const notes = toAnnotationNodes(project, view, {
+      selectedId: selectedAnnotation,
+      editingId: editingAnnotation,
+      showResolved,
+    });
+    // Regions behind the shapes, notes and comments in front.
+    return [
+      ...notes.filter((n) => n.type === 'region'),
+      ...shapes,
+      ...notes.filter((n) => n.type !== 'region'),
+    ];
+  }, [
+    project,
+    view,
+    selectedIds,
+    editingId,
+    connecting,
+    issues,
+    highlightIds,
+    compare,
+    selectedAnnotation,
+    editingAnnotation,
+    showResolved,
+  ]);
   const derivedEdges = useMemo(
     () =>
       project && view
@@ -97,7 +122,7 @@ export function Canvas() {
 
   // Local copies, so dragging and selecting are smooth. The model changes once, on drag
   // stop; selection reaches the store through onSelectionChange.
-  const [nodes, setNodes] = useState<ShapeFlowNode[]>(derivedNodes);
+  const [nodes, setNodes] = useState<CanvasNode[]>(derivedNodes);
   const [edges, setEdges] = useState<RelationFlowEdge[]>(derivedEdges);
   useEffect(() => setNodes(derivedNodes), [derivedNodes]);
   useEffect(() => setEdges(derivedEdges), [derivedEdges]);
@@ -140,7 +165,7 @@ export function Canvas() {
   }, [flow]);
 
   // Removal goes through ops (deleteKeyCode is off), so every change here is view-local.
-  const onNodesChange = useCallback((changes: NodeChange<ShapeFlowNode>[]) => {
+  const onNodesChange = useCallback((changes: NodeChange<CanvasNode>[]) => {
     setNodes((ns) => applyNodeChanges(changes, ns));
   }, []);
   const onEdgesChange = useCallback((changes: EdgeChange<RelationFlowEdge>[]) => {
@@ -148,7 +173,10 @@ export function Canvas() {
   }, []);
 
   const onSelectionChange = useCallback(({ nodes: n, edges: e }: OnSelectionChangeParams) => {
-    const elements = n.map((x) => x.id);
+    const annotation = n.map((x) => annIdOf(x.id)).find(Boolean) ?? null;
+    if (annotation !== useUi.getState().selectedAnnotation)
+      useUi.getState().set({ selectedAnnotation: annotation });
+    const elements = n.map((x) => x.id).filter((id) => !annIdOf(id));
     const relations = e.map((x) => x.id);
     const current = useProject.getState().selection;
     if (same(current.elements, elements) && same(current.relations, relations)) return;
@@ -158,10 +186,25 @@ export function Canvas() {
   }, []);
 
   const onNodeDragStop = useCallback(
-    (_: unknown, _node: ShapeFlowNode, dragged: ShapeFlowNode[]) => {
+    (_: unknown, _node: CanvasNode, dragged: CanvasNode[]) => {
       const p = useProject.getState().project;
       if (!p || !view) return;
       const ops: Op[] = [];
+      // Sticky notes, regions and free comments keep their new position.
+      for (const d of dragged) {
+        const annotationId = annIdOf(d.id);
+        const a = annotationId && view.annotations.find((x) => x.id === annotationId);
+        if (!a || !('x' in a.anchor)) continue;
+        ops.push({
+          op: 'upsertAnnotation',
+          viewId: view.id,
+          annotation: {
+            ...a,
+            anchor: { ...a.anchor, x: snap(d.position.x), y: snap(d.position.y) },
+          },
+        });
+      }
+      dragged = dragged.filter((d) => !annIdOf(d.id));
       const draggedIds = new Set(dragged.map((d) => d.id));
       for (const d of dragged) {
         const el = elementById(p, d.id);
@@ -200,7 +243,7 @@ export function Canvas() {
 
   const isValidConnection = useCallback((c: Connection | { source: string; target: string }) => {
     const p = useProject.getState().project;
-    if (!p || c.source === c.target) return false;
+    if (!p || c.source === c.target || annIdOf(c.source) || annIdOf(c.target)) return false;
     const s = elementById(p, c.source);
     const t = elementById(p, c.target);
     return !!s && !!t && validRelationTypes(catalog, s.kind, t.kind).length > 0;
@@ -250,7 +293,7 @@ export function Canvas() {
       data-testid="canvas"
     >
       <EdgeMarkers />
-      <ReactFlow<ShapeFlowNode, RelationFlowEdge>
+      <ReactFlow<CanvasNode, RelationFlowEdge>
         nodes={nodes}
         edges={edges}
         nodeTypes={nodeTypes}
@@ -268,7 +311,9 @@ export function Canvas() {
           e.preventDefault();
           e.dataTransfer.dropEffect = 'copy';
         }}
-        onPaneClick={() => useUi.getState().set({ picker: null, activeFinding: null })}
+        onPaneClick={() =>
+          useUi.getState().set({ picker: null, activeFinding: null, openComment: null })
+        }
         connectionMode={ConnectionMode.Loose}
         connectionRadius={40}
         snapToGrid
@@ -282,7 +327,13 @@ export function Canvas() {
         maxZoom={2.5}
       >
         <Background variant={BackgroundVariant.Dots} gap={16} size={1} />
-        <MiniMap pannable zoomable nodeColor={(n) => (n.data as ShapeFlowNode['data']).color} />
+        <MiniMap
+          pannable
+          zoomable
+          nodeColor={(n) =>
+            n.type === 'shape' ? (n.data as ShapeFlowNode['data']).color : 'transparent'
+          }
+        />
         <Controls showInteractive={false} />
       </ReactFlow>
     </div>
@@ -293,7 +344,7 @@ export function Canvas() {
 function nodeAt(x: number, y: number, except: string): string | undefined {
   for (const el of document.elementsFromPoint(x, y)) {
     const id = el.closest<HTMLElement>('.react-flow__node')?.dataset.id;
-    if (id && id !== except) return id;
+    if (id && id !== except && !annIdOf(id)) return id;
   }
   return undefined;
 }

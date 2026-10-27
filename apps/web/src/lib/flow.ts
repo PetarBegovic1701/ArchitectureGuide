@@ -1,8 +1,25 @@
 import type { Edge, Node } from '@xyflow/react';
-import type { Id, LineStyle, Project, Relation, ShapeId, Status, View } from '@archguide/core';
+import type {
+  Annotation,
+  Id,
+  LineStyle,
+  Project,
+  Relation,
+  ShapeId,
+  Status,
+  View,
+} from '@archguide/core';
 import { catalog, conceptOf, shapeFor } from './catalog';
 import { colorOf, elementById, isContainer, nodeSize } from './model';
 import type { Issue } from './findings';
+import {
+  REGION_SIZE,
+  STICKY_SIZE,
+  anchorBox,
+  anchorLabel,
+  annNodeId,
+  calloutPosition,
+} from './annotations';
 
 export type ShapeNodeData = {
   elementId: Id;
@@ -154,4 +171,82 @@ function diffMark(options: FlowOptions, id: Id): { diff?: DiffMark } {
   if (options.compare?.added.has(id)) return { diff: 'added' };
   if (options.compare?.changed.has(id)) return { diff: 'changed' };
   return {};
+}
+
+// --- annotations -----------------------------------------------------------------------
+
+export type AnnotationNodeData = {
+  annotation: Annotation;
+  editing: boolean;
+  /** Callouts: where the leader line ends, relative to the callout's top-left corner. */
+  leader?: { x: number; y: number };
+  /** Name of what a callout or comment is attached to. */
+  anchorName?: string;
+};
+
+export type AnnotationFlowNode = Node<
+  AnnotationNodeData,
+  'sticky' | 'region' | 'callout' | 'comment'
+>;
+export type CanvasNode = ShapeFlowNode | AnnotationFlowNode;
+
+const Z_REGION = -100;
+const Z_NOTE = 2500;
+
+/** React Flow nodes for a view's annotations. Anchored ones follow their element. */
+export function toAnnotationNodes(
+  p: Project,
+  view: View,
+  options: { selectedId?: Id | null; editingId?: Id | null; showResolved?: boolean } = {},
+): AnnotationFlowNode[] {
+  const out: AnnotationFlowNode[] = [];
+  for (const a of view.annotations) {
+    if (a.kind === 'comment' && a.resolved && !options.showResolved) continue;
+    const base = {
+      id: annNodeId(a.id),
+      selected: options.selectedId === a.id,
+      data: {
+        annotation: a,
+        editing: options.editingId === a.id,
+        ...(anchorLabel(p, a.anchor) ? { anchorName: anchorLabel(p, a.anchor)! } : {}),
+      },
+    };
+    if (a.kind === 'sticky' || a.kind === 'region') {
+      if (!('x' in a.anchor)) continue;
+      const size = a.kind === 'sticky' ? STICKY_SIZE : REGION_SIZE;
+      out.push({
+        ...base,
+        type: a.kind,
+        position: { x: a.anchor.x, y: a.anchor.y },
+        width: a.anchor.w ?? size.w,
+        height: a.anchor.h ?? size.h,
+        zIndex: a.kind === 'region' ? Z_REGION : Z_NOTE,
+        ...(a.kind === 'region' ? { dragHandle: '.ag-region-header', className: 'ag-region' } : {}),
+      });
+      continue;
+    }
+    const target = anchorBox(p, view, a.anchor);
+    if (!target) continue;
+    if (a.kind === 'callout') {
+      const at = calloutPosition(target);
+      out.push({
+        ...base,
+        type: 'callout',
+        position: at,
+        draggable: false,
+        zIndex: Z_NOTE,
+        data: { ...base.data, leader: { x: target.x + target.w / 2 - at.x, y: target.y - at.y } },
+      });
+    } else {
+      const free = 'x' in a.anchor;
+      out.push({
+        ...base,
+        type: 'comment',
+        position: free ? { x: target.x, y: target.y } : { x: target.x - 14, y: target.y - 14 },
+        draggable: free,
+        zIndex: Z_NOTE + 1,
+      });
+    }
+  }
+  return out;
 }
