@@ -5,8 +5,10 @@ combines the plan, the v1 stack profile (React + Node.js + PostgreSQL), and the
 research findings. It adds the implementation details: interfaces, algorithms,
 file formats, tool schemas, commands, and a task checklist per phase.
 
-The files in `docs/` (`PLAN.md`, `STACK-REACT-NODE-POSTGRES.md`, `RESEARCH.md`)
-are the earlier planning notes. If they differ from this file, this file is correct.
+The earlier planning notes (`docs/PLAN.md`, `docs/STACK-REACT-NODE-POSTGRES.md`,
+`docs/RESEARCH.md`) were merged into this file and removed.
+
+**Progress:** Phase 0 (foundations) is done. See §25 for the checklist.
 
 ---
 
@@ -256,7 +258,7 @@ Exact versions are pinned in the lockfile at Phase 0 (latest stable at that time
 
 | Concern | Choice | Reason |
 |---|---|---|
-| Language | TypeScript (strict, `moduleResolution: bundler`), ESM only | One language everywhere |
+| Language | TypeScript 6 (strict, `moduleResolution: bundler`), ESM only | One language everywhere. TypeScript 7 (native compiler) once typescript-eslint supports it |
 | Monorepo | pnpm workspaces + Turborepo | Fast, caching |
 | Lint / format | ESLint (flat config) + Prettier | Standard |
 | UI | React 19 + Vite | Fast dev loop |
@@ -264,6 +266,7 @@ Exact versions are pinned in the lockfile at Phase 0 (latest stable at that time
 | State | Zustand 5 + Immer | Small, testable |
 | Undo/redo | Own inverse-op history (§8) | Same ops as sync and MCP |
 | Schema | Zod 4 → JSON Schema (`z.toJSONSchema`) | One source of truth |
+| Script runner | `tsx` | Runs TypeScript scripts (schema generation) |
 | Layout | `elkjs` in a Web Worker | Layered layout with groups |
 | Rules in UI | Web Worker (Comlink) | Keeps canvas at 60 fps |
 | Local DB | Dexie 4 (IndexedDB) | Local-first autosave |
@@ -340,7 +343,7 @@ ArchitectureGuide/
 │  └─ mcp-server/                   # archguide-mcp
 ├─ skills/
 │  └─ archguide/SKILL.md            # Claude Code skill (§20), copied by `archguide init`
-└─ docs/                            # earlier planning notes + reference docs
+└─ docs/                            # generated reference docs (RULES.md from Phase 2)
 ```
 
 ---
@@ -565,30 +568,55 @@ fixture to the latest version and validates it.
 
 ### 8.1 Op types
 
+Implemented in `packages/core/src/schema/ops.ts`.
+
 ```ts
-type Op =
+// Model ops: everything a change set may hold.
+type ModelOp =
   | { op: 'addElement'; element: Element }
-  | { op: 'updateElement'; id: Id; patch: Partial<Element> }     // shallow merge; null removes a field
-  | { op: 'removeElement'; id: Id; cascade?: boolean }           // cascade: remove relations + children
+  | { op: 'updateElement'; id: Id; patch: Patch }        // shallow merge; null removes a field; no id / parentId
+  | { op: 'removeElement'; id: Id; cascade?: boolean }   // cascade: also children and relations
   | { op: 'moveElement'; id: Id; parentId: Id | null }
   | { op: 'addRelation'; relation: Relation }
-  | { op: 'updateRelation'; id: Id; patch: Partial<Relation> }
+  | { op: 'updateRelation'; id: Id; patch: Patch }
   | { op: 'removeRelation'; id: Id }
-  | { op: 'renameId'; from: Id; to: Id }
-  | { op: 'setViewNode'; viewId: Id; node: View['nodes'][number] }
-  | { op: 'removeViewNode'; viewId: Id; elementId: Id }
-  | { op: 'upsertAnnotation'; viewId: Id; annotation: Annotation }
-  | { op: 'removeAnnotation'; viewId: Id; id: Id }
+  | { op: 'renameId'; from: Id; to: Id }                 // element or relation
+  | { op: 'addView'; view: View }
+  | { op: 'updateView'; id: Id; patch: Patch }           // name, kind, scopeElementId, scenario
+  | { op: 'removeView'; id: Id }
+  | { op: 'setViewNode'; viewId: Id; node: ViewNode } | { op: 'removeViewNode'; viewId: Id; elementId: Id }
+  | { op: 'setViewEdge'; viewId: Id; edge: ViewEdge } | { op: 'removeViewEdge'; viewId: Id; relationId: Id }
+  | { op: 'upsertAnnotation'; viewId: Id; annotation: Annotation } | { op: 'removeAnnotation'; viewId: Id; id: Id }
   | { op: 'upsertNote'; note: Note } | { op: 'removeNote'; id: Id }
   | { op: 'upsertDecision'; decision: Decision } | { op: 'removeDecision'; id: Id }
-  | { op: 'upsertSuppression'; suppression: Suppression } | { op: 'removeSuppression'; ruleId: string; targetIds: Id[] };
+  | { op: 'upsertSuppression'; suppression: Suppression } | { op: 'removeSuppression'; ruleId: string; targetIds: Id[] }
+  | { op: 'updateProject'; patch: Patch }                // name, description, profile, derivedFrom
+  | { op: 'updateSettings'; patch: Patch };              // any ProjectSettings field
+
+// All ops. Change sets hold ModelOps only, so ops never nest more than one level.
+type Op = ModelOp
+  | { op: 'upsertChangeSet'; changeSet: ChangeSet }
+  | { op: 'removeChangeSet'; id: Id };
 ```
+
+Rules that apply to all ops:
+- Elements and relations share **one ID space**.
+- Every op is validated with `OpSchema` first (ops from MCP and sync are untrusted).
+- Patches are merged, then the full item is validated, so a patch cannot break an item.
+- Removing an element or relation also removes its view nodes/edges, the
+  annotations anchored to it, view scopes and scenario steps that point at it.
+  The inverse restores all of them.
+- `renameId` updates parents, relation ends, views, anchors, note/decision links,
+  suppressions, and element properties whose value is exactly the old ID
+  (for example `pg.schema` `ownedBy`). It does not rewrite ops stored in change sets.
 
 ### 8.2 Functions (`core/ops`)
 
 ```ts
-validateOps(project, ops, catalog): OpError[]      // schema + hard constraints (§10.4), no mutation
-applyOps(project, ops): { project: Project; inverse: Op[] }   // pure; Immer under the hood
+applyOps(project, ops, catalog):                   // pure; works on a structuredClone copy
+  | { ok: true; project: Project; inverse: Op[] }
+  | { ok: false; errors: OpError[] }
+validateOps(project, ops, catalog): OpError[]      // same checks, no result
 ```
 
 - `applyOps` is all-or-nothing. If one op fails validation, nothing changes.
@@ -597,7 +625,11 @@ applyOps(project, ops): { project: Project; inverse: Op[] }   // pure; Immer und
 
 Error codes: `SCHEMA_INVALID`, `ID_EXISTS`, `ID_NOT_FOUND`, `UNKNOWN_KIND`,
 `UNKNOWN_RELATION`, `RELATION_NOT_ALLOWED`, `NESTING_NOT_ALLOWED`,
-`NESTING_CYCLE`, `SELF_RELATION`, `PROPERTY_INVALID`, `REVISION_CONFLICT`.
+`NESTING_CYCLE`, `SELF_RELATION`, `PROPERTY_INVALID`, `HAS_DEPENDENTS`
+(remove without `cascade`), `REVISION_CONFLICT`.
+
+For `RELATION_NOT_ALLOWED`, `fix` holds the flipped relation when the reverse
+direction is valid (for example "Database calls Service" → "Service reads Database").
 
 ### 8.3 Who uses ops
 
@@ -635,18 +667,20 @@ interface Concept {
   icon: string;              // Lucide icon name or profile SVG
   idPrefix: string;          // "svc"
   defaultLayer?: Element['layer'];
-  allowedParents: string[];  // concept IDs or "category:<id>"; [] means top level only; "*" means anything
-  propertySchema?: ZodSchema;
+  allowedParents: Selector[]; // "top" = may have no parent; see Selector in §10.3
+  nestingHint?: string;      // shown when a nesting is refused
+  propertySchema?: ZodType;  // validates Element.properties; unknown keys allowed
   palette: { group: 'Frontend' | 'Backend' | 'Data' | 'Infra' | 'Events' | 'Groups' | 'Generic'; order: number; basic: boolean };
   docs: string;              // Markdown: what it is, when to use
-  profile?: string;          // undefined = generic
+  aliases?: string[];        // palette search: "prisma" finds Repository
 }
 
 interface StackProfile {
   id: string; name: string; version: string;
   concepts: Concept[];
   relationTypes: RelationType[];
-  relationRules: RelationRule[];       // §10.3
+  relationRules: RelationRule[];       // §10.3; checked before core rules
+  // Added in later phases:
   rules: Rule[];                       // §11
   rulePacks: RulePack[];
   templates: Template[];               // §12
@@ -793,6 +827,8 @@ interface RelationType {
   specializes?: string;                 // "enqueues" specializes "publishes"
   line: { dash?: string; width: 1 | 1.5 | 2.5; marker: 'arrow' | 'open-arrow' | 'triangle-hollow' | 'diamond-tail' | 'none' };
   defaultPriority: number;              // lower = offered first in the picker
+  hint?: string;                        // shown when no allow rule matches a pair
+  docs: string;
 }
 ```
 
@@ -827,15 +863,28 @@ Nesting (component inside service) uses `parentId`, never an edge.
 ### 10.3 Compatibility matrix
 
 ```ts
-interface RelationRule {
-  type: string;
-  from?: Selector[];         // allow rule: concept ID ("node.worker"), "pg.*", "category:<id>" or "group:<palette group>"
-  to?: Selector[];
-  deny?: { from?: Selector[]; to?: Selector[] };   // deny rule: wins over every allow rule
+// Selector: "*" | "node.service" | "pg.*" | "category:<id>" | "group:<palette group>"
+//           ("top" only in allowedParents)
+type RelationRule = AllowRule | DenyRule;
+
+interface AllowRule {
+  type: string | string[];
+  from: Selector[];
+  to: Selector[];
   allowSelf?: boolean;       // default false
-  message?: string;          // shown when the pair is blocked
+  priority?: number;         // overrides the type's defaultPriority for matching pairs
+}
+
+interface DenyRule {         // wins over every allow rule; the first match gives the message
+  type: string | string[];   // "*" = every type
+  deny: { from?: Selector[]; to?: Selector[] };   // a missing side matches anything
+  message: string;
 }
 ```
+
+Implemented in `packages/core/src/catalog`: `createCatalog(profiles)`,
+`validRelationTypes`, `checkRelation` (with `alternatives` and `flip`),
+`checkNesting`. Groups (`category:group`) never take part in relations.
 
 Core rules (excerpt):
 
@@ -1206,7 +1255,7 @@ post to the rules worker → (serve mode) send ops over WebSocket.
 - **`onConnectEnd` on empty canvas:** open quick-add filtered to valid targets.
   Create the element and the relation in one step.
 - **Nesting:** `onNodeDragStop` → find the innermost group under the pointer →
-  `canNest()` → `moveElement` op, or a refusal toast + snap back.
+  `checkNesting()` → `moveElement` op, or a refusal toast + snap back.
 - **Drill-down:** double-click a deployable or `pg.database` → open (or create)
   a view with `scopeElementId`. Breadcrumbs show the path.
 
@@ -2174,16 +2223,16 @@ Estimates assume one full-time developer. They are rough.
 
 ### Phase 0: Foundations (~1 week)
 
-- [ ] pnpm workspace, Turborepo, `tsconfig.base.json` (strict, ESM), ESLint, Prettier
-- [ ] Vitest setup; GitHub Actions CI (lint, typecheck, test, build)
-- [ ] `core/schema` with Zod; JSON Schema generation script → `schema/archguide.schema.json`
-- [ ] `core/serialize` (deterministic) + round-trip property tests
-- [ ] `core/ids` (slug, prefix, collision suffix)
-- [ ] `core/ops`: types, `validateOps`, `applyOps` with inverse; property tests
-- [ ] `core/catalog`: categories, shapes IDs, generic concepts, core relation types, matrix, `validRelationTypes`, `canNest`
-- [ ] `profiles/react-node-postgres`: concepts, relations, nesting, deny rules
-- [ ] Profile registry; package dependency rules (§4.2) checked with dependency-cruiser
-- **Done when:** schema round-trips deterministically; the §10.4 table passes as tests.
+- [x] pnpm workspace, Turborepo, `tsconfig.base.json` (strict, ESM), ESLint, Prettier
+- [x] Vitest setup; GitHub Actions CI (lint, format, typecheck, test, depcruise, schema check)
+- [x] `core/schema` with Zod; JSON Schema generation script → `schema/archguide.schema.json`
+- [x] `core/serialize` (deterministic) + round-trip property tests; `core/migrate` skeleton
+- [x] `core/ids` (slug, prefix, collision suffix)
+- [x] `core/ops`: types, `validateOps`, `applyOps` with inverse; property tests
+- [x] `core/catalog`: categories, shapes, generic concepts, core relation types, matrix, `validRelationTypes`, `checkRelation`, `checkNesting`
+- [x] `profiles/react-node-postgres`: concepts, relations, nesting, deny rules
+- [x] Profile registry (`createCatalog(profiles)`); package dependency rules (§4.2) checked with dependency-cruiser
+- **Done when:** schema round-trips deterministically; the §10.4 table passes as tests. **Done.**
 
 ### Phase 1: Canvas MVP (~3 weeks)
 
@@ -2193,7 +2242,7 @@ Estimates assume one full-time developer. They are rough.
 - [ ] Palette (search, Basic/Full, groups), drag and drop
 - [ ] Inline label edit; Inspector with forms from `propertySchema`
 - [ ] Connect with `isValidConnection`, target glow/fade, relation picker, refusal toast with fix
-- [ ] Groups and nesting with `canNest`
+- [ ] Groups and nesting with `checkNesting`
 - [ ] Color by layer + override, legend
 - [ ] `projectStore`, `historyStore` (inverse ops), `uiStore`
 - [ ] Undo/redo, copy/paste/duplicate, multi-select, align, snap, minimap

@@ -1,0 +1,249 @@
+import { CATEGORIES } from './shapes';
+import { CORE_CONCEPTS } from './core-concepts';
+import { CORE_RELATION_RULES, CORE_RELATION_TYPES } from './core-relations';
+import { isDenyRule } from './types';
+import type {
+  AllowRule,
+  Concept,
+  DenyRule,
+  RelationRule,
+  RelationType,
+  Selector,
+  ShapeId,
+  StackProfile,
+} from './types';
+
+export interface Catalog {
+  readonly profiles: readonly StackProfile[];
+  readonly concepts: ReadonlyMap<string, Concept>;
+  readonly relationTypes: ReadonlyMap<string, RelationType>;
+  readonly allowRules: readonly AllowRule[];
+  /** Profile deny rules first, then core deny rules. */
+  readonly denyRules: readonly DenyRule[];
+}
+
+export class CatalogError extends Error {}
+
+/** Builds the catalog from the core concepts and the given profiles. */
+export function createCatalog(profiles: readonly StackProfile[] = []): Catalog {
+  const concepts = new Map<string, Concept>();
+  const relationTypes = new Map<string, RelationType>();
+  const prefixes = new Map<string, string>();
+
+  const addConcept = (c: Concept) => {
+    if (concepts.has(c.id)) throw new CatalogError(`Duplicate concept "${c.id}"`);
+    const owner = prefixes.get(c.idPrefix);
+    if (owner) throw new CatalogError(`ID prefix "${c.idPrefix}" used by "${owner}" and "${c.id}"`);
+    concepts.set(c.id, c);
+    prefixes.set(c.idPrefix, c.id);
+  };
+  const addType = (t: RelationType) => {
+    if (relationTypes.has(t.id)) throw new CatalogError(`Duplicate relation type "${t.id}"`);
+    relationTypes.set(t.id, t);
+  };
+
+  CORE_CONCEPTS.forEach(addConcept);
+  CORE_RELATION_TYPES.forEach(addType);
+  const rules: RelationRule[] = [];
+  for (const profile of profiles) {
+    profile.concepts.forEach(addConcept);
+    profile.relationTypes.forEach(addType);
+    rules.push(...profile.relationRules);
+  }
+  rules.push(...CORE_RELATION_RULES);
+
+  return {
+    profiles,
+    concepts,
+    relationTypes,
+    allowRules: rules.filter((r): r is AllowRule => !isDenyRule(r)),
+    denyRules: rules.filter(isDenyRule),
+  };
+}
+
+export function shapeOf(concept: Concept): ShapeId {
+  return concept.shape ?? CATEGORIES[concept.category].shape;
+}
+
+/** True when `selector` selects `concept` (see `Selector`). "top" never matches a concept. */
+export function matchSelector(selector: Selector, concept: Concept): boolean {
+  if (selector === '*') return true;
+  if (selector === 'top') return false;
+  if (selector.startsWith('category:')) return concept.category === selector.slice(9);
+  if (selector.startsWith('group:')) return concept.palette.group === selector.slice(6);
+  if (selector.endsWith('.*')) return concept.id.startsWith(selector.slice(0, -1));
+  return concept.id === selector;
+}
+
+const matchesAny = (selectors: readonly Selector[] | undefined, concept: Concept) =>
+  selectors === undefined || selectors.some((s) => matchSelector(s, concept));
+
+const typeMatches = (ruleType: string | string[], type: string) =>
+  ruleType === '*' || ruleType === type || (Array.isArray(ruleType) && ruleType.includes(type));
+
+function denyRuleFor(catalog: Catalog, type: string, source: Concept, target: Concept) {
+  return catalog.denyRules.find(
+    (r) =>
+      typeMatches(r.type, type) && matchesAny(r.deny.from, source) && matchesAny(r.deny.to, target),
+  );
+}
+
+/** Lowest priority of the allow rules that allow `type` for this pair, or undefined if none do. */
+function allowPriority(
+  catalog: Catalog,
+  type: RelationType,
+  source: Concept,
+  target: Concept,
+  self: boolean,
+): number | undefined {
+  let best: number | undefined;
+  for (const rule of catalog.allowRules) {
+    if (!typeMatches(rule.type, type.id)) continue;
+    if (self && !rule.allowSelf) continue;
+    if (!matchesAny(rule.from, source) || !matchesAny(rule.to, target)) continue;
+    const p = rule.priority ?? type.defaultPriority;
+    best = best === undefined ? p : Math.min(best, p);
+  }
+  return best;
+}
+
+/**
+ * Relation types valid from `sourceKind` to `targetKind`, best first (Implementation.md §10.5).
+ * Unknown kinds give an empty list.
+ */
+export function validRelationTypes(
+  catalog: Catalog,
+  sourceKind: string,
+  targetKind: string,
+  options: { self?: boolean } = {},
+): RelationType[] {
+  const source = catalog.concepts.get(sourceKind);
+  const target = catalog.concepts.get(targetKind);
+  if (!source || !target) return [];
+  const ranked: { type: RelationType; priority: number }[] = [];
+  for (const type of catalog.relationTypes.values()) {
+    if (denyRuleFor(catalog, type.id, source, target)) continue;
+    const priority = allowPriority(catalog, type, source, target, options.self ?? false);
+    if (priority !== undefined) ranked.push({ type, priority });
+  }
+  return ranked.sort((a, b) => a.priority - b.priority).map((r) => r.type);
+}
+
+export type RelationCheck =
+  | { ok: true }
+  | {
+      ok: false;
+      code: 'UNKNOWN_KIND' | 'UNKNOWN_RELATION' | 'RELATION_NOT_ALLOWED' | 'SELF_RELATION';
+      message: string;
+      /** Valid types for the same pair, best first. */
+      alternatives: string[];
+      /** When the reversed direction is valid: the best type for it. */
+      flip?: string;
+    };
+
+/** Types preferred when a refused relation is flipped (a store is read, a queue is consumed). */
+const FLIP_PREFERENCE = ['processes', 'consumes', 'reads'];
+
+/** Checks one relation against the hard constraints and explains a refusal. */
+export function checkRelation(
+  catalog: Catalog,
+  type: string,
+  sourceKind: string,
+  targetKind: string,
+  options: { self?: boolean } = {},
+): RelationCheck {
+  const relType = catalog.relationTypes.get(type);
+  if (!relType) {
+    return {
+      ok: false,
+      code: 'UNKNOWN_RELATION',
+      message: `Unknown relation type "${type}".`,
+      alternatives: [],
+    };
+  }
+  const source = catalog.concepts.get(sourceKind);
+  const target = catalog.concepts.get(targetKind);
+  if (!source || !target) {
+    const missing = source ? targetKind : sourceKind;
+    return {
+      ok: false,
+      code: 'UNKNOWN_KIND',
+      message: `Unknown concept "${missing}".`,
+      alternatives: [],
+    };
+  }
+  const self = options.self ?? false;
+  const valid = validRelationTypes(catalog, sourceKind, targetKind, { self });
+  if (valid.some((t) => t.id === type)) return { ok: true };
+
+  const alternatives = valid.map((t) => t.id);
+  if (self) {
+    return {
+      ok: false,
+      code: 'SELF_RELATION',
+      message: `${source.name} cannot ${relType.name} itself.`,
+      alternatives,
+    };
+  }
+
+  const deny = denyRuleFor(catalog, type, source, target);
+  let message = deny
+    ? deny.message
+    : relType.hint
+      ? `${relType.hint} (${source.name} → ${target.name})`
+      : `${source.name} cannot ${relType.name} ${target.name}.`;
+  if (alternatives.length > 0) message += ` Valid here: ${alternatives.join(', ')}.`;
+
+  const flipped = validRelationTypes(catalog, targetKind, sourceKind).map((t) => t.id);
+  const flip = flipped.includes(type)
+    ? type
+    : (FLIP_PREFERENCE.find((t) => flipped.includes(t)) ?? flipped[0]);
+  return {
+    ok: false,
+    code: 'RELATION_NOT_ALLOWED',
+    message,
+    alternatives,
+    ...(flip ? { flip } : {}),
+  };
+}
+
+export type NestingCheck =
+  { ok: true } | { ok: false; code: 'UNKNOWN_KIND' | 'NESTING_NOT_ALLOWED'; message: string };
+
+/** Checks whether an element of `childKind` may sit inside `parentKind` (null = top level). */
+export function checkNesting(
+  catalog: Catalog,
+  childKind: string,
+  parentKind: string | null,
+): NestingCheck {
+  const child = catalog.concepts.get(childKind);
+  if (!child)
+    return { ok: false, code: 'UNKNOWN_KIND', message: `Unknown concept "${childKind}".` };
+  if (parentKind === null) {
+    if (child.allowedParents.includes('top') || child.allowedParents.includes('*'))
+      return { ok: true };
+    return {
+      ok: false,
+      code: 'NESTING_NOT_ALLOWED',
+      message:
+        child.nestingHint ??
+        `${child.name} must be placed inside ${describeParents(catalog, child)}.`,
+    };
+  }
+  const parent = catalog.concepts.get(parentKind);
+  if (!parent)
+    return { ok: false, code: 'UNKNOWN_KIND', message: `Unknown concept "${parentKind}".` };
+  if (child.allowedParents.some((s) => matchSelector(s, parent))) return { ok: true };
+  return {
+    ok: false,
+    code: 'NESTING_NOT_ALLOWED',
+    message: child.nestingHint ?? `${child.name} cannot be placed inside ${parent.name}.`,
+  };
+}
+
+function describeParents(catalog: Catalog, child: Concept): string {
+  const names = [...catalog.concepts.values()]
+    .filter((c) => child.allowedParents.some((s) => matchSelector(s, c)))
+    .map((c) => c.name);
+  return names.length > 0 ? names.join(' or ') : 'a parent';
+}

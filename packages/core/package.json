@@ -1,0 +1,18 @@
+{
+  "name": "@archguide/core",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "ArchitectureGuide core: schema, ops, catalog, serialization",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json && tsc -p scripts/tsconfig.json",
+    "schema": "tsx scripts/generate-schema.ts",
+    "schema:check": "tsx scripts/generate-schema.ts --check"
+  },
+  "dependencies": {
+    "zod": "4.6.7"
+  }
+}
