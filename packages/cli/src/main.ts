@@ -30,6 +30,7 @@ import {
 import { CliError, EXIT, findAsset } from './io';
 import type { Io } from './io';
 import { init } from './init';
+import { registerAnalysisCommands } from './analysis';
 
 export const VERSION = '0.0.0';
 
@@ -205,15 +206,20 @@ export async function main(argv: readonly string[], io: Io): Promise<number> {
       },
     );
 
-  program
-    .command('generate')
-    .description('enforcement configs: dependency-cruiser, nx, archunit (Phase 8)')
-    .argument('<target>', 'dependency-cruiser | nx | archunit')
-    .action((target: string) => {
-      throw new CliError(
-        `"archguide generate ${target}" comes with the enforcement generators (Implementation.md §23.1, Phase 8).`,
-      );
-    });
+  registerAnalysisCommands(program, {
+    io,
+    catalog,
+    paint,
+    workspace,
+    project,
+    info,
+    json,
+    global: g,
+    setExit: (code) => {
+      exitCode = code;
+    },
+    shortPath,
+  });
 
   program
     .command('templates')

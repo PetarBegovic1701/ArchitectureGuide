@@ -1,5 +1,5 @@
 import { randomBytes } from 'node:crypto';
-import { readFile, stat } from 'node:fs/promises';
+import { mkdir, readFile, stat } from 'node:fs/promises';
 import { basename, join } from 'node:path';
 import Fastify from 'fastify';
 import fastifyStatic from '@fastify/static';
@@ -14,6 +14,7 @@ import {
   readLock,
   removeLock,
   withFileLock,
+  writeFileAtomic,
   writeLock,
 } from '@archguide/workspace';
 import type { Workspace } from '@archguide/workspace';
@@ -214,6 +215,32 @@ export async function startServer(options: ServeOptions): Promise<RunningServer>
     },
   );
 
+  // The last analysis and the subjects the user rejected (Implementation.md §19.9).
+  const analysisFile = ws.localPath('analysis', 'last.json');
+  const rejectedFile = ws.localPath('analysis', 'rejected.json');
+  app.get('/api/analysis', async (_req, reply) => {
+    try {
+      return { ok: true, analysis: JSON.parse(await readFile(analysisFile, 'utf8')) as unknown };
+    } catch {
+      return reply
+        .code(404)
+        .send({ ok: false, message: 'No analysis yet. Run "archguide analyze".' });
+    }
+  });
+  app.post<{ Body: { subjects?: unknown } }>('/api/analysis/rejected', async (req, reply) => {
+    const subjects = req.body?.subjects;
+    if (!Array.isArray(subjects) || !subjects.every((x) => typeof x === 'string'))
+      return reply.code(400).send({ ok: false, message: 'Send { subjects: string[] }.' });
+    return withFileLock(rejectedFile, async () => {
+      const current = await readFile(rejectedFile, 'utf8')
+        .then((t) => JSON.parse(t) as string[])
+        .catch(() => [] as string[]);
+      const next = [...new Set([...current, ...subjects])].sort();
+      await writeFileAtomic(rejectedFile, `${JSON.stringify(next, null, 2)}\n`);
+      return { ok: true, rejected: next.length };
+    });
+  });
+
   app.post<{
     Params: { id: string };
     Body: { ops: Op[]; origin?: ChangeOrigin; baseRevision?: number };
@@ -326,7 +353,23 @@ export async function startServer(options: ServeOptions): Promise<RunningServer>
     );
   };
   watcher?.on('change', fileChanged).on('add', fileChanged).on('unlink', fileChanged);
-  if (watcher) await new Promise<void>((r) => watcher.once('ready', () => r()));
+  // Listen for "ready" right away: it can fire while another watcher starts.
+  const ready = (w: { once(event: 'ready', cb: () => void): unknown }) =>
+    new Promise<void>((r) => void w.once('ready', () => r()));
+  const watcherReady = watcher ? ready(watcher) : undefined;
+  if (options.watch !== false) await mkdir(ws.localPath('analysis'), { recursive: true });
+  const analysisWatcher =
+    options.watch === false
+      ? undefined
+      : watch(ws.localPath('analysis'), {
+          ignoreInitial: true,
+          depth: 0,
+          ignored: (p: string) => p.endsWith('.tmp'),
+        });
+  analysisWatcher?.on('all', (_event: string, path: string) => {
+    if (path.endsWith('last.json')) broadcast(null, { t: 'analysis' });
+  });
+  await Promise.all([watcherReady, analysisWatcher && ready(analysisWatcher)]);
 
   try {
     await app.listen({ host, port: options.port ?? 4317 });
@@ -357,6 +400,7 @@ export async function startServer(options: ServeOptions): Promise<RunningServer>
     async close() {
       for (const t of pending.values()) clearTimeout(t);
       await watcher?.close();
+      await analysisWatcher?.close();
       for (const s of sockets) s.close(1001, 'server stopped');
       await app.close();
       await removeLock(ws);

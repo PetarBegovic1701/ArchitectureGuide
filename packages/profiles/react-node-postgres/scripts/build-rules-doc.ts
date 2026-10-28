@@ -51,6 +51,7 @@ function section(rule: Rule): string {
   return lines.join('\n');
 }
 
+const analysis = profile.analysisRules ?? [];
 const generic = rules.filter((r) => r.id.startsWith('AP-'));
 const specific = rules.filter((r) => !r.id.startsWith('AP-'));
 
@@ -84,6 +85,18 @@ ${generic.map(section).join('\n\n')}
 ## ${profile.name} rules
 
 ${specific.map(section).join('\n\n')}
+
+## Analysis rules
+
+These rules read the code, not the model: \`archguide analyze\` and \`archguide check\` run them
+on the facts the analyzer finds (Implementation.md §19), and every finding points at a file
+and a line. Rules that exist as model rules too share their ID.
+
+| Rule | Title | Severity |
+| --- | --- | --- |
+${analysis.map((r) => `| ${r.id} | ${r.title} | ${r.severity} |`).join('\n')}
+
+${analysis.map((r) => [`### ${r.id} (code)`, '', `**${r.title}** · ${r.severity}`, '', r.rationale, ...(r.learnId ? ['', `Learn: \`${r.learnId}\`.`] : [])].join('\n')).join('\n\n')}
 `;
 
 if (process.argv.includes('--check')) {

@@ -6,3 +6,5 @@ export { indexSource } from './engines/ts-index';
 export type { FileIndex } from './engines/ts-index';
 export { parsePrisma } from './engines/prisma';
 export { parseSql } from './engines/sql';
+export * from './check';
+export * from './introspect';

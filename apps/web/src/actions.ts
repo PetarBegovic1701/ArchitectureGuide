@@ -1,4 +1,5 @@
 import {
+  databaseViewOps,
   RULE_PACKS,
   applyOps,
   checkNesting,
@@ -664,4 +665,18 @@ export function download(name: string, text: string, type: string): void {
 
 export async function readProjectFile(file: File): Promise<Project> {
   return parseProject(await file.text());
+}
+
+/** Adds a database view: the Postgres elements and their readers and writers, colored by owner. */
+export function createDatabaseView(): void {
+  const p = project().project;
+  if (!p) return;
+  const { ops, viewId } = databaseViewOps(p, catalog);
+  if (dispatch(ops, { label: 'Create database view' })) {
+    project().setView(viewId);
+    ui().toast({
+      tone: 'success',
+      message: 'Added the database view. Shapes are colored by the service that owns the data.',
+    });
+  }
 }

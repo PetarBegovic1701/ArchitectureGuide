@@ -1,5 +1,6 @@
 import { parseProject } from '@archguide/core';
 import type {
+  AnalysisResult,
   ChangeOrigin,
   ClientMessage,
   Id,
@@ -81,6 +82,23 @@ export const loadServeProject = async (id: Id): Promise<Project | undefined> => 
   } catch {
     return undefined;
   }
+};
+
+/** Fires when `archguide analyze` saved a new analysis (serve mode). */
+export const analysisEvents = new EventTarget();
+
+/** The last analysis (`.archguide/analysis/last.json`), or undefined when there is none. */
+export const loadServeAnalysis = async (): Promise<AnalysisResult | undefined> => {
+  try {
+    return (await api<{ analysis: AnalysisResult }>('/api/analysis')).analysis;
+  } catch {
+    return undefined;
+  }
+};
+
+/** Remembers rejected suggestions, so the next analysis does not offer them again. */
+export const rejectServeSubjects = async (subjects: string[]): Promise<void> => {
+  await api('/api/analysis/rejected', { method: 'POST', body: JSON.stringify({ subjects }) });
 };
 
 export const createServeProject = async (project: Project): Promise<void> => {
@@ -319,6 +337,9 @@ export class ServeSync {
       }
       case 'error':
         this.target.rejected([{ index: 0, code: 'SCHEMA_INVALID', message: m.message }]);
+        return;
+      case 'analysis':
+        analysisEvents.dispatchEvent(new Event('change'));
         return;
       case 'projects':
         return;

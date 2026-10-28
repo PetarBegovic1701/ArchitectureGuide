@@ -25,13 +25,15 @@ editing the JSON by hand. When `npx archguide serve` runs, every change shows up
 
 ## After a structural change
 
-- Update the model with the MCP write tools.
-- Run `npx archguide validate`. It must exit with code 0.
+- Update the model with the MCP write tools, or run `diff_with_repository` and `apply_analysis`
+  (CLI: `npx archguide analyze --write`) and review what it added.
+- Run `npx archguide check`. It must exit with code 0: it runs the model rules, the code
+  findings (file and line) and the dependency rules generated from the model.
 
 ## When the repo has no model yet
 
-`npx archguide init --template T1` (or without `--template` for an empty project), then model the
-deployables, modules and data stores with the MCP tools.
+Use the MCP prompt `map-repository`, or `npx archguide init && npx archguide analyze --write`, then
+correct names and responsibilities with the MCP tools and `export` agent-md with `write: true`.
 
 ## When you join a project or explain it to someone
 
@@ -40,4 +42,4 @@ unsure about, call `explain_concept` (or `npx archguide explain <id>`) instead o
 
 ## Without MCP
 
-Every read and export has a CLI equivalent: `npx archguide --help`.
+Every read, export and check has a CLI equivalent: `npx archguide --help`.

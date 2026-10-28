@@ -95,7 +95,17 @@ interface UiState {
   /** Context menu for a shape or an arrow (long-press or right-click). */
   contextMenu: { x: number; y: number; kind: 'element' | 'relation'; id: Id } | null;
   /** Open dialog in the editor, if any. */
-  dialog: 'templates' | 'save-template' | 'snapshots' | 'export' | 'tour-editor' | 'lab' | null;
+  dialog:
+    | 'templates'
+    | 'save-template'
+    | 'snapshots'
+    | 'export'
+    | 'tour-editor'
+    | 'lab'
+    | 'analysis'
+    | null;
+  /** Database view: color data by its owning deployable (§19.5). Always on in database views. */
+  ownership: boolean;
   /** Elements the current lesson step points at (§17.5). */
   lessonFocus: Id[];
   /** The `writes` relation the concurrency lab was opened for. */
@@ -156,6 +166,7 @@ export const useUi = create<UiState>()(
       suppressing: null,
       showSuppressed: false,
       dialog: null,
+      ownership: false,
       labRelation: null,
       lessonFocus: [],
       compare: null,

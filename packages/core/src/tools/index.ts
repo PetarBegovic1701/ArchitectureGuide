@@ -3,3 +3,4 @@ export * from './place';
 export * from './findings';
 export * from './summary';
 export * from './create';
+export * from './ownership';

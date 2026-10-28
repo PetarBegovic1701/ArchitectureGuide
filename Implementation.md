@@ -3009,19 +3009,63 @@ Implementation notes (Phase 7):
   real `archguide serve`: an agent builds, validates and exports through MCP while the open tab
   updates live; a file changes while a browser change is in flight (Discard and Reapply).
 
-### Phase 8: Repository analysis and enforcement (~4 weeks)
+### Phase 8: Repository analysis and enforcement (~4 weeks) — done
 
-- [ ] Analyzer pipeline (discover, engines, detectors, resolve, match, cache, limits)
-- [ ] Detectors in §19.4 (workspace, React, Node, Postgres, infra)
-- [ ] Data ownership algorithm (§19.5)
-- [ ] Analysis-scope rules RNP-003, 004, 012, 013, 015, 017, 018 (+ analysis parts of 001, 002, 005, 006)
-- [ ] Optional live introspection (§19.7)
-- [ ] Generators: dependency-cruiser (default), Nx, ArchUnitTS
-- [ ] CLI: `analyze`, `check`, `drift`; `--format github`
-- [ ] MCP: `analyze_repository`, `apply_analysis`, `diff_with_repository`, `generate_enforcement`; prompts `map-repository`, `review-change`
-- [ ] UI: Analysis review panel; database view with ownership colors; evidence links
-- [ ] GitHub Action example; fixture repos 1–4
-- **Done when:** on fixtures 1–3 the baseline has ≥ 80% of the hand-made reference elements and no element without evidence; fixture 4 triggers every analysis rule; `archguide check` fails on a seeded domain → Prisma import with file and line.
+- [x] Analyzer pipeline (discover, engines, detectors, resolve, match, cache, limits)
+- [x] Detectors in §19.4 (workspace, React, Node, Postgres, infra)
+- [x] Data ownership algorithm (§19.5)
+- [x] Analysis-scope rules RNP-003, 004, 012, 013, 015, 017, 018 (+ analysis parts of 001, 002, 005, 006)
+- [x] Optional live introspection (§19.7)
+- [x] Generators: dependency-cruiser (default), Nx, ArchUnitTS
+- [x] CLI: `analyze`, `check`, `drift`; `--format github`
+- [x] MCP: `analyze_repository`, `apply_analysis`, `diff_with_repository`, `generate_enforcement`; prompts `map-repository`, `review-change`
+- [x] UI: Analysis review panel; database view with ownership colors; evidence links
+- [x] GitHub Action example; fixture repos 1–4
+- **Done when:** on fixtures 1–3 the baseline has ≥ 80% of the hand-made reference elements and no element without evidence; fixture 4 triggers every analysis rule; `archguide check` fails on a seeded domain → Prisma import with file and line. **Done:** 16/16, 22/24 and 25/25 reference elements (100%, 92%, 100%; the misses are NestJS providers the reference models as use cases), evidence on every element and relation, every analysis rule on `bad-practices`, and `check` fails with `services/api/src/domain/order.ts:2` (tests in `packages/analyzer/src/*.test.ts`).
+
+Implementation notes (Phase 8):
+
+- **Where things live.** Fact types, resolve, match, suggestion selection, data ownership and the
+  analysis rule API are in `core/analysis` (pure, so the browser's review panel uses them too). The
+  profile has the analysis rules (`analysis-rules.ts`) and the generators (`generators.ts`).
+  Deviation from §6: the detectors live in `packages/analyzer/src/detectors/`, not in the profile,
+  because they need Node file IO and the TypeScript parser; the profile stays browser-safe.
+- **Engines (deviations from §19.2).** One syntax-only TypeScript parse per file (the
+  `typescript` package, no type checking, no ts-morph) is reduced to a cached index: imports,
+  calls with statically known arguments (literals, objects, `a ?? b`, templates), the calls they
+  sit inside (transactions), decorators, JSX and line numbers. The import graph is resolved from
+  that index (relative paths, tsconfig `paths`, workspace package names), so analysis works
+  without `node_modules`; dependency-cruiser runs in `check` with the generated rules. Prisma
+  schemas use a small parser; SQL uses libpg-query (WebAssembly). Env files and compose
+  environments keep names and URL host:port shapes only, never values.
+- **Facts.** Besides `data`, a fact may propose an `element` (kind, name, parent subject, code
+  paths, properties) or a `relation` between subjects; resolve merges proposals per subject
+  (noisy-or confidence, at most 8 evidence items) and drops properties the concept's schema
+  refuses. All Postgres schemas of one repository go into one database (`db:main`); separate
+  databases on one server are not told apart yet.
+- **Match.** Missing in code: existing elements tied to code (code paths, or inferred earlier),
+  and others of a kind the run detects. `DRIFT-001` reports them, `DRIFT-002` (info, in `check`)
+  reports deployables the model lacks. Rejected subjects (`rejected.json`) are skipped.
+- **Rules.** RNP-015 flags only handlers with POST, PUT or PATCH routes; validation through a
+  workspace contracts package (zod) counts. When a model rule and its analysis twin report the
+  same targets, `check` keeps the analysis finding (it has file and line).
+- **Generators.** Boundaries from the model: no database client in React apps (RNP-003), domains
+  free of ORMs and frameworks (RNP-006, error with the hexagonal pack), FSD direction and feature
+  isolation (RNP-013/014), no cycles, and in strict packs (`layered`, `hexagonal`,
+  `modular-monolith`, `fsd`) every import between sibling parts with code paths that the model
+  does not connect. Default paths: `.archguide/dependency-cruiser.cjs`, `nx-boundaries.json`,
+  `architecture.archunit.spec.ts` in the workspace folder (or `exports[].out`).
+- **Introspection** uses its own `pg_catalog` queries (not `pg-introspection`) in a read-only
+  transaction, with a 10 s statement timeout; tool schemas (`pgboss`, `graphile_worker`,
+  `drizzle`) and migration tables are left out. Tested against PGlite.
+- **UI.** The Analysis dialog compares the last analysis with the current model in the browser:
+  suggestions grouped by detector with confidence and `vscode://file/…` evidence links; Accept
+  (reviewed), Edit (accept, then the Inspector), Reject (serve mode: `rejected.json`), Accept all
+  above a confidence. In serve mode it loads `last.json` and updates when a new analysis lands;
+  elsewhere it opens a `last.json` file. Views menu: switch views, create a database view (Postgres
+  elements with their readers and writers), ownership colors with a legend (shared data in red).
+- **CLI bundle.** typescript, dependency-cruiser, libpg-query and pg stay external packages of
+  `@archguide/cli` (they load files next to their code).
 
 ### Phase 9: Change sets and advanced views (~3 weeks)
 

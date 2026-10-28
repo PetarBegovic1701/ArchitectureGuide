@@ -23,6 +23,7 @@ import { checkNesting, validRelationTypes } from '@archguide/core';
 import type { Id, Op } from '@archguide/core';
 import { catalog } from '../lib/catalog';
 import { decisionsByElement, toAnnotationNodes, toFlowEdges, toFlowNodes } from '../lib/flow';
+import { ownershipColors } from '../lib/ownership';
 import { annIdOf } from '../lib/annotations';
 import { annotationNodeTypes } from './AnnotationNodes';
 import { findingKey, findingsOf, issuesByItem } from '../lib/findings';
@@ -74,6 +75,11 @@ export function Canvas() {
   useEffect(() => store.setState({ multiSelectionActive: multiSelect }), [store, multiSelect]);
 
   const view = project ? activeView(project, viewId) : undefined;
+  const ownershipOn = useUi((s) => s.ownership) || view?.kind === 'database';
+  const ownership = useMemo(
+    () => (project && ownershipOn ? ownershipColors(project).colors : null),
+    [project, ownershipOn],
+  );
   const selectedIds = useMemo(
     () => new Set([...selection.elements, ...selection.relations]),
     [selection],
@@ -108,6 +114,7 @@ export function Canvas() {
       highlightIds,
       compare,
       decisions: decisionsByElement(project),
+      ownership,
     });
     const notes = toAnnotationNodes(project, view, {
       selectedId: selectedAnnotation,
@@ -129,6 +136,7 @@ export function Canvas() {
     issues,
     highlightIds,
     compare,
+    ownership,
     selectedAnnotation,
     editingAnnotation,
     showResolved,

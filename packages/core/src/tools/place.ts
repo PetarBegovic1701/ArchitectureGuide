@@ -52,7 +52,13 @@ export function viewNodeSize(
  * in a row to the right of the diagram, and relations whose two ends are shown. Agents,
  * the CLI and lessons change only the model; this makes their changes visible.
  */
-export function placeMissingOps(p: Project, catalog: Catalog, viewId?: Id): ModelOp[] {
+export function placeMissingOps(
+  p: Project,
+  catalog: Catalog,
+  viewId?: Id,
+  /** Place only these elements (the rest stays off the view). */
+  only?: ReadonlySet<Id>,
+): ModelOp[] {
   const view = p.views.find((v) => v.id === viewId) ?? p.views[0];
   if (!view) return [];
   const nodes = [...view.nodes];
@@ -65,7 +71,7 @@ export function placeMissingOps(p: Project, catalog: Catalog, viewId?: Id): Mode
     return d;
   };
   const missing = p.model.elements
-    .filter((e) => !shown.has(e.id))
+    .filter((e) => !shown.has(e.id) && (!only || only.has(e.id)))
     .sort((a, b) => depth(a) - depth(b));
   const ops: ModelOp[] = [];
   const topLevel = (id: Id) => {

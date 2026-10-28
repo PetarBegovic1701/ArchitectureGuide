@@ -22,8 +22,18 @@ await build({
   format: 'esm',
   splitting: true,
   chunkNames: 'chunks/[name]-[hash]',
-  // Optional native speed-ups of ws; it works without them.
-  external: ['bufferutil', 'utf-8-validate'],
+  // Optional native speed-ups of ws; it works without them. The analyzer's engines load
+  // files next to their own code (WebAssembly, TypeScript's lib files), so they stay
+  // packages and are installed with the CLI.
+  external: [
+    'bufferutil',
+    'utf-8-validate',
+    'pg-native',
+    'typescript',
+    'dependency-cruiser',
+    'libpg-query',
+    'pg',
+  ],
   banner: {
     js: [
       '#!/usr/bin/env node',

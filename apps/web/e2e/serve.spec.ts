@@ -1,6 +1,6 @@
-import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { cp, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
@@ -193,4 +193,59 @@ test('a file changed outside the app while a change is in flight: discard or rea
   await expect(name).toHaveValue('Mine');
   await expect(page.getByTestId('save-status')).toContainText('Saved');
   await expect.poll(async () => (await ws.readProject('shop')).name).toBe('Mine');
+});
+
+test('an agent analyzes the repository; a person reviews the suggestions and the data ownership', async ({
+  page,
+}) => {
+  // The workspace sits in a copy of the bad-practices fixture repository.
+  await cp(join(repo, 'packages/analyzer/fixtures/bad-practices'), dirname(ws.dir), {
+    recursive: true,
+  });
+  await tool('create_project', { name: 'Bad' });
+  await page.goto(`/?t=${TOKEN}#/p/bad`);
+  await expect(page.getByTestId('save-status')).toContainText('Saved · live');
+  await page.getByRole('button', { name: 'Analysis' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Analysis' });
+  await expect(dialog).toContainText('No analysis yet');
+
+  // The agent runs the analyzer; the open dialog picks up the new last.json by itself.
+  await tool('analyze_repository');
+  const suggestions = dialog.getByTestId('suggestion');
+  await expect(suggestions.first()).toBeVisible();
+  const orders = suggestions.filter({ hasText: /^Orders\s*Node service/ });
+  await expect(
+    orders.getByRole('link', { name: /services\/orders\/package\.json/ }),
+  ).toHaveAttribute('href', new RegExp(`^vscode://file/.+/services/orders/package\\.json:\\d+`));
+  await expect(dialog.getByTestId('analysis-finding').filter({ hasText: 'RNP-003' })).toContainText(
+    'apps/web/src/shared/lib/db.ts:2',
+  );
+
+  // Accept one: it is added as reviewed and shown on the canvas.
+  await orders.getByRole('button', { name: 'Accept' }).click();
+  await expect(node(page, 'svc.orders')).toBeVisible();
+  // Reject one: it leaves the list, and the workspace remembers it for the next analysis.
+  const billing = suggestions.filter({ hasText: /^Billing\s*Node service/ });
+  await billing.getByRole('button', { name: 'Reject' }).click();
+  await expect(billing).toHaveCount(0);
+  await expect
+    .poll(async () => readFile(ws.localPath('analysis', 'rejected.json'), 'utf8').catch(() => ''))
+    .toContain('pkg:services/billing');
+  // The rest above 60%.
+  await dialog.getByRole('button', { name: 'Accept all' }).click();
+  await dialog.getByRole('button', { name: 'Close' }).click();
+  const saved = await ws.readProject('bad');
+  expect(saved.model.elements.find((e) => e.id === 'svc.orders')?.source).toMatchObject({
+    origin: 'inferred',
+    reviewed: true,
+  });
+  expect(saved.model.elements.some((e) => e.name === 'Billing')).toBe(false);
+
+  // The database view colors the data by its owner and lists shared data.
+  await page.getByRole('button', { name: 'Views' }).click();
+  await page.getByRole('menuitem', { name: 'Create database view' }).click();
+  const legend = page.getByRole('complementary', { name: 'Data ownership' });
+  await expect(legend).toBeVisible();
+  await expect(node(page, 'tbl.invoice')).toBeVisible();
+  await expect(node(page, 'app.web')).toHaveCount(0);
 });

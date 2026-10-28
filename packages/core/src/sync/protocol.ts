@@ -18,4 +18,6 @@ export type ServerMessage =
   | { t: 'ops'; projectId: Id; revision: number; ops: Op[]; origin: ChangeOrigin }
   | { t: 'rejected'; clientOpId: string; errors: OpError[] }
   | { t: 'projects' }
+  /** A new analysis was saved (`.archguide/analysis/last.json`). */
+  | { t: 'analysis' }
   | { t: 'error'; message: string };

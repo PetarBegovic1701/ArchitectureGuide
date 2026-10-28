@@ -41,6 +41,8 @@ interface ProjectState {
   undo(): void;
   redo(): void;
   select(selection: Selection): void;
+  /** Shows another view of the project. */
+  setView(viewId: Id): void;
   /** Records a finished save. Does not count as a change or touch history. */
   markSaved(revision: number, updatedAt: string): void;
   /** Changes data that is not part of the undo history (the snapshot list); saved as usual. */
@@ -140,6 +142,11 @@ export const useProject = create<ProjectState>((set, get) => ({
 
   select(selection) {
     set({ selection });
+  },
+
+  setView(viewId) {
+    if (get().project?.views.some((v) => v.id === viewId))
+      set({ viewId, selection: { elements: [], relations: [] } });
   },
 
   patchSilently(patch) {

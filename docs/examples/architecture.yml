@@ -1,0 +1,18 @@
+# Example GitHub Actions workflow (Implementation.md §23.4). Copy it to
+# .github/workflows/architecture.yml in a repository that has an architecture/ folder.
+#
+# `archguide check` runs the model rules, the analyzer and its rules (file and line), the
+# dependency rules generated from the model, and drift. Findings show up as annotations on
+# the pull request; the job fails at --fail-on.
+name: architecture
+on: [pull_request]
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - run: npx -y archguide check --format github --fail-on error
+      # The generated dependency-cruiser config also works without ArchitectureGuide:
+      # - run: npx -y dependency-cruiser --config architecture/.archguide/dependency-cruiser.cjs .

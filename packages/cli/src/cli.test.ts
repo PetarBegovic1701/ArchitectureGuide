@@ -1,6 +1,7 @@
-import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { cp, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { beforeEach, describe, expect, it } from 'vitest';
 import WebSocket from 'ws';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
@@ -137,7 +138,7 @@ describe('commands on a workspace', () => {
     expect(JSON.parse((await cli('--json', 'migrate', '--dry-run')).out)).toEqual([
       { file: 'shop.archguide.json', from: 1, to: 1, changed: false },
     ]);
-    expect((await cli('generate', 'dependency-cruiser')).code).toBe(2);
+    expect((await cli('generate', 'dependency-cruiser')).code).toBe(0);
   });
 
   it('needs a workspace', async () => {
@@ -187,5 +188,76 @@ describe('archguide serve with MCP', () => {
     stop.abort();
     expect(await serving).toBe(0);
     expect(await readLock(ws())).toBeUndefined();
+  });
+});
+
+describe('analysis commands', () => {
+  const fixture = join(
+    dirname(fileURLToPath(import.meta.url)),
+    '..',
+    '..',
+    'analyzer',
+    'fixtures',
+    'bad-practices',
+  );
+  beforeEach(async () => {
+    await cp(fixture, cwd, { recursive: true });
+    await cli('init', '--name', 'Bad', '--no-skill');
+  });
+
+  it('analyze drafts the model, saves last.json, and --write adds it as inferred', async () => {
+    const dry = await cli('--json', 'analyze');
+    const r = JSON.parse(dry.out) as {
+      candidates: Record<string, number>;
+      findings: unknown[];
+      diff: { newInCode: string[] };
+    };
+    expect(r.candidates['node.service']).toBe(2);
+    expect(r.diff.newInCode.length).toBeGreaterThan(10);
+    expect(
+      JSON.parse(await readFile(join(cwd, 'architecture/.archguide/analysis/last.json'), 'utf8')),
+    ).toHaveProperty('candidates');
+    expect((await ws().readProject('bad')).model.elements).toEqual([]);
+
+    expect((await cli('analyze', '--write')).code).toBe(0);
+    const p = await ws().readProject('bad');
+    expect(p.model.elements.find((e) => e.name === 'Orders')).toMatchObject({
+      kind: 'node.service',
+      source: { origin: 'inferred', reviewed: false },
+    });
+    // Every new element is placed on the canvas.
+    expect(p.views[0]!.nodes.length).toBe(p.model.elements.length);
+    expect(JSON.parse((await cli('--json', 'drift')).out)).toMatchObject({
+      newInCode: [],
+      missingInCode: [],
+    });
+  });
+
+  it('check fails with file and line, also as GitHub annotations; generate writes the config', async () => {
+    await cli('analyze', '--write');
+    const text = await cli('check');
+    expect(text.code).toBe(1);
+    expect(text.out).toMatch(
+      /AG-RNP-003-no-db-client-in-app-web .*apps\/web\/src\/shared\/lib\/db\.ts:2/,
+    );
+    const gh = await cli('check', '--format', 'github');
+    expect(gh.out).toMatch(
+      /^::error file=apps\/web\/src\/shared\/lib\/db\.ts,line=2,title=AG-RNP-003-no-db-client-in-app-web::/m,
+    );
+    expect((await cli('check', '--fail-on', 'error', '--format', 'json')).code).toBe(1);
+
+    const gen = await cli('--json', 'generate', 'dependency-cruiser');
+    const written = JSON.parse(gen.out) as { written: string; rules: string[] };
+    expect(written.written).toBe(join(cwd, 'architecture/.archguide/dependency-cruiser.cjs'));
+    expect(await readFile(written.written, 'utf8')).toContain('module.exports');
+    expect((await cli('generate', 'nx', '--stdout')).out).toContain('depConstraints');
+    expect((await cli('generate', 'gradle')).code).toBe(2);
+  });
+
+  it('--db needs the database URL in the environment', async () => {
+    delete process.env.ARCHGUIDE_DATABASE_URL_READONLY;
+    const r = await cli('analyze', '--db');
+    expect(r.code).toBe(2);
+    expect(r.err).toMatch(/ARCHGUIDE_DATABASE_URL_READONLY/);
   });
 });

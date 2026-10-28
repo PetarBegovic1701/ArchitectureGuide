@@ -13,6 +13,8 @@ import {
   StickyNote,
   Wand2,
   Moon,
+  ScanSearch,
+  Layers,
   Redo2,
   Sun,
   Undo2,
@@ -24,7 +26,8 @@ import { ConcurrencyLab } from '../panels/ConcurrencyLab';
 import { LessonPlayer, useActiveLesson } from '../panels/LessonPlayer';
 import { Canvas } from '../canvas/Canvas';
 import { Inspector } from '../panels/Inspector';
-import { CommandPalette, Legend, RelationPicker } from '../panels/Overlays';
+import { CommandPalette, Legend, OwnershipLegend, RelationPicker } from '../panels/Overlays';
+import { AnalysisDialog } from '../panels/Analysis';
 import { Palette } from '../panels/Palette';
 import { ProblemsButton, ProblemsPanel, SuppressDialog } from '../panels/Problems';
 import { SaveTemplateDialog, TemplatePicker } from '../panels/Templates';
@@ -33,6 +36,7 @@ import { ExportDialog } from '../panels/ExportDialog';
 import { TourEditor, TourPlayer, draftAndEditTour, playTour } from '../panels/Tours';
 import {
   addAnchored,
+  createDatabaseView,
   addRegion,
   addSticky,
   dispatch,
@@ -168,6 +172,7 @@ function EditorLoaded() {
               <Canvas />
               {screen !== 'phone' && <Legend />}
               <CompareBanner />
+              <OwnershipLegend />
               {sync?.conflict && <ConflictBanner sync={sync} />}
               <ConnectBanner />
               <TourPlayer />
@@ -215,6 +220,7 @@ function EditorDialogs() {
   if (dialog === 'save-template') return <SaveTemplateDialog onClose={close} />;
   if (dialog === 'snapshots') return <SnapshotsDialog onClose={close} />;
   if (dialog === 'export') return <ExportDialog onClose={close} />;
+  if (dialog === 'analysis') return <AnalysisDialog onClose={close} />;
   if (dialog === 'lab') return <LabDialog onClose={close} />;
   return null;
 }
@@ -432,6 +438,8 @@ function overflowItems(): MenuItem[] {
       ? []
       : [{ label: 'Snapshots…', run: () => openDialog('snapshots') }]),
     { label: 'Export…', run: () => openDialog('export') },
+    { label: 'Analysis…', run: () => ui.set({ dialog: 'analysis', panel: null }) },
+    ...viewItems(),
     ...tours.map((t) => ({ label: `Play tour: ${t.title}`, run: () => playTour(t.id) })),
     ...tours.map((t) => ({
       label: `Edit tour: ${t.title}`,
@@ -545,6 +553,15 @@ function TopBar({ status, screen }: { status: SaveStatus; screen: Screen }) {
           <History size={14} aria-hidden /> Snapshots
         </button>
       )}
+      <ViewsMenu />
+      <button
+        type="button"
+        className="flex items-center gap-1 rounded px-2 py-1 text-xs hover:bg-[var(--ag-panel-2)]"
+        onClick={() => useUi.getState().set({ dialog: 'analysis' })}
+        title="Analysis: review what the analyzer found in the code"
+      >
+        <ScanSearch size={14} aria-hidden /> Analysis
+      </button>
       <Menu
         label="Tours"
         icon={<MapIcon size={14} aria-hidden />}
@@ -624,4 +641,28 @@ function TopBar({ status, screen }: { status: SaveStatus; screen: Screen }) {
       </div>
     </header>
   );
+}
+
+/** Views of the project, the database view, and the ownership colors. */
+function viewItems(): MenuItem[] {
+  const { project, viewId } = useProject.getState();
+  const ui = useUi.getState();
+  return [
+    ...(project?.views ?? []).map((v) => ({
+      label: `View: ${v.name}${v.id === viewId ? ' ✓' : ''}`,
+      run: () => useProject.getState().setView(v.id),
+    })),
+    { label: 'Create database view', run: createDatabaseView },
+    {
+      label: ui.ownership ? 'Hide ownership colors' : 'Show ownership colors',
+      run: () => ui.set({ ownership: !ui.ownership }),
+    },
+  ];
+}
+
+function ViewsMenu() {
+  // Re-read the items when the views, the active view or the toggle change.
+  useProject((s) => `${s.viewId}|${s.project?.views.map((v) => v.id).join()}`);
+  useUi((s) => s.ownership);
+  return <Menu label="Views" icon={<Layers size={14} aria-hidden />} items={viewItems()} />;
 }

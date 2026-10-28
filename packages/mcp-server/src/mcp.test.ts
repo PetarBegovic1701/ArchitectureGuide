@@ -1,6 +1,7 @@
-import { mkdtemp, readFile } from 'node:fs/promises';
+import { cp, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
@@ -55,6 +56,10 @@ describe('MCP tools', () => {
     expect(tools.map((t) => t.name).sort()).toEqual(
       [
         'add_annotation',
+        'analyze_repository',
+        'apply_analysis',
+        'diff_with_repository',
+        'generate_enforcement',
         'add_decision',
         'add_note',
         'apply_quick_fix',
@@ -374,8 +379,75 @@ describe('MCP resources and prompts', () => {
 
   it('offers the plan-feature prompt', async () => {
     const { prompts } = await client.listPrompts();
-    expect(prompts.map((p) => p.name)).toEqual(['plan-feature']);
+    expect(prompts.map((p) => p.name)).toEqual(['plan-feature', 'map-repository', 'review-change']);
     const p = await client.getPrompt({ name: 'plan-feature', arguments: { feature: 'Refunds' } });
     expect((p.messages[0]!.content as { text: string }).text).toContain('Refunds');
+  });
+});
+
+describe('MCP analysis tools', () => {
+  beforeEach(async () => {
+    // The workspace sits in a copy of a fixture repository, as after "archguide init".
+    const repo = await mkdtemp(join(tmpdir(), 'archguide-mcp-repo-'));
+    const fixture = join(
+      dirname(fileURLToPath(import.meta.url)),
+      '..',
+      '..',
+      'analyzer',
+      'fixtures',
+      'pnpm-bff-pgboss',
+    );
+    await cp(fixture, repo, { recursive: true });
+    await client.close();
+    ws = new Workspace(join(repo, 'architecture'));
+    await connect();
+  });
+
+  it('analyzes, applies, diffs and generates enforcement, only through MCP', async () => {
+    const first = await call('analyze_repository');
+    expect(first.ok).toBe(true);
+    expect(first.data.candidates['node.service']).toBe(2);
+    expect(first.hints?.[0]).toMatch(/create_project/);
+    expect(
+      first.data.elements.find((e: { name: string }) => e.name === 'Mailer').evidence[0],
+    ).toMatch(/^workers\/mailer\//);
+
+    await call('create_project', { name: 'Tickets' });
+    // Without a workspace folder the first run was not saved: nothing to apply yet.
+    expect(await call('apply_analysis')).toMatchObject({
+      ok: false,
+      errors: [{ code: 'NOT_FOUND' }],
+    });
+    await call('analyze_repository');
+    const applied = await call('apply_analysis', { minConfidence: 0.6 });
+    expect(applied.ok).toBe(true);
+    expect(applied.data.applied).toBeGreaterThan(20);
+    const p = await onDisk('tickets');
+    expect(p.model.elements.find((e) => e.name === 'Mailer')?.source).toMatchObject({
+      origin: 'inferred',
+      reviewed: false,
+    });
+    // Applying again adds nothing: everything matches now.
+    expect((await call('apply_analysis')).data.applied).toBe(0);
+
+    const diff = await call('diff_with_repository');
+    expect(diff.data).toMatchObject({ newInCode: [], missingInCode: [] });
+
+    const gen = await call('generate_enforcement', { target: 'dependency-cruiser', write: true });
+    expect(gen.data.written).toBe(join(ws.dir, '.archguide/dependency-cruiser.cjs'));
+    expect(gen.data.rules).toContain('AG-RNP-003-no-db-client-in-app-web');
+    const nx = await call('generate_enforcement', { target: 'nx' });
+    expect(nx.data).toContain('depConstraints');
+
+    // Code changes: a service goes away; the model still says it exists.
+    await writeFile(
+      join(ws.dir, '..', 'workers', 'mailer', 'package.json'),
+      '{ "name": "@tickets/mailer" }',
+    );
+    const drift = await call('diff_with_repository');
+    expect(drift.data.missingInCode.map((m: { name: string }) => m.name)).toContain('Mailer');
+    expect(drift.data.findings.some((f: { ruleId: string }) => f.ruleId === 'DRIFT-001')).toBe(
+      true,
+    );
   });
 });

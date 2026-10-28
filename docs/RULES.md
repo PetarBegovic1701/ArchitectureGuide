@@ -455,3 +455,109 @@ In a modular monolith each module owns its tables. When one module writes anothe
 **As a rule for agents:** A module MUST only write its own schema; it uses other modules through their public services.
 
 Learn: `pattern.modular-monolith`.
+
+## Analysis rules
+
+These rules read the code, not the model: `archguide analyze` and `archguide check` run them
+on the facts the analyzer finds (Implementation.md §19), and every finding points at a file
+and a line. Rules that exist as model rules too share their ID.
+
+| Rule | Title | Severity |
+| --- | --- | --- |
+| RNP-001 | Shared tables between services | warning |
+| RNP-002 | Several migration owners | error |
+| RNP-003 | Database client in the frontend bundle | error |
+| RNP-004 | Secrets exposed to the browser | error |
+| RNP-005 | Route handler uses the database directly | warning |
+| RNP-006 | Domain depends on the database or framework | warning |
+| RNP-012 | Server data in the client store | info |
+| RNP-013 | Feature-Sliced Design layer direction | warning |
+| RNP-015 | No validation at the boundary | info |
+| RNP-017 | Foreign key without an index | info |
+| RNP-018 | Import cycle between Node modules | warning |
+
+### RNP-001 (code)
+
+**Shared tables between services** · warning
+
+When two services write the same tables, a migration in one can break the other, and neither can be deployed alone. Separate databases, or separate schemas on one Postgres server, are fine. Give each schema one owning service; other services get the data through its API or its events. Background workers of the same service do not count as other writers.
+
+Learn: `pg.table`.
+
+### RNP-002 (code)
+
+**Several migration owners** · error
+
+Migrations change the shape of tables. When two codebases run migrations on the same schema, they overwrite each other's changes and the order of deploys decides what the database looks like. Pick one owner per schema; others read through a view or an API.
+
+Learn: `pg.table`.
+
+### RNP-003 (code)
+
+**Database client in the frontend bundle** · error
+
+Code in the browser is public: anyone can read it and call what it calls. A database client there means database credentials in the bundle, or a database open to the internet. The browser talks to a Node.js API; only types and validation schemas (zod) are shared.
+
+Learn: `react.app`.
+
+### RNP-004 (code)
+
+**Secrets exposed to the browser** · error
+
+Bundlers copy `VITE_*`, `REACT_APP_*` and `NEXT_PUBLIC_*` variables into the JavaScript every visitor downloads. A password, a token or a database URL there is public. Keep secrets in the server environment and add an endpoint that does the work.
+
+Learn: `topic.authentication`.
+
+### RNP-005 (code)
+
+**Route handler uses the database directly** · warning
+
+A route handler should turn HTTP into a call and back. When it also runs queries, business rules end up in controllers, are copied between endpoints, and cannot be tested without HTTP. Put a use case and a repository between the handler and Postgres.
+
+Learn: `topic.models`.
+
+### RNP-006 (code)
+
+**Domain depends on the database or framework** · warning
+
+The domain holds the business rules. If it imports the ORM, a repository class or HTTP code, every infrastructure change touches the rules, and the rules cannot be tested alone. Let the domain depend on a port (an interface) that a repository implements.
+
+Learn: `topic.models`.
+
+### RNP-012 (code)
+
+**Server data in the client store** · info
+
+A thunk that loads data from the API and puts it in a Redux or Zustand store must handle loading flags, errors, caching, refetching and stale data by hand. A server-state cache (TanStack Query, RTK Query) does all of that. Keep the client store for state the server does not own: the cart before checkout, filters, UI flags.
+
+Learn: `react.server-state`.
+
+### RNP-013 (code)
+
+**Feature-Sliced Design layer direction** · warning
+
+In Feature-Sliced Design a layer only imports layers below it: app → pages → widgets → features → entities → shared. An import upwards creates hidden cycles. Move the shared code down, or pass it in through props or slots.
+
+### RNP-015 (code)
+
+**No validation at the boundary** · info
+
+Data from the network can be anything. TypeScript types disappear at run time, so a handler that trusts its input crashes, or writes bad data. Validate every request with a schema (zod, TypeBox, class-validator); share the schema with the frontend through a contract.
+
+Learn: `node.endpoint`.
+
+### RNP-017 (code)
+
+**Foreign key without an index** · info
+
+PostgreSQL indexes primary keys, not foreign keys. Joins on the foreign key, and deletes or updates of the referenced row, then scan the whole table. Add an index whose first columns are the foreign key columns.
+
+Learn: `pg.table`.
+
+### RNP-018 (code)
+
+**Import cycle between Node modules** · warning
+
+Modules that import each other cannot be understood, tested or split alone, and a change in one ripples into the other. Extract what both need into a third module, or let one of them publish an event the other handles.
+
+Learn: `node.module`.

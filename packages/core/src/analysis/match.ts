@@ -114,8 +114,17 @@ export function matchModel(
   const detectable = options.detectableKinds ?? new Set(candidates.elements.map((e) => e.kind));
   return {
     newInCode: ordered.filter((c) => !matches[c.id]).map((c) => idFor.get(c.id)!),
+    // Missing: existing elements tied to code (code paths, or found by an earlier analysis), and
+    // others of a kind this run detects at all.
     missingInCode: model.elements
-      .filter((e) => e.status === 'existing' && detectable.has(e.kind) && !used.has(e.id))
+      .filter(
+        (e) =>
+          e.status === 'existing' &&
+          !used.has(e.id) &&
+          (Boolean(e.codePaths?.length) ||
+            e.source?.origin === 'inferred' ||
+            detectable.has(e.kind)),
+      )
       .map((e) => e.id),
     changed,
     suggestedOps,

@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -202,6 +202,31 @@ describe('archguide serve', () => {
       /EADDRINUSE/,
     );
     expect(await readLock(other)).toBeUndefined();
+  });
+
+  it('serves the last analysis, tells browsers about a new one, and stores rejected subjects', async () => {
+    const browser = await connect();
+    expect((await api('/api/analysis')).status).toBe(404);
+    await mkdir(ws.localPath('analysis'), { recursive: true });
+    await writeFile(
+      ws.localPath('analysis', 'last.json'),
+      JSON.stringify({ candidates: { elements: [], relations: [] } }),
+    );
+    await browser.next('analysis', 5000);
+    expect(await (await api('/api/analysis')).json()).toMatchObject({
+      ok: true,
+      analysis: { candidates: {} },
+    });
+    const post = (subjects: unknown) =>
+      api('/api/analysis/rejected', { method: 'POST', body: JSON.stringify({ subjects }) });
+    expect(await (await post(['ext:Stripe', 'pkg:a'])).json()).toEqual({ ok: true, rejected: 2 });
+    expect(await (await post(['pkg:a', 'pkg:b'])).json()).toEqual({ ok: true, rejected: 3 });
+    expect(JSON.parse(await readFile(ws.localPath('analysis', 'rejected.json'), 'utf8'))).toEqual([
+      'ext:Stripe',
+      'pkg:a',
+      'pkg:b',
+    ]);
+    expect((await post('nope')).status).toBe(400);
   });
 
   it('refuses to start twice for one workspace, and removes the lock when it stops', async () => {

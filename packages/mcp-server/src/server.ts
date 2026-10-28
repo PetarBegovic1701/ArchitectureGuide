@@ -7,6 +7,7 @@ import type { McpContext } from './context';
 import { registerPrompts } from './prompts';
 import { registerResources } from './resources';
 import { registerTools } from './tools';
+import { registerAnalysisTools } from './analysis-tools';
 
 export const SERVER_NAME = 'archguide';
 export const SERVER_VERSION = '0.0.0';
@@ -25,6 +26,7 @@ export function createMcpServer(ctx: McpContext): McpServer {
     { instructions: INSTRUCTIONS },
   );
   registerTools(server, ctx);
+  registerAnalysisTools(server, ctx);
   registerResources(server, ctx);
   registerPrompts(server, ctx);
   return server;
@@ -34,6 +36,8 @@ export interface StdioOptions {
   /** The architecture folder (default: ./architecture). */
   workspace: string;
   readOnly?: boolean;
+  /** The repository to analyze (default: the workspace's codeRoot). */
+  repo?: string;
 }
 
 /** `archguide mcp`: serves the workspace over stdio until the client disconnects. */
@@ -42,6 +46,7 @@ export async function runStdio(options: StdioOptions): Promise<void> {
     workspace: new Workspace(options.workspace),
     catalog: defaultCatalog(),
     readOnly: options.readOnly ?? false,
+    ...(options.repo ? { repo: options.repo } : {}),
   });
   await server.connect(new StdioServerTransport());
 }

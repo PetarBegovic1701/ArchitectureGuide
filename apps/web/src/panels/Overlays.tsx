@@ -17,11 +17,13 @@ import {
   exportJson,
   redo,
   tidyUp,
+  createDatabaseView,
   undo,
 } from '../actions';
 import { useProject } from '../store/project';
 import { useUi } from '../store/ui';
 import { isServed } from '../persistence/serve';
+import { SHARED_COLOR, ownershipColors } from '../lib/ownership';
 import { draftAndEditTour, playTour } from './Tours';
 
 /** Toasts with actions such as "Reverse it" and "Why?" (§10.4). */
@@ -170,6 +172,21 @@ export function CommandPalette() {
         ? []
         : [{ id: 'snapshots', label: 'Snapshots…', run: () => ui.set({ dialog: 'snapshots' }) }]),
       { id: 'tidy', label: 'Tidy up (automatic layout)', run: () => void tidyUp() },
+      {
+        id: 'analysis',
+        label: 'Analysis: review what the analyzer found',
+        run: () => ui.set({ dialog: 'analysis' }),
+      },
+      {
+        id: 'database-view',
+        label: 'Create database view (data ownership)',
+        run: createDatabaseView,
+      },
+      {
+        id: 'ownership',
+        label: 'Toggle ownership colors',
+        run: () => ui.set({ ownership: !useUi.getState().ownership }),
+      },
       ...(project?.tours ?? []).map((t) => ({
         id: `tour-${t.id}`,
         label: `Play tour: ${t.title}`,
@@ -315,5 +332,56 @@ export function Legend() {
         </span>
       ))}
     </div>
+  );
+}
+
+/** Legend of the ownership colors (database view): who owns which schema, and shared data. */
+export function OwnershipLegend() {
+  const project = useProject((s) => s.project);
+  const viewId = useProject((s) => s.viewId);
+  const on = useUi((s) => s.ownership);
+  const view = project?.views.find((v) => v.id === viewId) ?? project?.views[0];
+  const legend = useMemo(() => (project ? ownershipColors(project).legend : null), [project]);
+  if (!legend || !(on || view?.kind === 'database')) return null;
+  return (
+    <aside
+      aria-label="Data ownership"
+      className="absolute right-3 top-3 z-10 max-w-64 rounded-lg border border-[var(--ag-border)] bg-[var(--ag-panel)] p-2 text-xs shadow"
+    >
+      <h3 className="mb-1 font-semibold">Data ownership</h3>
+      {legend.owners.length === 0 && legend.shared.length === 0 && (
+        <p className="text-[var(--ag-muted)]">
+          No schema has an owner yet: connect a service with “migrates”.
+        </p>
+      )}
+      <ul className="space-y-0.5">
+        {legend.owners.map((o) => (
+          <li key={o.id} className="flex items-center gap-1.5">
+            <span
+              className="inline-block h-2.5 w-2.5 shrink-0 rounded-sm"
+              style={{ background: o.color }}
+              aria-hidden
+            />
+            <span className="font-medium">{o.name}</span>
+            {o.owns.length > 0 && (
+              <span className="truncate text-[var(--ag-muted)]">owns {o.owns.join(', ')}</span>
+            )}
+          </li>
+        ))}
+        {legend.shared.map((x) => (
+          <li key={x.id} className="flex items-center gap-1.5" data-testid="shared-data">
+            <span
+              className="inline-block h-2.5 w-2.5 shrink-0 rounded-sm"
+              style={{ background: SHARED_COLOR }}
+              aria-hidden
+            />
+            <span className="font-medium">{x.name}</span>
+            <span className="truncate text-[var(--ag-muted)]">
+              written by {x.writers.join(', ')}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </aside>
   );
 }

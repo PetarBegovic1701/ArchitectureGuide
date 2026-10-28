@@ -9,6 +9,8 @@ export interface McpContext {
   catalog: Catalog;
   /** `--read-only`: write tools refuse (§20.5). */
   readOnly: boolean;
+  /** `--repo`: the code to analyze (default: the workspace's codeRoot). */
+  repo?: string;
 }
 
 /** Errors in tool results: op errors, or tool-level ones with their own codes. */

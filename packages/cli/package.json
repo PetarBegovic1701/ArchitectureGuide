@@ -16,13 +16,18 @@
     "build": "tsx scripts/build.ts"
   },
   "dependencies": {
+    "@archguide/analyzer": "workspace:*",
     "@archguide/core": "workspace:*",
     "@archguide/mcp-server": "workspace:*",
     "@archguide/profile-react-node-postgres": "workspace:*",
     "@archguide/server": "workspace:*",
     "@archguide/workspace": "workspace:*",
     "commander": "15.0.0",
-    "picocolors": "1.1.1"
+    "dependency-cruiser": "18.7.0",
+    "libpg-query": "17.7.4",
+    "pg": "8.23.1",
+    "picocolors": "1.1.1",
+    "typescript": "6.0.3"
   },
   "devDependencies": {
     "esbuild": "0.28.2",

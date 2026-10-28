@@ -16,6 +16,8 @@ export interface GeneratedConfig {
   content: string;
   /** Rule names, for reports and tests. */
   rules: string[];
+  /** The config as data, when the tool can take it in memory (`archguide check`). */
+  data?: unknown;
 }
 
 /** Turns the model into a config that a standard tool enforces in CI (Implementation.md §23.1). */

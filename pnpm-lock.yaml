@@ -157,6 +157,9 @@ importers:
 
   packages/cli:
     dependencies:
+      '@archguide/analyzer':
+        specifier: workspace:*
+        version: link:../analyzer
       '@archguide/core':
         specifier: workspace:*
         version: link:../core
@@ -175,9 +178,21 @@ importers:
       commander:
         specifier: 15.0.0
         version: 15.0.0
+      dependency-cruiser:
+        specifier: 18.7.0
+        version: 18.7.0
+      libpg-query:
+        specifier: 17.7.4
+        version: 17.7.4
+      pg:
+        specifier: 8.23.1
+        version: 8.23.1
       picocolors:
         specifier: 1.1.1
         version: 1.1.1
+      typescript:
+        specifier: 6.0.3
+        version: 6.0.3
     devDependencies:
       '@modelcontextprotocol/sdk':
         specifier: 1.32.2
@@ -203,6 +218,9 @@ importers:
 
   packages/mcp-server:
     dependencies:
+      '@archguide/analyzer':
+        specifier: workspace:*
+        version: link:../analyzer
       '@archguide/core':
         specifier: workspace:*
         version: link:../core

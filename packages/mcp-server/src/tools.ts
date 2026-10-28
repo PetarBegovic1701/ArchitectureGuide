@@ -47,7 +47,7 @@ export function toResult(env: Envelope): CallToolResult {
 }
 
 /** Runs a tool body and turns thrown errors into a failed envelope. */
-async function run(body: () => Promise<Envelope>): Promise<CallToolResult> {
+export async function run(body: () => Promise<Envelope>): Promise<CallToolResult> {
   try {
     return toResult(await body());
   } catch (error) {

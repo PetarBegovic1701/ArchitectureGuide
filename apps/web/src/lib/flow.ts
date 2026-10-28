@@ -70,6 +70,8 @@ export interface FlowOptions {
   highlightIds?: ReadonlySet<Id>;
   compare?: { added: ReadonlySet<Id>; changed: ReadonlySet<Id> } | null;
   decisions?: ReadonlyMap<Id, Id[]>;
+  /** Ownership colors (database view): they replace the shapes' own colors. */
+  ownership?: ReadonlyMap<Id, string> | null;
 }
 
 /**
@@ -120,7 +122,7 @@ export function toFlowNodes(p: Project, view: View, options: FlowOptions = {}): 
           conceptName: concept?.name ?? el.kind,
           icon: concept?.icon ?? 'box',
           shape: container ? 'container' : shapeFor(el.kind),
-          color: colorOf(el),
+          color: options.ownership?.get(el.id) ?? colorOf(el),
           w: size.w,
           h: size.h,
           container,

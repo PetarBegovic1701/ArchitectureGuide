@@ -20,12 +20,12 @@ See [Implementation.md](Implementation.md) for the full design and the delivery 
 
 ## Status
 
-Phases 0 to 7 are done: foundations, canvas, rules engine, templates and projects, notes and
-exports, responsive editor, learning mode, and the server, CLI and MCP server. Run
-`pnpm install && pnpm dev` and open http://localhost:5179: create a project or open the
-starter, drag shapes from the palette, connect them, and open the **Learn** tab. The
-**Problems** panel lists anti-patterns in the design, with quick fixes and a "Why?"
-explanation for each. All rules: [docs/RULES.md](docs/RULES.md).
+Phases 0 to 8 are done: foundations, canvas, rules engine, templates and projects, notes and
+exports, responsive editor, learning mode, the server, CLI and MCP server, and repository
+analysis with enforcement. Run `pnpm install && pnpm dev` and open http://localhost:5179:
+create a project or open the starter, drag shapes from the palette, connect them, and open
+the **Learn** tab. The **Problems** panel lists anti-patterns in the design, with quick fixes
+and a "Why?" explanation for each. All rules: [docs/RULES.md](docs/RULES.md).
 
 Start from one of eight architecture templates (starter, layered, hexagonal, modular
 monolith, backend-for-frontend, database per service, background jobs, Feature-Sliced
@@ -44,6 +44,7 @@ JSON, PNG and SVG. Examples for every template: [golden files](packages/profiles
 | [`apps/web`](apps/web)                                                           | The builder: React Flow canvas, palette, inspector with generated property forms, Learn tab with three levels, refusals with fixes and explanations, Problems panel with finding badges, quick fixes and suppressions, templates, snapshots with compare, automatic layout and align, undo/redo, copy/paste, command palette, autosave in the browser or to a folder, JSON import/export                                                    |
 | [`packages/core`](packages/core)                                                 | Zod schema of the project file, deterministic serialization, migrations, readable IDs, the concept catalog (shapes, categories, relation rules and properties, concept guides), the op engine with undo, graph queries and the rules engine with 18 generic anti-pattern rules, the template engine, project diff, and the learning module (content schemas, parsers, lesson checks)                                                        |
 | [`packages/profiles/react-node-postgres`](packages/profiles/react-node-postgres) | React, Node.js and PostgreSQL concepts, profile relation types, the hard constraints, 24 stack rules (ownership, concurrency, API design, authentication, state management), eight architecture templates, concept guides (real-world uses and typical connections for every shape), and learning content: [texts](packages/profiles/react-node-postgres/content/docs) and [lessons](packages/profiles/react-node-postgres/content/lessons) |
+| [`packages/analyzer`](packages/analyzer)                                         | The repository analyzer: discover, engines (TypeScript index, Prisma, SQL, compose, env), detectors, resolve and match, cache, live Postgres introspection, `archguide check`; [fixture repositories](packages/analyzer/fixtures)                                                                                                                                                                                                           |
 | [`packages/workspace`](packages/workspace)                                       | File IO shared by the server, the CLI and MCP: atomic writes, file locks, revision checks, the serve lock file, export writing                                                                                                                                                                                                                                                                                                              |
 | [`packages/server`](packages/server)                                             | `archguide serve`: the web app, the HTTP API and the WebSocket protocol, the single writer of the files while it runs, file watching                                                                                                                                                                                                                                                                                                        |
 | [`packages/mcp-server`](packages/mcp-server)                                     | `archguide-mcp`: tools, resources and prompts for AI agents (stdio)                                                                                                                                                                                                                                                                                                                                                                         |
@@ -87,7 +88,27 @@ prompt; every write returns only the findings it introduced. The CLI also valida
 (`archguide validate --fail-on warning`), exports, explains concepts in the terminal and
 writes the onboarding pack (`archguide --help`).
 
-Next: Phase 8, repository analysis and enforcement (Implementation.md §19, §23).
+**Read an existing repository and keep it in line with the model** (Phase 8):
+
+```bash
+npx archguide analyze           # draft the model from the code, with evidence (no code is run)
+npx archguide analyze --write   # add the suggestions to the project, as inferred
+npx archguide check --format github --fail-on error   # CI gate: rules, code findings, generated dependency rules, drift
+npx archguide generate dependency-cruiser             # also nx, archunit
+```
+
+The analyzer finds deployables, routes, handlers, NestJS modules, state, API clients, schemas
+and tables (Prisma, Drizzle, TypeORM, SQL migrations), job queues, service calls and who owns
+which data, and reports code problems with file and line: database clients in the browser,
+secrets in `VITE_*` variables, shared tables, several migration owners, foreign keys without an
+index, import cycles between modules and more ([docs/RULES.md](docs/RULES.md#analysis-rules)).
+`--db` also reads a live database catalog, read-only. In the editor, the **Analysis** dialog
+lists the suggestions with their evidence (accept, edit or reject), and **Views → Create
+database view** colors the data by the service that owns it. MCP agents get
+`analyze_repository`, `apply_analysis`, `diff_with_repository`, `generate_enforcement` and the
+`map-repository` and `review-change` prompts. CI: [docs/examples/architecture.yml](docs/examples/architecture.yml).
+
+Next: Phase 9, change sets and advanced views (Implementation.md §16).
 
 ## Development
 
