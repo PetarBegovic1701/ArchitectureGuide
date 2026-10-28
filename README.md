@@ -20,8 +20,8 @@ See [Implementation.md](Implementation.md) for the full design and the delivery 
 
 ## Status
 
-Phases 0 (foundations), 1 (canvas), 2 (rules engine), 3 (templates and projects) and
-4 (notes, annotations, exports) are done. Run
+Phases 0 to 7 are done: foundations, canvas, rules engine, templates and projects, notes and
+exports, responsive editor, learning mode, and the server, CLI and MCP server. Run
 `pnpm install && pnpm dev` and open http://localhost:5179: create a project or open the
 starter, drag shapes from the palette, connect them, and open the **Learn** tab. The
 **Problems** panel lists anti-patterns in the design, with quick fixes and a "Why?"
@@ -44,6 +44,11 @@ JSON, PNG and SVG. Examples for every template: [golden files](packages/profiles
 | [`apps/web`](apps/web)                                                           | The builder: React Flow canvas, palette, inspector with generated property forms, Learn tab with three levels, refusals with fixes and explanations, Problems panel with finding badges, quick fixes and suppressions, templates, snapshots with compare, automatic layout and align, undo/redo, copy/paste, command palette, autosave in the browser or to a folder, JSON import/export                                                    |
 | [`packages/core`](packages/core)                                                 | Zod schema of the project file, deterministic serialization, migrations, readable IDs, the concept catalog (shapes, categories, relation rules and properties, concept guides), the op engine with undo, graph queries and the rules engine with 18 generic anti-pattern rules, the template engine, project diff, and the learning module (content schemas, parsers, lesson checks)                                                        |
 | [`packages/profiles/react-node-postgres`](packages/profiles/react-node-postgres) | React, Node.js and PostgreSQL concepts, profile relation types, the hard constraints, 24 stack rules (ownership, concurrency, API design, authentication, state management), eight architecture templates, concept guides (real-world uses and typical connections for every shape), and learning content: [texts](packages/profiles/react-node-postgres/content/docs) and [lessons](packages/profiles/react-node-postgres/content/lessons) |
+| [`packages/workspace`](packages/workspace)                                       | File IO shared by the server, the CLI and MCP: atomic writes, file locks, revision checks, the serve lock file, export writing                                                                                                                                                                                                                                                                                                              |
+| [`packages/server`](packages/server)                                             | `archguide serve`: the web app, the HTTP API and the WebSocket protocol, the single writer of the files while it runs, file watching                                                                                                                                                                                                                                                                                                        |
+| [`packages/mcp-server`](packages/mcp-server)                                     | `archguide-mcp`: tools, resources and prompts for AI agents (stdio)                                                                                                                                                                                                                                                                                                                                                                         |
+| [`packages/cli`](packages/cli)                                                   | `archguide`: init, serve, validate, export, templates, explain, onboarding, migrate, mcp                                                                                                                                                                                                                                                                                                                                                    |
+| [`skills/archguide`](skills/archguide)                                           | The Claude Code skill that `archguide init` copies into a repository                                                                                                                                                                                                                                                                                                                                                                        |
 | [`schema/archguide.schema.json`](schema/archguide.schema.json)                   | JSON Schema of the project file, generated from the Zod schema                                                                                                                                                                                                                                                                                                                                                                              |
 
 Pick a shape and the builder explains it: what it is for, where it is used in real
@@ -62,7 +67,27 @@ arrow at beginner, intermediate and senior level, with quizzes. The **Concurrenc
 (`#/lab`) replays a lost update, and its fixes, step by step. Progress stays in the browser
 and can be exported.
 
-Next: Phase 7, server, CLI and MCP (Implementation.md §20).
+**Work with your repository and AI agents** (Phase 7):
+
+```bash
+npx archguide init --template T1   # architecture/ with config, a project, ARCHITECTURE.md and the Claude Code skill
+npx archguide serve                # the editor on these files; opens at http://127.0.0.1:4317/?t=…
+claude mcp add archguide -- npx archguide-mcp --workspace ./architecture
+```
+
+The packages are not on npm yet: in this repository, use `pnpm archguide …` instead of
+`npx archguide …`, and `node packages/cli/dist/archguide-mcp.js` after `pnpm build`.
+
+While `archguide serve` runs, every change an agent makes through MCP (or the CLI) shows up
+live in the open browser tab, and changes in the browser are saved to the files. When a file
+changes outside the app while you have unsaved changes, the editor asks: reapply or discard.
+The MCP server has 26 tools (read and edit the model, templates, rules and quick fixes,
+exports, learning texts, lessons, onboarding and tours), resources and the `plan-feature`
+prompt; every write returns only the findings it introduced. The CLI also validates
+(`archguide validate --fail-on warning`), exports, explains concepts in the terminal and
+writes the onboarding pack (`archguide --help`).
+
+Next: Phase 8, repository analysis and enforcement (Implementation.md §19, §23).
 
 ## Development
 
@@ -71,6 +96,7 @@ Requirements: Node.js 22.12 or later, pnpm 10.
 ```bash
 pnpm install
 pnpm dev           # the builder at http://localhost:5179
+pnpm archguide     # the CLI from the sources, e.g. pnpm archguide serve --workspace ../my-repo/architecture
 pnpm test          # Vitest (unit, property and content tests)
 pnpm e2e           # Playwright scenarios: desktop, phone and tablet projects
 pnpm typecheck     # tsc in every package (Turborepo)
@@ -80,7 +106,7 @@ pnpm depcruise     # package boundaries (Implementation.md §4.2)
 pnpm schema        # regenerate schema/archguide.schema.json
 pnpm content       # compile learning texts and lessons after editing content/
 pnpm rules-doc     # regenerate docs/RULES.md after changing a rule
-pnpm build         # production build of the builder
+pnpm build         # production build of the builder and the bundled CLI (packages/cli/dist)
 pnpm check         # everything CI runs (except e2e)
 ```
 

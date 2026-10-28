@@ -17,6 +17,12 @@ export interface Selection {
 
 const HISTORY_LIMIT = 200;
 
+/** Serve mode: gets every change made in this tab (dispatch, undo, redo) to send it. */
+let localChanges: ((ops: Op[]) => void) | null = null;
+export function onLocalChanges(listener: ((ops: Op[]) => void) | null): void {
+  localChanges = listener;
+}
+
 interface ProjectState {
   project: Project | null;
   viewId: Id;
@@ -41,6 +47,10 @@ interface ProjectState {
   patchSilently(patch: Pick<Partial<Project>, 'snapshots'>): void;
   /** Replaces the whole project (restoring a snapshot). History starts over. */
   replace(project: Project): void;
+  /** Serve mode: ops from MCP, the CLI or another tab. Not an undo step. */
+  applyRemote(ops: Op[], revision: number): boolean;
+  /** Serve mode: the server's version replaces this tab's copy; history starts over. */
+  replaceRemote(project: Project): void;
 }
 
 export const useProject = create<ProjectState>((set, get) => ({
@@ -92,6 +102,7 @@ export const useProject = create<ProjectState>((set, get) => ({
       version: version + 1,
       selection: pruneSelection(result.project, get().selection),
     });
+    localChanges?.(ops);
     return [];
   },
 
@@ -108,6 +119,7 @@ export const useProject = create<ProjectState>((set, get) => ({
       version: version + 1,
       selection: pruneSelection(result.project, get().selection),
     });
+    localChanges?.(entry.inverse);
   },
 
   redo() {
@@ -123,6 +135,7 @@ export const useProject = create<ProjectState>((set, get) => ({
       version: version + 1,
       selection: pruneSelection(result.project, get().selection),
     });
+    localChanges?.(entry.ops);
   },
 
   select(selection) {
@@ -141,6 +154,34 @@ export const useProject = create<ProjectState>((set, get) => ({
       future: [],
       selection: { elements: [], relations: [] },
       version: get().version + 1,
+    });
+  },
+
+  applyRemote(ops, revision) {
+    const { project, version } = get();
+    if (!project) return false;
+    const result = applyOps(project, ops, catalog);
+    if (!result.ok) return false;
+    // Undo steps stay: they are ID-based and are checked again when used.
+    set({
+      project: { ...result.project, revision },
+      version: version + 1,
+      selection: pruneSelection(result.project, get().selection),
+    });
+    return true;
+  },
+
+  replaceRemote(project) {
+    const { viewId, version } = get();
+    set({
+      project,
+      viewId: project.views.some((v) => v.id === viewId)
+        ? viewId
+        : (project.views[0]?.id ?? 'main'),
+      past: [],
+      future: [],
+      selection: pruneSelection(project, get().selection),
+      version: version + 1,
     });
   },
 

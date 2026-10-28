@@ -1,0 +1,33 @@
+{
+  "name": "@archguide/cli",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "archguide: init, serve, validate, export, explain and the MCP server from the terminal",
+  "bin": {
+    "archguide": "./dist/archguide.js",
+    "archguide-mcp": "./dist/archguide-mcp.js"
+  },
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json && tsc -p scripts/tsconfig.json",
+    "build": "tsx scripts/build.ts"
+  },
+  "dependencies": {
+    "@archguide/core": "workspace:*",
+    "@archguide/mcp-server": "workspace:*",
+    "@archguide/profile-react-node-postgres": "workspace:*",
+    "@archguide/server": "workspace:*",
+    "@archguide/workspace": "workspace:*",
+    "commander": "15.0.0",
+    "picocolors": "1.1.1"
+  },
+  "devDependencies": {
+    "esbuild": "0.28.2",
+    "@modelcontextprotocol/sdk": "1.32.2",
+    "@types/ws": "^8.18.1",
+    "ws": "8.22.0"
+  }
+}

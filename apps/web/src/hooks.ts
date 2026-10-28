@@ -11,7 +11,9 @@ import {
 } from './actions';
 import { saveProject } from './persistence/db';
 import { folder } from './persistence/folder';
-import { useProject } from './store/project';
+import { ServeSync, isServed } from './persistence/serve';
+import type { SyncState } from './persistence/serve';
+import { onLocalChanges, useProject } from './store/project';
 import { useUi } from './store/ui';
 
 export type Route =
@@ -146,7 +148,7 @@ export function useShortcuts(): void {
   }, []);
 }
 
-export type SaveStatus = 'saved' | 'saving' | 'error';
+export type SaveStatus = 'saved' | 'saving' | 'error' | 'connecting' | 'offline' | 'conflict';
 
 export type Screen = 'phone' | 'tablet' | 'desktop';
 
@@ -192,7 +194,8 @@ export function useFolder(): { open: boolean; name: string; revision: number } {
  * after the first unsaved change, and when the editor closes (§14.3).
  */
 export function useAutosave(): SaveStatus {
-  const version = useProject((s) => s.version);
+  // Served projects are saved by the server (§14.3).
+  const version = useProject((s) => (isServed(s.project?.id) ? 0 : s.version));
   const [status, setStatus] = useState<SaveStatus>('saved');
   const pending = useRef(false);
 
@@ -236,4 +239,50 @@ export function useAutosave(): SaveStatus {
   }, [flush]);
 
   return status;
+}
+
+let activeSync: ServeSync | null = null;
+const IDLE: SyncState = { status: 'connecting', pending: 0, conflict: null, lastRemote: null };
+
+/** The open project's serve-mode sync, for the conflict banner and the status. */
+export const currentSync = (): ServeSync | null => activeSync;
+
+/**
+ * Serve mode: connects the open project to `archguide serve`, sends this tab's changes and
+ * applies everyone else's live (§14.5). Returns the sync state; outside serve mode, null.
+ */
+export function useServeSync(projectId: string): SyncState | null {
+  const [sync, setSync] = useState<ServeSync | null>(null);
+  useEffect(() => {
+    if (!isServed(projectId)) return;
+    const store = useProject.getState;
+    const next = new ServeSync(projectId, {
+      current: () => store().project,
+      applyRemote: (ops, revision) => store().applyRemote(ops, revision),
+      replaceRemote: (project) => store().replaceRemote(project),
+      setRevision: (revision) => {
+        const p = store().project;
+        if (p && p.revision < revision) store().markSaved(revision, p.updatedAt);
+      },
+      rejected: (errors) =>
+        useUi.getState().toast({
+          tone: 'error',
+          message: `The server did not save a change: ${errors[0]?.message ?? 'unknown error'}. The project was reloaded.`,
+        }),
+    });
+    activeSync = next;
+    onLocalChanges((ops) => next.send(ops));
+    setSync(next);
+    return () => {
+      onLocalChanges(null);
+      if (activeSync === next) activeSync = null;
+      next.close();
+    };
+  }, [projectId]);
+  return (
+    useSyncExternalStore(
+      (listener) => sync?.subscribe(listener) ?? (() => {}),
+      () => (sync ? sync.state : null),
+    ) ?? (isServed(projectId) ? IDLE : null)
+  );
 }

@@ -8,6 +8,10 @@
     "build": {
       "dependsOn": ["^build"],
       "outputs": ["dist/**"]
+    },
+    "@archguide/cli#build": {
+      "dependsOn": ["^build", "@archguide/web#build"],
+      "outputs": ["dist/**"]
     }
   }
 }

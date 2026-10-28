@@ -44,14 +44,36 @@ import {
 import { Menu } from '../panels/Menu';
 import type { MenuItem } from '../panels/Menu';
 import { BottomSheet, BottomToolbar, ConnectBanner, ContextMenu, Drawer } from '../panels/Mobile';
-import { useAutosave, useFolder, useScreen, useShortcuts } from '../hooks';
+import {
+  currentSync,
+  useAutosave,
+  useFolder,
+  useScreen,
+  useServeSync,
+  useShortcuts,
+} from '../hooks';
 import type { Screen } from '../hooks';
 import { folder } from '../persistence/folder';
 import type { SaveStatus } from '../hooks';
 import { loadProject } from '../persistence/db';
+import { isServeMode, isServed, loadServeProject, markBrowserOnly } from '../persistence/serve';
+import type { SyncState } from '../persistence/serve';
 import { useProject } from '../store/project';
 import { useUi } from '../store/ui';
 import { LEVELS } from '../lib/learn';
+
+/**
+ * Serve mode loads from the server; a project that is not there but in this browser (a
+ * lesson's practice project) opens as a browser project, saved locally and not synced.
+ */
+async function loadEither(projectId: string) {
+  if (!isServeMode()) return loadProject(projectId);
+  const served = await loadServeProject(projectId);
+  if (served) return served;
+  const local = await loadProject(projectId);
+  if (local) markBrowserOnly(projectId);
+  return local;
+}
 
 export function Editor({ projectId }: { projectId: string }) {
   const project = useProject((s) => s.project);
@@ -59,7 +81,7 @@ export function Editor({ projectId }: { projectId: string }) {
 
   useEffect(() => {
     let cancelled = false;
-    void loadProject(projectId).then((p) => {
+    void loadEither(projectId).then((p) => {
       if (cancelled) return;
       if (p) useProject.getState().load(p);
       else setMissing(true);
@@ -77,7 +99,8 @@ export function Editor({ projectId }: { projectId: string }) {
     return (
       <main className="p-10">
         <p>
-          Project “{projectId}” was not found in this browser.{' '}
+          Project “{projectId}” was not found{' '}
+          {isServeMode() ? 'in the workspace' : 'in this browser'}.{' '}
           <a className="text-[var(--ag-accent)] underline" href="#/">
             Back to projects
           </a>
@@ -96,7 +119,9 @@ export function Editor({ projectId }: { projectId: string }) {
  */
 function EditorLoaded() {
   useShortcuts();
-  const status = useAutosave();
+  const saved = useAutosave();
+  const sync = useServeSync(useProject.getState().project!.id);
+  const status = sync ? syncStatus(sync) : saved;
   const screen = useScreen();
   const panel = useUi((s) => s.panel);
   const desktop = screen === 'desktop';
@@ -143,6 +168,7 @@ function EditorLoaded() {
               <Canvas />
               {screen !== 'phone' && <Legend />}
               <CompareBanner />
+              {sync?.conflict && <ConflictBanner sync={sync} />}
               <ConnectBanner />
               <TourPlayer />
               <TourEditor />
@@ -265,7 +291,54 @@ const STATUS_TEXT: Record<SaveStatus, string> = {
   saved: 'Saved',
   saving: 'Saving…',
   error: 'Not saved',
+  connecting: 'Connecting…',
+  offline: 'Offline: reconnecting…',
+  conflict: 'Conflict',
 };
+
+/** Serve mode: the server saves; the status follows the sync (§14.3). */
+function syncStatus(sync: SyncState): SaveStatus {
+  if (sync.conflict) return 'conflict';
+  if (sync.status !== 'live') return sync.status;
+  return sync.pending > 0 ? 'saving' : 'saved';
+}
+
+const ORIGIN_TEXT = {
+  mcp: 'an agent (MCP)',
+  cli: 'the CLI',
+  client: 'another tab',
+  file: 'a file change',
+};
+
+/** "The file changed outside the app. Reapply your changes / Discard" (§14.5). */
+function ConflictBanner({ sync }: { sync: SyncState }) {
+  const count = sync.conflict?.ops.length ?? 0;
+  return (
+    <div
+      role="alertdialog"
+      aria-label="Conflict"
+      className="absolute left-1/2 top-3 z-30 flex max-w-[calc(100%-1.5rem)] -translate-x-1/2 flex-wrap items-center gap-2 rounded-lg border border-[var(--ag-warning)] bg-[var(--ag-panel)] px-3 py-2 text-sm shadow-lg"
+    >
+      <span>
+        The file changed outside the app. You have {count} unsaved change{count === 1 ? '' : 's'}.
+      </span>
+      <button
+        type="button"
+        className="rounded bg-[var(--ag-accent)] px-2 py-1 text-xs font-semibold text-[var(--ag-accent-text)]"
+        onClick={() => currentSync()?.reapply()}
+      >
+        Reapply your changes
+      </button>
+      <button
+        type="button"
+        className="rounded border border-[var(--ag-border)] px-2 py-1 text-xs font-semibold"
+        onClick={() => currentSync()?.discard()}
+      >
+        Discard
+      </button>
+    </div>
+  );
+}
 
 const iconButton = 'ag-touch rounded p-1.5 hover:bg-[var(--ag-panel-2)] disabled:opacity-40';
 
@@ -287,6 +360,18 @@ function ProjectName({ className }: { className: string }) {
   );
 }
 
+/** Serve mode: who changed the model last, from outside this tab. */
+function LiveNote() {
+  const [sync, setSync] = useState(() => currentSync()?.state ?? null);
+  useEffect(() => currentSync()?.subscribe(() => setSync(currentSync()?.state ?? null)), []);
+  return (
+    <span data-testid="live-note">
+      {' · live'}
+      {sync?.lastRemote && ` · last change by ${ORIGIN_TEXT[sync.lastRemote.origin]}`}
+    </span>
+  );
+}
+
 function SaveStatusText({ status, short = false }: { status: SaveStatus; short?: boolean }) {
   const project = useProject((s) => s.project)!;
   const folderState = useFolder();
@@ -299,6 +384,7 @@ function SaveStatusText({ status, short = false }: { status: SaveStatus; short?:
     >
       {STATUS_TEXT[status]}
       {!short && inFolder && status === 'saved' && ` to folder ${folderState.name}`}
+      {!short && isServed(project.id) && status === 'saved' && <LiveNote />}
     </span>
   );
 }
@@ -341,7 +427,10 @@ function overflowItems(): MenuItem[] {
   const tours = useProject.getState().project?.tours ?? [];
   return [
     { label: 'Templates…', run: () => openDialog('templates') },
-    { label: 'Snapshots…', run: () => openDialog('snapshots') },
+    // Serve mode: the files are in git, which keeps the history.
+    ...(isServed(useProject.getState().project?.id)
+      ? []
+      : [{ label: 'Snapshots…', run: () => openDialog('snapshots') }]),
     { label: 'Export…', run: () => openDialog('export') },
     ...tours.map((t) => ({ label: `Play tour: ${t.title}`, run: () => playTour(t.id) })),
     ...tours.map((t) => ({
@@ -446,14 +535,16 @@ function TopBar({ status, screen }: { status: SaveStatus; screen: Screen }) {
       >
         <LayoutTemplate size={14} aria-hidden /> Templates
       </button>
-      <button
-        type="button"
-        className="flex items-center gap-1 rounded px-2 py-1 text-xs hover:bg-[var(--ag-panel-2)]"
-        onClick={() => useUi.getState().set({ dialog: 'snapshots' })}
-        title="Snapshots: save, compare and restore versions"
-      >
-        <History size={14} aria-hidden /> Snapshots
-      </button>
+      {!isServed(project.id) && (
+        <button
+          type="button"
+          className="flex items-center gap-1 rounded px-2 py-1 text-xs hover:bg-[var(--ag-panel-2)]"
+          onClick={() => useUi.getState().set({ dialog: 'snapshots' })}
+          title="Snapshots: save, compare and restore versions"
+        >
+          <History size={14} aria-hidden /> Snapshots
+        </button>
+      )}
       <Menu
         label="Tours"
         icon={<MapIcon size={14} aria-hidden />}

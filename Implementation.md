@@ -224,7 +224,8 @@ flowchart LR
     core["packages/core<br/>schema, ops, catalog, rules, graph, exporters"]
     profile["packages/profiles/react-node-postgres<br/>concepts, rules, templates, detectors, generators"]
     web["apps/web<br/>React canvas builder"]
-    server["packages/server<br/>local server: static app + WebSocket + file IO"]
+    workspace["packages/workspace<br/>file IO: atomic writes, locks, revisions"]
+    server["packages/server<br/>local server: static app + WebSocket"]
     cli["packages/cli<br/>archguide"]
     mcp["packages/mcp-server<br/>archguide-mcp"]
     analyzer["packages/analyzer<br/>detector runner"]
@@ -233,12 +234,17 @@ flowchart LR
   profile --> core
   web --> core
   web --> profile
+  workspace --> core
   server --> core
+  server --> workspace
   cli --> core
   cli --> analyzer
   cli --> server
+  cli --> mcp
+  cli --> workspace
   mcp --> core
   mcp --> analyzer
+  mcp --> workspace
   analyzer --> core
   analyzer --> profile
 
@@ -253,7 +259,7 @@ flowchart LR
 ### 4.1 Principles
 
 1. **All logic in `packages/core`.** Pure TypeScript, no DOM, no Node-only APIs
-   (file IO lives in `server`, `cli`, `mcp-server`). The same schema, rules and
+   (file IO lives in `workspace`, used by `server`, `cli` and `mcp-server`). The same schema, rules and
    exporters run in the browser, CLI, MCP and CI.
 2. **Everything is an operation.** Every change (UI action, MCP call, template
    stamp, change set, undo, sync) is a list of `Op`s (§8).
@@ -271,10 +277,11 @@ We enforce this with our own generated dependency-cruiser config (dogfooding):
 | `core` | nothing internal |
 | `profiles/*` | `core` |
 | `analyzer` | `core`, `profiles/*` |
-| `server` | `core` |
-| `cli` | `core`, `analyzer`, `server`, `profiles/*` |
-| `mcp-server` | `core`, `analyzer`, `profiles/*` |
-| `apps/web` | `core`, `profiles/*` (never `analyzer`, `server`, `cli`, `mcp-server`) |
+| `workspace` | `core` (Node file IO: project files, atomic writes, file locks, the serve lock file) |
+| `server` | `core`, `workspace` |
+| `cli` | `core`, `analyzer`, `workspace`, `server`, `mcp-server`, `profiles/*` (never `apps/web` sources; it serves the built app) |
+| `mcp-server` | `core`, `analyzer`, `workspace`, `profiles/*` |
+| `apps/web` | `core`, `profiles/*` (never `analyzer`, `workspace`, `server`, `cli`, `mcp-server`) |
 
 ---
 
@@ -369,8 +376,9 @@ ArchitectureGuide/
 │  │  ├─ src/engines/               # depcruise.ts, tsmorph.ts, prisma.ts, sql.ts, compose.ts, env.ts
 │  │  ├─ src/introspect/            # live Postgres (pg_catalog)
 │  │  └─ fixtures/                  # test repos
+│  ├─ workspace/                    # Node file IO shared by server, CLI and MCP: files, locks, revisions
 │  ├─ server/                       # archguide serve
-│  ├─ cli/                          # archguide
+│  ├─ cli/                          # archguide (bundles archguide and archguide-mcp with esbuild)
 │  └─ mcp-server/                   # archguide-mcp
 ├─ skills/
 │  └─ archguide/SKILL.md            # Claude Code skill (§21), copied by `archguide init`
@@ -1730,6 +1738,10 @@ db.version(1).stores({
 - **Revision conflict:** ops are re-validated against the newest revision. If
   they are still valid, they are applied (ops are small and ID-based, so this
   usually works). Otherwise, `REVISION_CONFLICT` with the details.
+- **After a reload from disk** the server refuses a browser's ops with
+  `REVISION_CONFLICT` until that browser answers the `state` with `hello`. Ops
+  that were in flight are therefore never applied behind the user's back: the
+  banner's Reapply sends them again on the new version, Discard drops them.
 
 ---
 
@@ -2946,16 +2958,56 @@ Estimates assume one full-time developer. They are rough.
 - [x] Content stream: a text for every concept and relation type (rule texts still open, §17.10); four lessons per track for `foundations`, `data-and-models`, `api-design`, `state-management`, `auth`, `concurrency-and-parallelism`
 - **Done when:** a beginner finishes `lesson.first-full-stack` without help in a usability test, every lesson in CI is solvable, and content coverage is 100% for concepts and relation types.
 
-### Phase 7: Server, CLI, MCP, skill (~2 weeks)
+### Phase 7: Server, CLI, MCP, skill (~2 weeks) — done
 
-- [ ] `server`: Fastify, static app, token, WebSocket protocol, chokidar, lock file, atomic writes, revision checks
-- [ ] Web `serveClient` (live updates, conflict UI)
-- [ ] CLI: `init`, `serve`, `validate`, `export`, `generate`, `templates`, `migrate`, `mcp`
-- [ ] MCP server: envelope, all tools except analysis ones, resources, prompts `plan-feature`
-- [ ] Skill file + `init` copy
-- [ ] Learning and onboarding tools: `explain_concept`, `search_learning`, `list_lessons`, `get_lesson`, `check_lesson_step`, `get_onboarding`, tours; CLI `explain`, `onboarding`
-- [ ] MCP contract tests
+- [x] `server`: Fastify, static app, token, WebSocket protocol, chokidar, lock file, atomic writes, revision checks
+- [x] Web `serveClient` (live updates, conflict UI)
+- [x] CLI: `init`, `serve`, `validate`, `export`, `generate`, `templates`, `migrate`, `mcp`
+- [x] MCP server: envelope, all tools except analysis ones, resources, prompts `plan-feature`
+- [x] Skill file + `init` copy
+- [x] Learning and onboarding tools: `explain_concept`, `search_learning`, `list_lessons`, `get_lesson`, `check_lesson_step`, `get_onboarding`, tours; CLI `explain`, `onboarding`
+- [x] MCP contract tests
 - **Done when:** Claude Code creates, edits, validates and exports a project only through MCP, and the open browser tab updates live.
+
+Implementation notes (Phase 7):
+
+- New package `workspace` (§4.2): the Node file IO that `server`, `cli` and `mcp-server` share.
+  Atomic writes (temp file + rename), an exclusive `<file>.lock` around read → apply → write,
+  revision checks, and the serve lock file `.archguide/server.json` (ignored when its pid is gone).
+  `applyToWorkspace` sends ops to the running server when the lock file exists, else writes the file.
+- Core helpers for agents and the CLI (`packages/core/src/tools/`): `upsertElementsOps`,
+  `upsertRelationsOps` (smart default type, ambiguous → error with the types), `removeItemsOps`,
+  `placeMissingOps` (new shapes appear in the first view, children inside their container),
+  `newFindings`, `catalogSummary`, `newProject`, `templateOps`; `explainText` in `learn/`.
+  MCP writes place new elements, so the browser shows them at once.
+- Server: before each write it compares the file with its cached copy; an edit the watcher has not
+  reported yet is reloaded first, never overwritten. After a reload from disk, the browsers' ops
+  are refused (`REVISION_CONFLICT`) until the browser answers the `state` with `hello`; this is
+  what makes "Reapply / Discard" exact (§14.5). MCP and CLI writes re-read first and are applied.
+- Web serve mode: `?t=<token>` is kept in `sessionStorage` and removed from the address bar. The
+  workspace page lists the server's projects and follows `projects` messages; new projects are
+  written by the server. Every dispatch, undo and redo is sent as ops; remote ops apply without
+  an undo step. Status: "Saved · live · last change by an agent (MCP)", "Saving…", "Offline",
+  "Conflict". No Dexie autosave for served projects; snapshots are hidden there (git keeps the
+  history). Lesson projects stay in the browser in serve mode too (they are practice, not part
+  of the repository's model).
+- `pnpm dev` proxies `/api` and `/ws` to `ARCHGUIDE_SERVE` (default `http://127.0.0.1:4317`), so the
+  dev server works against a running `archguide serve`.
+- MCP tool results: the envelope as JSON in `structuredContent` and a text block; long texts
+  (Markdown, YAML) come as a second text block. Export paths (`out`, config `exports[].out`) are
+  relative to the workspace folder; the default is the file's own name in it (`architecture/ARCHITECTURE.md`).
+  Resources follow §20.3 (without change sets). `explain_concept` also takes rule IDs.
+- `plan-feature` gives the steps without change sets (they come in Phase 9). Not done yet:
+  `audience` on `get_onboarding` and `draft_tour`, `--repo` (both need Phase 8 data), and
+  `archguide generate` (exits with code 2 until the Phase 8 generators exist).
+- CLI: `commander`; exit codes 0/1/2/3; `--json` and `--quiet` on every command; `init` is safe to run
+  twice. `pnpm archguide …` runs it from the sources (tsx); `pnpm --filter @archguide/cli build`
+  bundles `dist/archguide.js` and `dist/archguide-mcp.js` with esbuild, plus the skill and the built
+  web app.
+- Tests: MCP contract tests (in-memory client), CLI tests in-process (including `serve` with an MCP
+  client and a WebSocket "browser"), server protocol tests, and two Playwright scenarios against the
+  real `archguide serve`: an agent builds, validates and exports through MCP while the open tab
+  updates live; a file changes while a browser change is in flight (Discard and Reapply).
 
 ### Phase 8: Repository analysis and enforcement (~4 weeks)
 

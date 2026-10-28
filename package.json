@@ -8,6 +8,7 @@
   },
   "scripts": {
     "dev": "pnpm --filter @archguide/web run dev",
+    "archguide": "tsx packages/cli/src/bin.ts",
     "typecheck": "turbo run typecheck",
     "test": "vitest run",
     "test:watch": "vitest",

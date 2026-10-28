@@ -17,11 +17,22 @@ import { canOpenFolders, folder } from '../persistence/folder';
 import type { FolderProject } from '../persistence/folder';
 import { closeFolder, lastFolder, pickFolder, reopenFolder } from '../persistence/handles';
 import type { StoredProject } from '../persistence/db';
+import {
+  createServeProject,
+  isServeMode,
+  listServeProjects,
+  watchServeProjects,
+} from '../persistence/serve';
+import type { Project } from '@archguide/core';
 import { hrefFor, navigate, useFolder } from '../hooks';
 import { useUi } from '../store/ui';
 
 /** Project list: create, open, import, duplicate, delete (§14.4). */
 export function Workspace() {
+  return isServeMode() ? <ServeWorkspace /> : <BrowserWorkspace />;
+}
+
+function BrowserWorkspace() {
   const [projects, setProjects] = useState<StoredProject[] | null>(null);
   const [name, setName] = useState('');
   const fileInput = useRef<HTMLInputElement>(null);
@@ -367,6 +378,142 @@ export function Workspace() {
           onUse={(template, params, projectName) => {
             setPicking(false);
             void createFromTemplate(template, params, projectName);
+          }}
+        />
+      )}
+    </main>
+  );
+}
+
+/**
+ * Serve mode: the projects are the files in the served architecture/ folder. New projects
+ * are written there by the server; the list follows changes from MCP, the CLI and git.
+ */
+function ServeWorkspace() {
+  const [projects, setProjects] = useState<{ id: string; name: string; file: string }[] | null>(
+    null,
+  );
+  const [name, setName] = useState('');
+  const [picking, setPicking] = useState(false);
+  const toast = useUi((s) => s.toast);
+
+  const refresh = useCallback(async () => {
+    try {
+      setProjects(await listServeProjects());
+    } catch (error) {
+      toast({ tone: 'error', message: (error as Error).message });
+    }
+  }, [toast]);
+  useEffect(() => {
+    void refresh();
+    return watchServeProjects(() => void refresh());
+  }, [refresh]);
+
+  const freeId = (base: string) =>
+    uniqueId(slugify(base), new Set((projects ?? []).map((p) => p.id)));
+
+  const save = async (project: Project) => {
+    try {
+      await createServeProject(project);
+      navigate({ page: 'editor', projectId: project.id });
+    } catch (error) {
+      toast({ tone: 'error', message: (error as Error).message });
+    }
+  };
+
+  return (
+    <main className="mx-auto max-w-3xl px-4 py-10">
+      <header className="mb-8">
+        <h1 className="text-2xl font-bold">ArchitectureGuide</h1>
+        <p className="text-[var(--ag-muted)]">
+          Served by <code>archguide serve</code>: changes are saved to the workspace files, and
+          changes from MCP, the CLI and git show up here live.
+        </p>
+      </header>
+      <form
+        className="mb-8 flex flex-wrap items-end gap-2 rounded-lg border border-[var(--ag-border)] bg-[var(--ag-panel)] p-4"
+        onSubmit={(e) => {
+          e.preventDefault();
+          const projectName = name.trim() || 'Untitled architecture';
+          void save(
+            createProject({ id: freeId(projectName), name: projectName, profile: DEFAULT_PROFILE }),
+          );
+        }}
+      >
+        <label className="flex-1 text-xs text-[var(--ag-muted)]">
+          New project
+          <input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="e.g. Shop"
+            className="mt-1 block w-full rounded border border-[var(--ag-border)] bg-[var(--ag-bg)] px-2 py-1 text-sm text-[var(--ag-text)] outline-none focus:border-[var(--ag-accent)]"
+          />
+        </label>
+        <button
+          type="submit"
+          className="rounded bg-[var(--ag-accent)] px-3 py-1.5 text-sm font-semibold text-[var(--ag-accent-text)]"
+        >
+          Create
+        </button>
+        <button
+          type="button"
+          className="rounded border border-[var(--ag-border)] px-3 py-1.5 text-sm font-semibold"
+          onClick={() => setPicking(true)}
+        >
+          From a template…
+        </button>
+      </form>
+      <h2 className="mb-2 font-semibold">Workspace projects</h2>
+      {projects === null ? (
+        <p className="text-sm text-[var(--ag-muted)]">Loading…</p>
+      ) : projects.length === 0 ? (
+        <p className="text-sm text-[var(--ag-muted)]">
+          No projects yet. Create one here, or with <code>archguide init</code> or the MCP tool{' '}
+          <code>create_project</code>.
+        </p>
+      ) : (
+        <ul
+          aria-label="Workspace projects"
+          className="divide-y divide-[var(--ag-border)] rounded-lg border border-[var(--ag-border)] bg-[var(--ag-panel)]"
+        >
+          {projects.map((p) => (
+            <li key={p.id} className="flex items-center gap-3 px-4 py-2">
+              <a
+                className="flex-1 font-medium hover:underline"
+                href={`#/p/${encodeURIComponent(p.id)}`}
+              >
+                {p.name}
+              </a>
+              <span className="text-xs text-[var(--ag-muted)]">{p.file}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+      <p className="mt-6 text-sm">
+        <a className="text-[var(--ag-accent)] hover:underline" href={hrefFor({ page: 'learn' })}>
+          Lessons
+        </a>{' '}
+        ·{' '}
+        <a className="text-[var(--ag-accent)] hover:underline" href={hrefFor({ page: 'library' })}>
+          Library
+        </a>
+      </p>
+      {picking && (
+        <TemplatePicker
+          mode="project"
+          onClose={() => setPicking(false)}
+          onUse={(template, params, projectName) => {
+            setPicking(false);
+            try {
+              void save(
+                projectFromTemplate(template, params, {
+                  id: freeId(projectName),
+                  name: projectName,
+                }),
+              );
+            } catch (error) {
+              toast({ tone: 'error', message: (error as Error).message });
+            }
           }}
         />
       )}

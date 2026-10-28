@@ -21,6 +21,7 @@ import {
 } from '../actions';
 import { useProject } from '../store/project';
 import { useUi } from '../store/ui';
+import { isServed } from '../persistence/serve';
 import { draftAndEditTour, playTour } from './Tours';
 
 /** Toasts with actions such as "Reverse it" and "Why?" (§10.4). */
@@ -165,7 +166,9 @@ export function CommandPalette() {
         ? [{ id: 'export-json', label: 'Export JSON', run: () => exportJson(project) }]
         : []),
       { id: 'templates', label: 'Insert template…', run: () => ui.set({ dialog: 'templates' }) },
-      { id: 'snapshots', label: 'Snapshots…', run: () => ui.set({ dialog: 'snapshots' }) },
+      ...(isServed(project?.id)
+        ? []
+        : [{ id: 'snapshots', label: 'Snapshots…', run: () => ui.set({ dialog: 'snapshots' }) }]),
       { id: 'tidy', label: 'Tidy up (automatic layout)', run: () => void tidyUp() },
       ...(project?.tours ?? []).map((t) => ({
         id: `tour-${t.id}`,

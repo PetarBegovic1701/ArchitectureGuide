@@ -1,0 +1,25 @@
+{
+  "name": "@archguide/server",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "archguide serve: the web app, a WebSocket for live sync, and the single writer of the workspace files",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@archguide/core": "workspace:*",
+    "@archguide/workspace": "workspace:*",
+    "@fastify/static": "10.1.8",
+    "@fastify/websocket": "11.3.4",
+    "chokidar": "6.0.0",
+    "fastify": "5.12.7"
+  },
+  "devDependencies": {
+    "@types/ws": "^8.18.1",
+    "ws": "8.22.0"
+  }
+}

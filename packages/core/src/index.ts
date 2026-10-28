@@ -12,3 +12,5 @@ export * from './templates';
 export * from './diff';
 export * from './export';
 export * from './tours';
+export * from './tools';
+export * from './sync';

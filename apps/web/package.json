@@ -26,6 +26,10 @@
     "zustand": "5.0.16"
   },
   "devDependencies": {
+    "@archguide/mcp-server": "workspace:*",
+    "@archguide/server": "workspace:*",
+    "@archguide/workspace": "workspace:*",
+    "@modelcontextprotocol/sdk": "1.32.2",
     "@playwright/test": "1.63.0",
     "@tailwindcss/vite": "4.3.3",
     "@types/react": "19.3.0",

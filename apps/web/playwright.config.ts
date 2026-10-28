@@ -31,6 +31,8 @@ export default defineConfig({
   ],
   webServer: {
     command: 'pnpm exec vite --port 5179 --strictPort',
+    // serve.spec.ts starts `archguide serve` on this port; Vite proxies /api and /ws to it.
+    env: { ARCHGUIDE_SERVE: 'http://127.0.0.1:4399' },
     url: 'http://localhost:5179',
     reuseExistingServer: true,
     timeout: 60_000,
