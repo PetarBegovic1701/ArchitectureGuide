@@ -2183,6 +2183,39 @@ After a structural change, update the model (MCP tool `upsert_elements` / `upser
   externals → `softwareSystem` with tag `External`.
 - **DBML:** `Table schema.table { ... }` with `Ref:` for FKs. Notes: owner service.
 
+### 18.8 Phase 4 implementation notes
+
+- **API as built:** `exportProject(format, project, catalog, options)` in `core/export`
+  returns `{ files: { path, content, mime }[] }`. Pure and deterministic: dates come
+  from `project.updatedAt`, all lists are sorted. `json`, `agent-md`, `agent-yaml`,
+  `agents-snippet`, `mermaid`, `dbml`, `onboarding-md` and `concept-pack` are built;
+  `plan-md`, `speckit`, `kiro` come with change sets (Phase 9), the enforcement
+  formats with Phase 8, and `likec4`, `structurizr`, `plantuml` later.
+- **Invariants** (§18.1) come from three sources, in this order: the filled-in
+  invariants of the templates used (now stored in `derivedFrom[].invariants`), data
+  ownership (one writer and one migration owner per store), and the enabled rules. Each
+  rule has an `invariant` sentence and an `appliesTo` list of concept selectors; a rule's
+  sentence is exported only when the model contains something it applies to, so a
+  backend service does not get React rules. The AGENTS.md snippet lists only the
+  project-specific invariants and points to ARCHITECTURE.md for the rest.
+- **Changes from the review of the golden files:** elements are ordered actors first,
+  then by layer; code paths use slugs (`{serviceName:slug}` placeholders); concept
+  summaries are cut at the end of a sentence, not at "Node.js"; template tables got
+  typical columns, so DBML is useful; T7's dead-letter invariant became a MUST.
+- **Agent Markdown** also lists canvas annotations (sticky notes, callouts, regions)
+  and open comment threads under `## Notes`; mentions stay as IDs (`@svc.api`).
+- **Onboarding pack** adds a "Patterns used" section with the pattern texts of the
+  project's templates at the reader's level, and falls back to a drafted tour when the
+  project has none.
+- **Images:** `html-to-image` 1.11.11 (the version React Flow documents). The whole
+  canvas is captured after fitting the diagram, because the arrowhead definitions live
+  outside React Flow's viewport.
+- **Annotations UI:** annotations are React Flow nodes with `ann:`-prefixed IDs.
+  Callouts are placed above their element (no stored offset); new sticky notes go to a
+  free spot. Regions are visual only: moving a region does not move the shapes in it.
+- **Not done:** Mermaid `sequenceDiagram` for scenario views (scenario views are not
+  built yet); linking a suppression to a decision from the UI.
+
 ---
 
 ## 19. Repository analyzer
@@ -2748,18 +2781,19 @@ Estimates assume one full-time developer. They are rough.
 - Not done: comparing two snapshots with each other (compare is snapshot vs canvas); the Dexie copy of a folder project is a cache, so editing the same project in two tabs is not detected (serve mode, Phase 7, handles conflicts)
 - **Done when:** each template validates with 0 errors under its own packs; a project saved to a folder reopens identically. **Done.**
 
-### Phase 4: Notes, annotations, exports (~2 weeks)
+### Phase 4: Notes, annotations, exports (~2 weeks) — done
 
-- [ ] Element/relation notes; sticky notes, callouts, regions, comments
-- [ ] Project notes with `@id` mentions; glossary note
-- [ ] Decisions (ADRs) panel and badges
-- [ ] Exporters: `agent-md`, `agent-yaml`, `agents-snippet`, `mermaid`, `dbml`, `png`/`svg`, `json`
-- [ ] Focus/depth neighborhood export
-- [ ] Export dialog with preview and copy
-- [ ] Tours: editor, player, "Draft tour" (§17.8)
-- [ ] Exporters: `onboarding-md`, `concept-pack`; `## Concepts` section in `agent-md`
-- [ ] Golden-file tests for each exporter × template
-- **Done when:** the agent-md output of each template is reviewed and stable.
+- [x] Element/relation notes; sticky notes, callouts, regions, comments (threads with replies, resolve/reopen)
+- [x] Project notes with `@id` mentions (autocomplete; rendered as links that select the element); glossary note
+- [x] Decisions (ADRs) panel and badges on linked shapes
+- [x] Exporters: `agent-md`, `agent-yaml`, `agents-snippet`, `mermaid`, `dbml`, `png`/`svg`, `json` (§18.8)
+- [x] Focus/depth neighborhood export
+- [x] Export dialog with preview, copy and download (`Ctrl/Cmd + E`)
+- [x] Tours: editor, player, "Draft tour" (§17.8)
+- [x] Exporters: `onboarding-md`, `concept-pack`; `## Concepts` section in `agent-md`
+- [x] Golden-file tests for each exporter × template (`packages/profiles/react-node-postgres/golden/`)
+- [x] Tests: exporter unit tests (sections, escaping, notes, comments, decisions, glossary, focus, YAML, Mermaid, JSON), `draftTour`; Playwright scenarios for annotations, notes and decisions, the export dialog (Markdown, neighborhood, Mermaid, PNG, download) and tours (template tour, draft, edit)
+- **Done when:** the agent-md output of each template is reviewed and stable. **Done** (reviewed; changes found in review are in §18.8).
 
 ### Phase 5: Mobile and touch (~1 week)
 

@@ -20,8 +20,8 @@ See [Implementation.md](Implementation.md) for the full design and the delivery 
 
 ## Status
 
-Phases 0 (foundations), 1 (canvas), 2 (rules engine) and 3 (templates and projects)
-are done. Run
+Phases 0 (foundations), 1 (canvas), 2 (rules engine), 3 (templates and projects) and
+4 (notes, annotations, exports) are done. Run
 `pnpm install && pnpm dev` and open http://localhost:5179: create a project or open the
 starter, drag shapes from the palette, connect them, and open the **Learn** tab. The
 **Problems** panel lists anti-patterns in the design, with quick fixes and a "Why?"
@@ -33,6 +33,12 @@ Design), each with a tour and a learning text. Save snapshots and compare the ca
 with them, tidy the layout automatically, and keep projects as files in your repository
 with **Open folder** (Chromium browsers).
 
+Annotate the canvas (sticky notes, regions, callouts, comment threads), keep project
+notes with `@` mentions, a glossary and decision records, and play or write guided
+tours. **Export** (Ctrl+E) writes `ARCHITECTURE.md` for AI agents, an `AGENTS.md`
+snippet, YAML, an onboarding pack for new team members, concept packs, Mermaid, DBML,
+JSON, PNG and SVG. Examples for every template: [golden files](packages/profiles/react-node-postgres/golden).
+
 | Package                                                                          | Content                                                                                                                                                                                                                                                                                                                                                                                  |
 | -------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | [`apps/web`](apps/web)                                                           | The builder: React Flow canvas, palette, inspector with generated property forms, Learn tab with three levels, refusals with fixes and explanations, Problems panel with finding badges, quick fixes and suppressions, templates, snapshots with compare, automatic layout and align, undo/redo, copy/paste, command palette, autosave in the browser or to a folder, JSON import/export |
@@ -40,7 +46,7 @@ with **Open folder** (Chromium browsers).
 | [`packages/profiles/react-node-postgres`](packages/profiles/react-node-postgres) | React, Node.js and PostgreSQL concepts, profile relation types, the hard constraints, 23 stack rules (ownership, concurrency, API design, authentication), eight architecture templates, and learning content: [texts](packages/profiles/react-node-postgres/content/docs) and [lessons](packages/profiles/react-node-postgres/content/lessons)                                          |
 | [`schema/archguide.schema.json`](schema/archguide.schema.json)                   | JSON Schema of the project file, generated from the Zod schema                                                                                                                                                                                                                                                                                                                           |
 
-Next: Phase 4, notes, annotations and exports (Markdown for people and AI agents, Mermaid, PNG/SVG).
+Next: Phase 5, mobile and touch (Implementation.md §13.10).
 
 ## Development
 
