@@ -1,8 +1,8 @@
 import { create } from 'zustand';
 import {
   applyOps,
+  layOutChangeOps,
   matchModel,
-  placeMissingOps,
   relationSubject,
   selectSuggestions,
 } from '@archguide/core';
@@ -193,7 +193,7 @@ export function acceptSuggestions(
     return 0;
   }
   const added = new Set(ops.flatMap((o) => (o.op === 'addElement' ? [o.element.id] : [])));
-  const placed = placeMissingOps(trial.project, catalog, viewId, added);
+  const placed = layOutChangeOps(p, trial.project, catalog, viewId, added);
   return dispatch([...ops, ...placed], { label: `Accept ${ops.length} suggestion(s)` })
     ? ops.length
     : 0;

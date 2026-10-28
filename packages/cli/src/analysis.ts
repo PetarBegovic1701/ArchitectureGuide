@@ -2,7 +2,7 @@ import { relative, resolve } from 'node:path';
 import type { Command } from 'commander';
 import { Option } from 'commander';
 import type pc from 'picocolors';
-import { ENFORCEMENT_TARGETS, applyOps, placeMissingOps, selectSuggestions } from '@archguide/core';
+import { ENFORCEMENT_TARGETS, applyOps, layOutChangeOps, selectSuggestions } from '@archguide/core';
 import type { AnalysisResult, Catalog, Project, Severity } from '@archguide/core';
 import {
   analysisDir,
@@ -117,7 +117,7 @@ export function registerAnalysisCommands(program: Command, env: CommandEnv): voi
           const ops = selectSuggestions(result.diff, { minConfidence: o.minConfidence });
           if (ops.length) {
             const trial = applyOps(project, ops, env.catalog);
-            const placed = trial.ok ? placeMissingOps(trial.project, env.catalog) : [];
+            const placed = trial.ok ? layOutChangeOps(project, trial.project, env.catalog) : [];
             const r = await applyToWorkspace(ws, env.catalog, project.id, [...ops, ...placed], {
               origin: 'cli',
             });

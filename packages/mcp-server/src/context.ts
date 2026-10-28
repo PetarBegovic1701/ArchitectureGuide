@@ -2,7 +2,7 @@ import {
   appendOps,
   applyOps,
   effectiveProject,
-  placeMissingOps,
+  layOutChangeOps,
   runRules,
   storedChangeSet,
 } from '@archguide/core';
@@ -148,7 +148,8 @@ export async function change(
   if (built.ops.length === 0) return ok(built.data, { revision: baseline.revision, changed: [] });
   const trial = applyOps(before, built.ops, ctx.catalog);
   if (!trial.ok) return fail(trial.errors, hintsFor(trial.errors));
-  const ops = [...built.ops, ...placeMissingOps(trial.project, ctx.catalog)];
+  // Overlaps that were there before (the user's) stay; new ones are moved apart.
+  const ops = [...built.ops, ...layOutChangeOps(before, trial.project, ctx.catalog)];
   const recorded = changeSet
     ? storedChangeSet({ ...changeSet, ops: appendOps(changeSet.ops, ops) }, baseline)
     : undefined;

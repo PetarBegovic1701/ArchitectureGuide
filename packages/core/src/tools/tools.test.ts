@@ -7,12 +7,14 @@ import { testCatalog } from '../test-support/fixtures';
 import {
   catalogSummary,
   countFindings,
+  layOutChangeOps,
   newFindings,
   placeMissingOps,
   removeItemsOps,
   suggestKinds,
   upsertElementsOps,
   upsertRelationsOps,
+  viewNodeSize,
 } from '.';
 
 const NOW = '2026-10-28T00:00:00.000Z';
@@ -185,6 +187,83 @@ describe('placeMissingOps', () => {
     expect(w.x).toBeGreaterThan(a.x);
     // Nothing left to place.
     expect(placeMissingOps(p, testCatalog)).toEqual([]);
+  });
+
+  it('places containers by the size their new children give them', () => {
+    let p = apply(
+      empty(),
+      upsertElementsOps(empty(), testCatalog, [
+        { kind: 't.service', name: 'A', id: 'svc.a' },
+        { kind: 't.service', name: 'B', id: 'svc.b' },
+        { kind: 't.module', name: 'M1', id: 'mod.m1', parentId: 'svc.a' },
+        { kind: 't.module', name: 'M2', id: 'mod.m2', parentId: 'svc.a' },
+        { kind: 't.module', name: 'M3', id: 'mod.m3', parentId: 'svc.a' },
+        { kind: 't.module', name: 'M4', id: 'mod.m4', parentId: 'mod.m1' },
+      ]).ops,
+    );
+    p = apply(p, placeMissingOps(p, testCatalog));
+    const view = p.views[0]!;
+    const node = (id: string) => view.nodes.find((n) => n.elementId === id)!;
+    const a = viewNodeSize(p, view, testCatalog, 'svc.a');
+    expect(node('svc.b').x).toBeGreaterThan(node('svc.a').x + a.w);
+    const m1 = viewNodeSize(p, view, testCatalog, 'mod.m1');
+    expect(node('mod.m2').x).toBeGreaterThan(node('mod.m1').x + m1.w);
+  });
+});
+
+describe('layOutChangeOps', () => {
+  const boxes = (p: Project) => {
+    const view = p.views[0]!;
+    return new Map(
+      view.nodes.map((n) => [
+        n.elementId,
+        { x: n.x, y: n.y, ...viewNodeSize(p, view, testCatalog, n.elementId) },
+      ]),
+    );
+  };
+  const overlap = (a: { x: number; y: number; w: number; h: number }, b: typeof a) =>
+    a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
+  const change = (p: Project, ops: ModelOp[]) => {
+    const changed = apply(p, ops);
+    return apply(changed, layOutChangeOps(p, changed, testCatalog));
+  };
+  const services = upsertElementsOps(empty(), testCatalog, [
+    { kind: 't.service', name: 'A', id: 'svc.a' },
+    { kind: 't.service', name: 'B', id: 'svc.b' },
+  ]).ops;
+
+  it('moves a neighbour out of the way of a container that grew', () => {
+    let p = change(empty(), services);
+    p = change(
+      p,
+      upsertElementsOps(p, testCatalog, [
+        { kind: 't.module', name: 'M1', id: 'mod.m1', parentId: 'svc.a' },
+        { kind: 't.module', name: 'M2', id: 'mod.m2', parentId: 'svc.a' },
+        { kind: 't.module', name: 'M3', id: 'mod.m3', parentId: 'svc.a' },
+        { kind: 't.module', name: 'M4', id: 'mod.m4', parentId: 'svc.a' },
+      ]).ops,
+    );
+    const b = boxes(p);
+    expect(overlap(b.get('svc.a')!, b.get('svc.b')!)).toBe(false);
+  });
+
+  it('keeps overlaps the user made', () => {
+    let p = change(empty(), services);
+    const a = p.views[0]!.nodes.find((n) => n.elementId === 'svc.a')!;
+    p = apply(p, [
+      {
+        op: 'setViewNode',
+        viewId: p.views[0]!.id,
+        node: { elementId: 'svc.b', x: a.x + 8, y: a.y + 8 },
+      },
+    ]);
+    p = change(
+      p,
+      upsertElementsOps(p, testCatalog, [{ kind: 't.app', name: 'W', id: 'app.w' }]).ops,
+    );
+    const b = boxes(p);
+    expect(overlap(b.get('svc.a')!, b.get('svc.b')!)).toBe(true);
+    expect(overlap(b.get('app.w')!, b.get('svc.b')!)).toBe(false);
   });
 });
 
