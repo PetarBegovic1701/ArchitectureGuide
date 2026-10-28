@@ -217,3 +217,36 @@ body {
   padding-left: 8px;
   color: var(--ag-muted);
 }
+
+/* Touch (Implementation.md §13.10): 44 px targets without changing the look. */
+@media (pointer: coarse) {
+  .ag-touch {
+    min-width: 44px;
+    min-height: 44px;
+  }
+  /* Only on the selected shape: on small shapes the larger areas would cover the shape. */
+  .react-flow__node.selected .ag-handle::after,
+  .ag-badge::after {
+    content: '';
+    position: absolute;
+    inset: -17px;
+  }
+  .react-flow__controls-button {
+    width: 36px;
+    height: 36px;
+  }
+}
+
+/* Connect mode works with taps on shapes; the handles would catch them. */
+.ag-connect-mode .react-flow__handle {
+  pointer-events: none !important;
+}
+
+/* The canvas handles its own gestures; the page itself must not pan or zoom. */
+.react-flow {
+  touch-action: none;
+}
+html,
+body {
+  overscroll-behavior: none;
+}

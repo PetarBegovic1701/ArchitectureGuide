@@ -49,6 +49,44 @@ export function sampleProject(id: string, now = new Date().toISOString()): Proje
     ...rel('rel.api-reads-public', 'reads', 'svc.api', 'schema.public', { via: 'prisma' }),
     ...rel('rel.api-writes-public', 'writes', 'svc.api', 'schema.public', { via: 'prisma' }),
     ...rel('rel.api-migrates-public', 'migrates', 'svc.api', 'schema.public'),
+    {
+      op: 'upsertTour',
+      tour: {
+        id: 'tour.starter',
+        title: 'How a request travels',
+        audience: 'beginner',
+        steps: [
+          {
+            id: 'step.web',
+            title: 'The React app',
+            body: 'The customer uses @app.web, a React app that runs in the browser. It shows data and sends requests; it never talks to the database.',
+            elementIds: ['actor.customer', 'app.web'],
+            relationIds: ['rel.customer-uses-web'],
+            conceptIds: ['react.app'],
+          },
+          {
+            id: 'step.api',
+            title: 'The API',
+            body: '@app.web calls @svc.api over HTTP. The API checks the request, runs the business logic and decides what to read or write.',
+            elementIds: ['app.web', 'svc.api'],
+            relationIds: ['rel.web-calls-api'],
+            conceptIds: ['node.service', 'calls'],
+          },
+          {
+            id: 'step.data',
+            title: 'The data',
+            body: 'Only @svc.api reads and writes the @schema.public schema, and it owns the migrations. One owner per schema keeps the data consistent.',
+            elementIds: ['svc.api', 'schema.public'],
+            relationIds: [
+              'rel.api-reads-public',
+              'rel.api-writes-public',
+              'rel.api-migrates-public',
+            ],
+            conceptIds: ['pg.schema', 'migrates'],
+          },
+        ],
+      },
+    },
   ];
   const result = applyOps(base, ops, catalog);
   if (!result.ok) throw new Error(`Sample project is invalid: ${result.errors[0]?.message}`);

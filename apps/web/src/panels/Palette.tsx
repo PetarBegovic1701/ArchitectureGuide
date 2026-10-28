@@ -14,7 +14,7 @@ function matches(c: Concept, query: string): boolean {
 }
 
 /** Concepts to drag (or click) onto the canvas, grouped and searchable (§13.4). */
-export function Palette() {
+export function Palette({ variant = 'side' }: { variant?: 'side' | 'sheet' }) {
   const mode = useUi((s) => s.paletteMode);
   const setMode = useUi((s) => s.setPaletteMode);
   const [query, setQuery] = useState('');
@@ -33,7 +33,7 @@ export function Palette() {
 
   return (
     <aside
-      className="flex h-full w-56 shrink-0 flex-col border-r border-[var(--ag-border)] bg-[var(--ag-panel)]"
+      className={`flex h-full shrink-0 flex-col bg-[var(--ag-panel)] ${variant === 'side' ? 'w-56 border-r border-[var(--ag-border)]' : 'w-full'}`}
       aria-label="Palette"
     >
       <div className="space-y-2 border-b border-[var(--ag-border)] p-2">
@@ -83,8 +83,12 @@ export function Palette() {
                         e.dataTransfer.setData(DRAG_MIME, c.id);
                         e.dataTransfer.effectAllowed = 'copy';
                       }}
-                      onClick={() => addElementFromPalette(c.id)}
-                      className="flex w-full cursor-grab items-center gap-2 rounded px-2 py-1 text-left text-sm hover:bg-[var(--ag-panel-2)]"
+                      onClick={() => {
+                        addElementFromPalette(c.id);
+                        // On a phone the sheet covers the canvas: close it to show the new shape.
+                        if (variant === 'sheet') useUi.getState().set({ panel: null });
+                      }}
+                      className="ag-touch flex w-full cursor-grab items-center gap-2 rounded px-2 py-1 text-left text-sm hover:bg-[var(--ag-panel-2)]"
                     >
                       <Icon size={15} className="shrink-0 text-[var(--ag-muted)]" aria-hidden />
                       <span className="truncate">{c.name}</span>

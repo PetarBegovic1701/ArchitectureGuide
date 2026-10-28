@@ -4,6 +4,9 @@ import {
   ArrowLeft,
   History,
   Command,
+  MoreHorizontal,
+  Shapes,
+  SlidersHorizontal,
   Download,
   LayoutTemplate,
   Map as MapIcon,
@@ -35,7 +38,10 @@ import {
   undo,
 } from '../actions';
 import { Menu } from '../panels/Menu';
-import { useAutosave, useFolder, useShortcuts } from '../hooks';
+import type { MenuItem } from '../panels/Menu';
+import { BottomSheet, BottomToolbar, ConnectBanner, ContextMenu, Drawer } from '../panels/Mobile';
+import { useAutosave, useFolder, useScreen, useShortcuts } from '../hooks';
+import type { Screen } from '../hooks';
 import { folder } from '../persistence/folder';
 import type { SaveStatus } from '../hooks';
 import { loadProject } from '../persistence/db';
@@ -80,35 +86,77 @@ export function Editor({ projectId }: { projectId: string }) {
   return <EditorLoaded />;
 }
 
+/**
+ * Desktop: palette | canvas + problems | inspector. Tablet: the palette and inspector
+ * become drawers. Phone: a bottom toolbar opens them as bottom sheets (§13.10).
+ */
 function EditorLoaded() {
   useShortcuts();
   const status = useAutosave();
+  const screen = useScreen();
+  const panel = useUi((s) => s.panel);
+  const desktop = screen === 'desktop';
+
+  // Leaving a small screen closes its drawer or sheet.
+  useEffect(() => {
+    if (desktop) useUi.getState().set({ panel: null, multiSelect: false });
+  }, [desktop]);
+
+  const overlay =
+    screen === 'tablet' ? (
+      panel === 'palette' ? (
+        <Drawer side="left" label="Shapes">
+          <Palette variant="sheet" />
+        </Drawer>
+      ) : panel === 'inspector' ? (
+        <Drawer side="right" label="Inspector">
+          <Inspector variant="sheet" />
+        </Drawer>
+      ) : null
+    ) : screen === 'phone' && panel ? (
+      <BottomSheet label={SHEET_LABEL[panel]}>
+        {panel === 'palette' ? (
+          <Palette variant="sheet" />
+        ) : panel === 'inspector' ? (
+          <Inspector variant="sheet" />
+        ) : (
+          <ProblemsPanel variant="sheet" />
+        )}
+      </BottomSheet>
+    ) : null;
+
   return (
     <ReactFlowProvider>
-      <div className="flex h-full flex-col">
-        <TopBar status={status} />
-        <div className="flex min-h-0 flex-1">
-          <Palette />
+      <div className="flex h-full flex-col overflow-hidden">
+        <TopBar status={status} screen={screen} />
+        <div className="relative flex min-h-0 flex-1">
+          {desktop && <Palette />}
           <div className="flex min-w-0 flex-1 flex-col">
             <main className="relative min-h-0 flex-1">
               <Canvas />
-              <Legend />
+              {screen !== 'phone' && <Legend />}
               <CompareBanner />
+              <ConnectBanner />
               <TourPlayer />
               <TourEditor />
             </main>
-            <ProblemsPanel />
+            {screen !== 'phone' && <ProblemsPanel />}
           </div>
-          <Inspector />
+          {desktop && <Inspector />}
+          {overlay}
         </div>
+        {screen === 'phone' && <BottomToolbar />}
       </div>
       <RelationPicker />
       <CommandPalette />
       <SuppressDialog />
+      <ContextMenu smallScreen={!desktop} />
       <EditorDialogs />
     </ReactFlowProvider>
   );
 }
+
+const SHEET_LABEL = { palette: 'Shapes', inspector: 'Inspector', problems: 'Problems' } as const;
 
 function EditorDialogs() {
   const dialog = useUi((s) => s.dialog);
@@ -136,59 +184,176 @@ const STATUS_TEXT: Record<SaveStatus, string> = {
   error: 'Not saved',
 };
 
-function TopBar({ status }: { status: SaveStatus }) {
+const iconButton = 'ag-touch rounded p-1.5 hover:bg-[var(--ag-panel-2)] disabled:opacity-40';
+
+function ProjectName({ className }: { className: string }) {
   const project = useProject((s) => s.project)!;
+  return (
+    <input
+      aria-label="Project name"
+      className={`${className} min-w-0 rounded border border-transparent bg-transparent px-1 font-semibold outline-none hover:border-[var(--ag-border)] focus:border-[var(--ag-accent)]`}
+      defaultValue={project.name}
+      key={project.name}
+      onBlur={(e) => {
+        const name = e.target.value.trim();
+        if (name && name !== project.name)
+          dispatch([{ op: 'updateProject', patch: { name } }], { label: 'Rename project' });
+      }}
+      onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
+    />
+  );
+}
+
+function SaveStatusText({ status, short = false }: { status: SaveStatus; short?: boolean }) {
+  const project = useProject((s) => s.project)!;
+  const folderState = useFolder();
+  const inFolder = folderState.open && folder.isLinked(project.id);
+  return (
+    <span
+      className="shrink-0 text-xs text-[var(--ag-muted)]"
+      data-testid="save-status"
+      aria-live="polite"
+    >
+      {STATUS_TEXT[status]}
+      {!short && inFolder && status === 'saved' && ` to folder ${folderState.name}`}
+    </span>
+  );
+}
+
+function UndoRedo() {
   const canUndo = useProject((s) => s.past.length > 0);
   const canRedo = useProject((s) => s.future.length > 0);
+  return (
+    <div className="flex shrink-0">
+      <button
+        type="button"
+        className={iconButton}
+        onClick={undo}
+        disabled={!canUndo}
+        aria-label="Undo"
+        title="Undo (Ctrl+Z)"
+      >
+        <Undo2 size={16} />
+      </button>
+      <button
+        type="button"
+        className={iconButton}
+        onClick={redo}
+        disabled={!canRedo}
+        aria-label="Redo"
+        title="Redo (Ctrl+Shift+Z)"
+      >
+        <Redo2 size={16} />
+      </button>
+    </div>
+  );
+}
+
+const openDialog = (dialog: 'templates' | 'snapshots' | 'export') =>
+  useUi.getState().set({ dialog, panel: null });
+
+/** Everything the desktop top bar shows, as one menu for small screens. */
+function overflowItems(): MenuItem[] {
+  const ui = useUi.getState();
+  const tours = useProject.getState().project?.tours ?? [];
+  return [
+    { label: 'Templates…', run: () => openDialog('templates') },
+    { label: 'Snapshots…', run: () => openDialog('snapshots') },
+    { label: 'Export…', run: () => openDialog('export') },
+    ...tours.map((t) => ({ label: `Play tour: ${t.title}`, run: () => playTour(t.id) })),
+    ...tours.map((t) => ({
+      label: `Edit tour: ${t.title}`,
+      run: () => ui.set({ editingTour: t.id, tour: null }),
+    })),
+    { label: 'Draft a tour from the diagram', run: draftAndEditTour },
+    { label: 'Add a sticky note', run: addSticky },
+    { label: 'Add a region around the selection', run: addRegion },
+    { label: 'Add a callout on the selection', run: () => addAnchored('callout') },
+    { label: 'Add a comment', run: () => addAnchored('comment') },
+    { label: 'Tidy up the layout', run: () => void tidyUp() },
+    { label: 'Command palette…', run: () => ui.set({ commandOpen: true }) },
+    {
+      label: ui.theme === 'dark' ? 'Light mode' : 'Dark mode',
+      run: () => ui.setTheme(ui.theme === 'dark' ? 'light' : 'dark'),
+    },
+    ...LEVELS.map((l) => ({
+      label: `Level: ${l}${ui.level === l ? ' ✓' : ''}`,
+      run: () => ui.setLevel(l),
+    })),
+  ];
+}
+
+/** Tablet and phone top bar: the essentials, the rest in a "More" menu. */
+function CompactTopBar({ status, screen }: { status: SaveStatus; screen: Screen }) {
+  const panel = useUi((s) => s.panel);
+  // Re-read the menu items when what they show changes.
+  useUi((s) => `${s.theme}|${s.level}`);
+  useProject((s) => s.project?.tours);
+  const toggle = (p: 'palette' | 'inspector') =>
+    useUi.getState().set({ panel: panel === p ? null : p });
+  const tablet = screen === 'tablet';
+  return (
+    <header className="flex h-12 shrink-0 items-center gap-1 border-b border-[var(--ag-border)] bg-[var(--ag-panel)] px-1">
+      <a href="#/" className={iconButton} aria-label="Back to projects" title="Back to projects">
+        <ArrowLeft size={16} />
+      </a>
+      {tablet && (
+        <button
+          type="button"
+          className={iconButton}
+          aria-label="Shapes"
+          aria-pressed={panel === 'palette'}
+          title="Shapes"
+          onClick={() => toggle('palette')}
+        >
+          <Shapes size={16} />
+        </button>
+      )}
+      <ProjectName className={tablet ? 'w-48' : 'flex-1'} />
+      <SaveStatusText status={status} short />
+      <UndoRedo />
+      <div className="ml-auto flex shrink-0 items-center gap-1">
+        {tablet && <ProblemsButton />}
+        {tablet && (
+          <button
+            type="button"
+            className={iconButton}
+            aria-label="Inspector"
+            aria-pressed={panel === 'inspector'}
+            title="Inspector"
+            onClick={() => toggle('inspector')}
+          >
+            <SlidersHorizontal size={16} />
+          </button>
+        )}
+        <Menu
+          label="More"
+          iconOnly
+          align="right"
+          icon={<MoreHorizontal size={16} aria-hidden />}
+          items={overflowItems()}
+        />
+      </div>
+    </header>
+  );
+}
+
+function TopBar({ status, screen }: { status: SaveStatus; screen: Screen }) {
+  const project = useProject((s) => s.project)!;
   const level = useUi((s) => s.level);
   const setLevel = useUi((s) => s.setLevel);
   const theme = useUi((s) => s.theme);
   const setTheme = useUi((s) => s.setTheme);
-  const iconButton = 'rounded p-1.5 hover:bg-[var(--ag-panel-2)] disabled:opacity-40';
-  const folderState = useFolder();
-  const inFolder = folderState.open && folder.isLinked(project.id);
+  if (screen !== 'desktop') return <CompactTopBar status={status} screen={screen} />;
   return (
     <header className="flex h-11 shrink-0 items-center gap-2 border-b border-[var(--ag-border)] bg-[var(--ag-panel)] px-2">
       <a href="#/" className={iconButton} aria-label="Back to projects" title="Back to projects">
         <ArrowLeft size={16} />
       </a>
-      <input
-        aria-label="Project name"
-        className="w-56 rounded border border-transparent bg-transparent px-1 font-semibold outline-none hover:border-[var(--ag-border)] focus:border-[var(--ag-accent)]"
-        defaultValue={project.name}
-        key={project.name}
-        onBlur={(e) => {
-          const name = e.target.value.trim();
-          if (name && name !== project.name)
-            dispatch([{ op: 'updateProject', patch: { name } }], { label: 'Rename project' });
-        }}
-        onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
-      />
-      <span className="text-xs text-[var(--ag-muted)]" data-testid="save-status" aria-live="polite">
-        {STATUS_TEXT[status]}
-        {inFolder && status === 'saved' && ` to folder ${folderState.name}`}
-      </span>
-      <div className="ml-2 flex">
-        <button
-          type="button"
-          className={iconButton}
-          onClick={undo}
-          disabled={!canUndo}
-          aria-label="Undo"
-          title="Undo (Ctrl+Z)"
-        >
-          <Undo2 size={16} />
-        </button>
-        <button
-          type="button"
-          className={iconButton}
-          onClick={redo}
-          disabled={!canRedo}
-          aria-label="Redo"
-          title="Redo (Ctrl+Shift+Z)"
-        >
-          <Redo2 size={16} />
-        </button>
+      <ProjectName className="w-56" />
+      <SaveStatusText status={status} />
+      <div className="ml-2">
+        <UndoRedo />
       </div>
       <button
         type="button"

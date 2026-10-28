@@ -1,5 +1,14 @@
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
-import { copy, deleteSelection, duplicate, paste, redo, undo } from './actions';
+import {
+  cancelConnectMode,
+  copy,
+  deleteSelection,
+  duplicate,
+  paste,
+  redo,
+  startConnectMode,
+  undo,
+} from './actions';
 import { saveProject } from './persistence/db';
 import { folder } from './persistence/folder';
 import { useProject } from './store/project';
@@ -93,8 +102,14 @@ export function useShortcuts(): void {
           e.preventDefault();
           useUi.getState().set({ editingId: selected[0]! });
         }
+      } else if (key === 'c' && !mod && !e.altKey) {
+        // Connect mode: click the source, then the target (Implementation.md §13.10).
+        const selected = useProject.getState().selection.elements;
+        if (useUi.getState().connectMode) cancelConnectMode();
+        else startConnectMode(selected.length === 1 ? selected[0] : undefined);
       } else if (key === 'escape') {
-        useUi.getState().set({ picker: null, editingId: null });
+        if (useUi.getState().connectMode) cancelConnectMode();
+        useUi.getState().set({ picker: null, editingId: null, contextMenu: null });
       }
     };
     window.addEventListener('keydown', onKey);
@@ -103,6 +118,36 @@ export function useShortcuts(): void {
 }
 
 export type SaveStatus = 'saved' | 'saving' | 'error';
+
+export type Screen = 'phone' | 'tablet' | 'desktop';
+
+const PHONE = '(max-width: 639px)';
+const TABLET = '(min-width: 640px) and (max-width: 1023px)';
+
+function currentScreen(): Screen {
+  if (typeof window === 'undefined' || !window.matchMedia) return 'desktop';
+  if (window.matchMedia(PHONE).matches) return 'phone';
+  if (window.matchMedia(TABLET).matches) return 'tablet';
+  return 'desktop';
+}
+
+/** For event handlers that need the layout class without re-rendering on resize. */
+export const isPhone = (): boolean => currentScreen() === 'phone';
+
+/** Layout class by width (Implementation.md §13.10): phone < 640 ≤ tablet < 1024 ≤ desktop. */
+export function useScreen(): Screen {
+  return useSyncExternalStore(
+    (listener) => {
+      const queries = [PHONE, TABLET].map((q) => window.matchMedia(q));
+      for (const q of queries) q.addEventListener('change', listener);
+      return () => {
+        for (const q of queries) q.removeEventListener('change', listener);
+      };
+    },
+    currentScreen,
+    () => 'desktop',
+  );
+}
 
 /** Re-renders when a folder is opened or closed, or its files change. */
 export function useFolder(): { open: boolean; name: string; revision: number } {

@@ -71,14 +71,14 @@ export function SnapshotsDialog({ onClose }: { onClose: () => void }) {
         role="dialog"
         aria-modal="true"
         aria-label="Snapshots"
-        className="w-[32rem] space-y-3 rounded-lg border border-[var(--ag-border)] bg-[var(--ag-panel)] p-4 shadow-xl"
+        className="max-h-[90dvh] w-[min(32rem,calc(100vw-2rem))] space-y-3 overflow-y-auto rounded-lg border border-[var(--ag-border)] bg-[var(--ag-panel)] p-4 shadow-xl"
         onKeyDown={(e) => e.key === 'Escape' && onClose()}
       >
         <header className="flex items-center">
           <h2 className="flex-1 font-semibold">Snapshots</h2>
           <button
             type="button"
-            className="rounded p-1 hover:bg-[var(--ag-panel-2)]"
+            className="ag-touch rounded p-1 hover:bg-[var(--ag-panel-2)]"
             aria-label="Close"
             onClick={onClose}
           >

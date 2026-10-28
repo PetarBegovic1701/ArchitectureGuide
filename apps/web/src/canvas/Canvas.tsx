@@ -9,6 +9,7 @@ import {
   applyEdgeChanges,
   applyNodeChanges,
   useReactFlow,
+  useStoreApi,
 } from '@xyflow/react';
 import type {
   Connection,
@@ -38,10 +39,12 @@ import {
   addElementAt,
   canvasApi,
   connect,
+  connectModeTap,
   dispatch,
   refuseConnection,
   startConnecting,
 } from '../actions';
+import { useScreen } from '../hooks';
 import { useProject } from '../store/project';
 import { useUi } from '../store/ui';
 import { EdgeMarkers, RelationEdge } from './RelationEdge';
@@ -58,9 +61,17 @@ export function Canvas() {
   const selection = useProject((s) => s.selection);
   const editingId = useUi((s) => s.editingId);
   const connecting = useUi((s) => s.connecting);
+  const connectMode = useUi((s) => s.connectMode);
+  const multiSelect = useUi((s) => s.multiSelect);
+  const screen = useScreen();
   const flow = useReactFlow();
+  const store = useStoreApi();
   const pointer = useRef({ x: 0, y: 0 });
   const wrapper = useRef<HTMLDivElement>(null);
+  const longPress = useRef<{ timer: number; x: number; y: number } | null>(null);
+
+  // "Select several" on touch: taps add to the selection, like Ctrl+click.
+  useEffect(() => store.setState({ multiSelectionActive: multiSelect }), [store, multiSelect]);
 
   const view = project ? activeView(project, viewId) : undefined;
   const selectedIds = useMemo(
@@ -315,13 +326,48 @@ export function Canvas() {
     [flow],
   );
 
+  const openMenu = (kind: 'element' | 'relation', id: Id, x: number, y: number) =>
+    useUi.getState().set({ contextMenu: { kind, id, x, y }, picker: null });
+
+  /** Long-press on a shape or an arrow opens its context menu (touch has no right-click). */
+  const onPointerDown = (e: React.PointerEvent) => {
+    if (e.pointerType !== 'touch') return;
+    const target = e.target as HTMLElement;
+    const nodeId = target.closest<HTMLElement>('.react-flow__node')?.dataset.id;
+    const edgeId = target.closest<HTMLElement>('.react-flow__edge')?.dataset.id;
+    const kind = nodeId && !annIdOf(nodeId) ? 'element' : edgeId ? 'relation' : undefined;
+    if (!kind) return;
+    const { clientX: x, clientY: y } = e;
+    longPress.current = {
+      x,
+      y,
+      timer: window.setTimeout(() => {
+        longPress.current = null;
+        openMenu(kind, (nodeId ?? edgeId)!, x, y);
+      }, 500),
+    };
+  };
+  const cancelLongPress = (e?: React.PointerEvent) => {
+    const lp = longPress.current;
+    if (!lp) return;
+    if (e && e.type === 'pointermove' && Math.hypot(e.clientX - lp.x, e.clientY - lp.y) < 8) return;
+    window.clearTimeout(lp.timer);
+    longPress.current = null;
+  };
+
   if (!project || !view) return null;
 
   return (
     <div
       ref={wrapper}
-      className={`relative h-full w-full ${connecting ? 'ag-connecting' : ''}`}
-      onPointerMove={(e) => (pointer.current = { x: e.clientX, y: e.clientY })}
+      className={`relative h-full w-full ${connecting ? 'ag-connecting' : ''} ${connectMode ? 'ag-connect-mode' : ''}`}
+      onPointerMove={(e) => {
+        pointer.current = { x: e.clientX, y: e.clientY };
+        cancelLongPress(e);
+      }}
+      onPointerDownCapture={onPointerDown}
+      onPointerUp={() => cancelLongPress()}
+      onPointerCancel={() => cancelLongPress()}
       data-testid="canvas"
     >
       <EdgeMarkers />
@@ -344,8 +390,29 @@ export function Canvas() {
           e.dataTransfer.dropEffect = 'copy';
         }}
         onPaneClick={() =>
-          useUi.getState().set({ picker: null, activeFinding: null, openComment: null })
+          useUi.getState().set({
+            picker: null,
+            activeFinding: null,
+            openComment: null,
+            contextMenu: null,
+            panel: null,
+          })
         }
+        onNodeClick={(e, node) => {
+          if (connectMode && node.type === 'shape')
+            connectModeTap(node.id, { x: e.clientX, y: e.clientY });
+        }}
+        onNodeContextMenu={(e, node) => {
+          if (node.type !== 'shape') return;
+          e.preventDefault();
+          openMenu('element', node.id, e.clientX, e.clientY);
+        }}
+        onEdgeContextMenu={(e, edge) => {
+          e.preventDefault();
+          openMenu('relation', edge.id, e.clientX, e.clientY);
+        }}
+        nodesDraggable={!connectMode}
+        elementsSelectable={!connectMode}
         connectionMode={ConnectionMode.Loose}
         connectionRadius={40}
         snapToGrid
@@ -359,13 +426,15 @@ export function Canvas() {
         maxZoom={2.5}
       >
         <Background variant={BackgroundVariant.Dots} gap={16} size={1} />
-        <MiniMap
-          pannable
-          zoomable
-          nodeColor={(n) =>
-            n.type === 'shape' ? (n.data as ShapeFlowNode['data']).color : 'transparent'
-          }
-        />
+        {screen !== 'phone' && (
+          <MiniMap
+            pannable
+            zoomable
+            nodeColor={(n) =>
+              n.type === 'shape' ? (n.data as ShapeFlowNode['data']).color : 'transparent'
+            }
+          />
+        )}
         <Controls showInteractive={false} />
       </ReactFlow>
     </div>

@@ -1567,6 +1567,32 @@ phones; touch targets are at least 44 px; sheets and drawers are focus-trapped
 and close with Escape or a swipe down. Playwright runs the main scenarios with
 phone (390 × 844) and tablet (820 × 1180) viewports with touch enabled.
 
+**Phase 5 implementation notes** (where the build differs from the plan above):
+
+- The phone toolbar is Add, Connect, Select, Inspect, Learn, Problems. The "⋯"
+  menu is in the top bar, not in the toolbar; it holds templates, snapshots,
+  export, tours, annotations, tidy up, the command palette, theme and level.
+- Toolbar labels are 11 px under their icons; all other text on a phone is at
+  least 14 px.
+- Tablets keep the Problems panel below the canvas (as on desktop) instead of a
+  separate bottom drawer.
+- Long-press is our own 500 ms timer on touch pointers (cancelled by a move of
+  8 px or more); a right-click opens the same menu on desktop. The `C` key
+  starts connect mode on desktop (from the selected shape, if there is one).
+- In connect mode, shapes cannot be selected or dragged and handles ignore the
+  pointer, so every tap picks a shape. The larger 44 px handle area applies only
+  to the selected shape: on a small shape at phone zoom it would otherwise cover
+  the whole shape.
+- Dialogs (templates, export) are full screen on phones; the smaller forms
+  (snapshots, suppress, save as template) fit the screen width with a margin.
+- The starter project now has a three-step beginner tour, "How a request
+  travels".
+- Playwright: the `desktop` project runs the existing specs; the `phone` and
+  `tablet` projects run `mobile.spec.ts`, which covers the starter, tour,
+  finding, connect, rename, template, export and Learn scenarios with taps. The
+  desktop specs are not run on phone sizes, because they use desktop-only
+  controls (palette drag, top-bar menus).
+
 ---
 
 ## 14. Persistence, projects and sync
@@ -2795,15 +2821,15 @@ Estimates assume one full-time developer. They are rough.
 - [x] Tests: exporter unit tests (sections, escaping, notes, comments, decisions, glossary, focus, YAML, Mermaid, JSON), `draftTour`; Playwright scenarios for annotations, notes and decisions, the export dialog (Markdown, neighborhood, Mermaid, PNG, download) and tours (template tour, draft, edit)
 - **Done when:** the agent-md output of each template is reviewed and stable. **Done** (reviewed; changes found in review are in §18.8).
 
-### Phase 5: Mobile and touch (~1 week)
+### Phase 5: Mobile and touch (~1 week) — done
 
-- [ ] Responsive editor layout (§13.10): drawers on tablets; full-screen canvas, bottom toolbar and bottom sheets on phones; "⋯" menu in the top bar
-- [ ] Full-screen dialogs on phones (templates, snapshots, suppress, save as template)
-- [ ] Connect mode (tap source, tap target) with the same refusal messages and fixes
-- [ ] Long-press context menu on shapes and arrows; "Select several" toggle
-- [ ] 44 px touch areas for handles, badges and toolbar buttons; no hover-only information
-- [ ] Workspace, Learn tab and Problems panel checked at phone width (no sideways scroll)
-- [ ] Playwright projects for phone and tablet viewports with touch; the starter, findings and template scenarios run on them
+- [x] Responsive editor layout (§13.10): drawers on tablets; full-screen canvas, bottom toolbar and bottom sheets on phones; "⋯" menu in the top bar
+- [x] Full-screen dialogs on phones (templates, snapshots, suppress, save as template)
+- [x] Connect mode (tap source, tap target) with the same refusal messages and fixes
+- [x] Long-press context menu on shapes and arrows; "Select several" toggle
+- [x] 44 px touch areas for handles, badges and toolbar buttons; no hover-only information
+- [x] Workspace, Learn tab and Problems panel checked at phone width (no sideways scroll)
+- [x] Playwright projects for phone and tablet viewports with touch; the starter, findings and template scenarios run on them (in `mobile.spec.ts`; see the notes in §13.10)
 - **Done when:** on a 390 px wide phone, a user opens the starter, follows its tour, fixes a finding, connects two shapes and renames one, without horizontal scrolling and without a mouse or keyboard.
 
 ### Phase 6: Learning mode (~3 weeks, plus a content stream)

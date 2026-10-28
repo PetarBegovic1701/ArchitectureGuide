@@ -89,18 +89,18 @@ export function TemplatePicker({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4 max-sm:p-0"
       onPointerDown={(e) => e.target === e.currentTarget && onClose()}
     >
       <div
         role="dialog"
         aria-modal="true"
         aria-label={mode === 'project' ? 'New project from a template' : 'Insert a template'}
-        className="flex h-[min(640px,90vh)] w-[min(960px,96vw)] overflow-hidden rounded-lg border border-[var(--ag-border)] bg-[var(--ag-panel)] shadow-2xl"
+        className="flex h-[min(640px,90vh)] w-[min(960px,96vw)] overflow-hidden rounded-lg max-sm:h-dvh max-sm:w-screen max-sm:flex-col max-sm:rounded-none border border-[var(--ag-border)] bg-[var(--ag-panel)] shadow-2xl"
         onKeyDown={(e) => e.key === 'Escape' && onClose()}
       >
         <nav
-          className="flex w-64 shrink-0 flex-col border-r border-[var(--ag-border)]"
+          className="flex w-64 shrink-0 flex-col border-r border-[var(--ag-border)] max-sm:max-h-[35%] max-sm:w-full max-sm:border-b max-sm:border-r-0"
           aria-label="Templates"
         >
           <ul className="flex-1 overflow-y-auto p-2" role="listbox" aria-label="Template list">
@@ -147,7 +147,7 @@ export function TemplatePicker({
         </nav>
 
         <form
-          className="flex min-w-0 flex-1 flex-col"
+          className="flex min-h-0 min-w-0 flex-1 flex-col"
           onSubmit={(e) => {
             e.preventDefault();
             if (Object.keys(errors).length === 0 && !nameMissing)
@@ -191,7 +191,7 @@ export function TemplatePicker({
             )}
             <button
               type="button"
-              className="rounded p-1 hover:bg-[var(--ag-panel-2)]"
+              className="ag-touch rounded p-1 hover:bg-[var(--ag-panel-2)]"
               aria-label="Close"
               onClick={onClose}
             >
@@ -369,7 +369,7 @@ export function SaveTemplateDialog({ onClose }: { onClose: () => void }) {
         role="dialog"
         aria-modal="true"
         aria-label="Save selection as template"
-        className="w-[26rem] space-y-3 rounded-lg border border-[var(--ag-border)] bg-[var(--ag-panel)] p-4 shadow-xl"
+        className="max-h-[90dvh] w-[min(26rem,calc(100vw-2rem))] space-y-3 overflow-y-auto rounded-lg border border-[var(--ag-border)] bg-[var(--ag-panel)] p-4 shadow-xl"
         onSubmit={(e) => {
           e.preventDefault();
           if (valid) void save();

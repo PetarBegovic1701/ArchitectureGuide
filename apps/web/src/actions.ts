@@ -235,6 +235,34 @@ export function startConnecting(sourceId: Id): void {
   ui().set({ connecting: { sourceId, validTargets: valid } });
 }
 
+// --- connect mode (touch, or the C key) ----------------------------------------------
+
+/** Starts connect mode: tap a source, then a target. Starts at the source when given. */
+export function startConnectMode(sourceId?: Id): void {
+  ui().set({ connectMode: { sourceId: sourceId ?? null }, contextMenu: null, panel: null });
+  if (sourceId) startConnecting(sourceId);
+}
+
+export function cancelConnectMode(): void {
+  ui().set({ connectMode: null, connecting: null });
+}
+
+/** A tap in connect mode: the first one picks the source, the second connects. */
+export function connectModeTap(id: Id, at: Point): void {
+  const mode = ui().connectMode;
+  if (!mode) return;
+  if (!mode.sourceId || mode.sourceId === id) {
+    ui().set({ connectMode: { sourceId: id } });
+    startConnecting(id);
+    return;
+  }
+  const valid = ui().connecting?.validTargets.has(id) ?? false;
+  const sourceId = mode.sourceId;
+  cancelConnectMode();
+  if (valid) connect(sourceId, id, at);
+  else refuseConnection(sourceId, id);
+}
+
 export function deleteSelection(): void {
   const { project: p, selection } = project();
   if (!p) return;

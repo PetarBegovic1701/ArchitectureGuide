@@ -88,23 +88,23 @@ export function ProblemsButton() {
 }
 
 /** Bottom panel: findings grouped by severity (Implementation.md §13.4). */
-export function ProblemsPanel() {
+export function ProblemsPanel({ variant = 'side' }: { variant?: 'side' | 'sheet' }) {
   const project = useProject((s) => s.project);
   const open = useUi((s) => s.problemsOpen);
   const level = useUi((s) => s.level);
   const showSuppressed = useUi((s) => s.showSuppressed);
   const findings = useFindings();
-  if (!open || !project) return null;
+  if ((!open && variant === 'side') || !project) return null;
   const visible = findings.filter((f) => showSuppressed || !f.suppressed);
   const suppressedCount = findings.filter((f) => f.suppressed).length;
 
   return (
     <section
-      className="flex h-56 shrink-0 flex-col border-t border-[var(--ag-border)] bg-[var(--ag-panel)]"
+      className={`flex shrink-0 flex-col bg-[var(--ag-panel)] ${variant === 'side' ? 'h-56 border-t border-[var(--ag-border)]' : 'h-full'}`}
       aria-label="Problems"
       data-testid="problems-panel"
     >
-      <header className="flex items-center gap-3 border-b border-[var(--ag-border)] px-3 py-1.5 text-sm">
+      <header className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-[var(--ag-border)] px-3 py-1.5 text-sm">
         <h2 className="font-semibold">Problems</h2>
         <span className="text-xs text-[var(--ag-muted)]">
           {level === 'beginner'
@@ -124,7 +124,9 @@ export function ProblemsPanel() {
           type="button"
           className="rounded p-1 hover:bg-[var(--ag-panel-2)]"
           aria-label="Close the Problems panel"
-          onClick={() => useUi.getState().set({ problemsOpen: false })}
+          onClick={() =>
+            useUi.getState().set(variant === 'side' ? { problemsOpen: false } : { panel: null })
+          }
         >
           <X size={14} />
         </button>
@@ -319,7 +321,7 @@ export function SuppressDialog() {
         role="dialog"
         aria-modal="true"
         aria-label="Suppress finding"
-        className="w-[28rem] space-y-3 rounded-lg border border-[var(--ag-border)] bg-[var(--ag-panel)] p-4 shadow-xl"
+        className="max-h-[90dvh] w-[min(28rem,calc(100vw-2rem))] space-y-3 overflow-y-auto rounded-lg border border-[var(--ag-border)] bg-[var(--ag-panel)] p-4 shadow-xl"
         onSubmit={(e) => {
           e.preventDefault();
           if (!valid) return;

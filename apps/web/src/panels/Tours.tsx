@@ -141,7 +141,7 @@ export function TourEditor() {
 
   return (
     <aside
-      className="absolute right-3 top-3 z-30 flex max-h-[calc(100%-24px)] w-96 flex-col rounded-lg border border-[var(--ag-border)] bg-[var(--ag-panel)] shadow-xl"
+      className="absolute right-3 top-3 z-30 flex max-h-[calc(100%-24px)] w-96 max-w-[calc(100%-24px)] flex-col rounded-lg border border-[var(--ag-border)] bg-[var(--ag-panel)] shadow-xl"
       aria-label="Tour editor"
     >
       <header className="flex items-center gap-2 border-b border-[var(--ag-border)] px-3 py-2">

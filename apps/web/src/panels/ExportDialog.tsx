@@ -150,18 +150,18 @@ export function ExportDialog({ onClose }: { onClose: () => void }) {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4 max-sm:p-0"
       onPointerDown={(e) => e.target === e.currentTarget && onClose()}
     >
       <div
         role="dialog"
         aria-modal="true"
         aria-label="Export"
-        className="flex h-[min(720px,92vh)] w-[min(1040px,96vw)] overflow-hidden rounded-lg border border-[var(--ag-border)] bg-[var(--ag-panel)] shadow-2xl"
+        className="flex h-[min(720px,92vh)] w-[min(1040px,96vw)] overflow-hidden rounded-lg max-sm:h-dvh max-sm:w-screen max-sm:flex-col max-sm:rounded-none border border-[var(--ag-border)] bg-[var(--ag-panel)] shadow-2xl"
         onKeyDown={(e) => e.key === 'Escape' && onClose()}
       >
         <nav
-          className="w-60 shrink-0 overflow-y-auto border-r border-[var(--ag-border)] p-2"
+          className="w-60 shrink-0 overflow-y-auto border-r border-[var(--ag-border)] p-2 max-sm:max-h-[30%] max-sm:w-full max-sm:border-b max-sm:border-r-0"
           aria-label="Formats"
         >
           <ul role="listbox" aria-label="Export format">
@@ -181,7 +181,7 @@ export function ExportDialog({ onClose }: { onClose: () => void }) {
             ))}
           </ul>
         </nav>
-        <section className="flex min-w-0 flex-1 flex-col">
+        <section className="flex min-h-0 min-w-0 flex-1 flex-col">
           <header className="flex flex-wrap items-center gap-3 border-b border-[var(--ag-border)] px-3 py-2 text-sm">
             {!isImage && format !== 'json' && format !== 'concept-pack' && (
               <label

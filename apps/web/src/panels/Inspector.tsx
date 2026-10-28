@@ -25,12 +25,12 @@ import { CommitInput, PropertyForm, Row, inputClass } from './PropertyForm';
 const STATUSES: Status[] = ['planned', 'existing', 'deprecated'];
 
 /** Right panel: properties of the selection, and the Learn tab (§13.4, §17.7). */
-export function Inspector() {
+export function Inspector({ variant = 'side' }: { variant?: 'side' | 'sheet' }) {
   const tab = useUi((s) => s.inspectorTab);
   const setTab = useUi((s) => s.setInspectorTab);
   return (
     <aside
-      className="flex h-full w-80 shrink-0 flex-col border-l border-[var(--ag-border)] bg-[var(--ag-panel)]"
+      className={`flex h-full shrink-0 flex-col bg-[var(--ag-panel)] ${variant === 'side' ? 'w-80 border-l border-[var(--ag-border)]' : 'w-full'}`}
       aria-label="Inspector"
     >
       <div className="flex border-b border-[var(--ag-border)] text-sm" role="tablist">
@@ -66,10 +66,18 @@ function PropertiesTab() {
     return (
       <div className="space-y-2 text-sm text-[var(--ag-muted)]">
         <p>Nothing selected.</p>
-        <p>
-          Drag a shape from the palette, or click it to add it. Drag from the dot on a shape's
-          border to another shape to connect them.
-        </p>
+        {window.matchMedia?.('(pointer: coarse)').matches ? (
+          <p>
+            Tap a shape to select it. Tap Add to place a new one, and Connect, then two shapes, to
+            draw an arrow. Press and hold a shape for more actions.
+          </p>
+        ) : (
+          <p>
+            Drag a shape from the palette, or click it to add it. Drag from the dot on a shape's
+            border to another shape to connect them (or press C, then click two shapes). Right-click
+            a shape for more actions.
+          </p>
+        )}
       </div>
     );
   }

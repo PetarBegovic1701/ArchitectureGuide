@@ -84,6 +84,14 @@ interface UiState {
   tour: { id: Id; step: number } | null;
   /** The tour open in the tour editor. */
   editingTour: Id | null;
+  /** Tablet drawer or phone bottom sheet that is open (Implementation.md §13.10). */
+  panel: 'palette' | 'inspector' | 'problems' | null;
+  /** Connect mode: tap a source, then a target. `sourceId` is null until the first tap. */
+  connectMode: { sourceId: Id | null } | null;
+  /** "Select several": taps add to the selection instead of replacing it. */
+  multiSelect: boolean;
+  /** Context menu for a shape or an arrow (long-press or right-click). */
+  contextMenu: { x: number; y: number; kind: 'element' | 'relation'; id: Id } | null;
   /** Open dialog in the editor, if any. */
   dialog: 'templates' | 'save-template' | 'snapshots' | 'export' | 'tour-editor' | null;
 
@@ -145,6 +153,10 @@ export const useUi = create<UiState>()(
       selectedAnnotation: null,
       tour: null,
       editingTour: null,
+      panel: null,
+      connectMode: null,
+      multiSelect: false,
+      contextMenu: null,
       editingAnnotation: null,
       openComment: null,
       showResolvedComments: false,

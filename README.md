@@ -46,7 +46,11 @@ JSON, PNG and SVG. Examples for every template: [golden files](packages/profiles
 | [`packages/profiles/react-node-postgres`](packages/profiles/react-node-postgres) | React, Node.js and PostgreSQL concepts, profile relation types, the hard constraints, 23 stack rules (ownership, concurrency, API design, authentication), eight architecture templates, and learning content: [texts](packages/profiles/react-node-postgres/content/docs) and [lessons](packages/profiles/react-node-postgres/content/lessons)                                          |
 | [`schema/archguide.schema.json`](schema/archguide.schema.json)                   | JSON Schema of the project file, generated from the Zod schema                                                                                                                                                                                                                                                                                                                           |
 
-Next: Phase 5, mobile and touch (Implementation.md §13.10).
+The editor also works on tablets and phones: drawers on tablets, and on phones a full-screen
+canvas with a bottom toolbar, bottom sheets, tap-to-connect, a long-press menu and
+"select several" (Implementation.md §13.10).
+
+Next: Phase 6, learning mode (Implementation.md §17).
 
 ## Development
 
@@ -56,7 +60,7 @@ Requirements: Node.js 22.12 or later, pnpm 10.
 pnpm install
 pnpm dev           # the builder at http://localhost:5179
 pnpm test          # Vitest (unit, property and content tests)
-pnpm e2e           # Playwright scenarios against the builder
+pnpm e2e           # Playwright scenarios: desktop, phone and tablet projects
 pnpm typecheck     # tsc in every package (Turborepo)
 pnpm lint          # ESLint
 pnpm format        # Prettier

@@ -4,6 +4,7 @@ import type { NodeProps } from '@xyflow/react';
 import type { ShapeFlowNode } from '../lib/flow';
 import { CONTAINER_HEADER } from '../lib/model';
 import { renameElement } from '../actions';
+import { isPhone } from '../hooks';
 import { useUi } from '../store/ui';
 import { SEVERITY_COLOR } from '../lib/findings';
 import { iconFor } from './icons';
@@ -164,7 +165,9 @@ function IssueBadge({
       data-severity={issue.severity}
       aria-label={`${issue.count} ${issue.severity === 'info' ? 'tip' : word}, open the Problems panel`}
       title={`${issue.count} ${word}`}
-      onClick={() => useUi.getState().set({ problemsOpen: true })}
+      onClick={() =>
+        useUi.getState().set(isPhone() ? { panel: 'problems' } : { problemsOpen: true })
+      }
     >
       {issue.severity === 'info' ? 'i' : issue.count}
     </button>
