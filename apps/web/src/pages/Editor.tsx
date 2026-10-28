@@ -16,8 +16,12 @@ import {
   Redo2,
   Sun,
   Undo2,
+  X,
 } from 'lucide-react';
-import type { Level } from '@archguide/core';
+import { LAB_CONTROLS } from '@archguide/core';
+import type { LabControl, Level } from '@archguide/core';
+import { ConcurrencyLab } from '../panels/ConcurrencyLab';
+import { LessonPlayer, useActiveLesson } from '../panels/LessonPlayer';
 import { Canvas } from '../canvas/Canvas';
 import { Inspector } from '../panels/Inspector';
 import { CommandPalette, Legend, RelationPicker } from '../panels/Overlays';
@@ -96,6 +100,8 @@ function EditorLoaded() {
   const screen = useScreen();
   const panel = useUi((s) => s.panel);
   const desktop = screen === 'desktop';
+  const projectId = useProject((s) => s.project!.id);
+  const lesson = useActiveLesson(projectId);
 
   // Leaving a small screen closes its drawer or sheet.
   useEffect(() => {
@@ -131,6 +137,7 @@ function EditorLoaded() {
         <TopBar status={status} screen={screen} />
         <div className="relative flex min-h-0 flex-1">
           {desktop && <Palette />}
+          {desktop && lesson && <LessonPlayer key={lesson.id} lesson={lesson} variant="dock" />}
           <div className="flex min-w-0 flex-1 flex-col">
             <main className="relative min-h-0 flex-1">
               <Canvas />
@@ -139,6 +146,13 @@ function EditorLoaded() {
               <ConnectBanner />
               <TourPlayer />
               <TourEditor />
+              {lesson && !desktop && (
+                <LessonPlayer
+                  key={lesson.id}
+                  lesson={lesson}
+                  variant={screen === 'phone' ? 'sheet' : 'float'}
+                />
+              )}
             </main>
             {screen !== 'phone' && <ProblemsPanel />}
           </div>
@@ -175,7 +189,76 @@ function EditorDialogs() {
   if (dialog === 'save-template') return <SaveTemplateDialog onClose={close} />;
   if (dialog === 'snapshots') return <SnapshotsDialog onClose={close} />;
   if (dialog === 'export') return <ExportDialog onClose={close} />;
+  if (dialog === 'lab') return <LabDialog onClose={close} />;
   return null;
+}
+
+/** The concurrency lab for one `writes` relation; "Use this" sets its concurrencyControl. */
+function LabDialog({ onClose }: { onClose: () => void }) {
+  const project = useProject((s) => s.project)!;
+  const id = useUi((s) => s.labRelation);
+  const relation = project.model.relations.find((r) => r.id === id);
+  const control = relation?.properties?.concurrencyControl;
+  const name = (eid: string) => project.model.elements.find((e) => e.id === eid)?.name ?? eid;
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4 max-sm:p-0"
+      onPointerDown={(e) => e.target === e.currentTarget && onClose()}
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label="Concurrency lab"
+        className="max-h-[92vh] w-[min(1000px,96vw)] overflow-y-auto rounded-lg border border-[var(--ag-border)] bg-[var(--ag-panel)] p-4 shadow-2xl max-sm:h-dvh max-sm:max-h-none max-sm:w-screen max-sm:rounded-none"
+        onKeyDown={(e) => e.key === 'Escape' && onClose()}
+      >
+        <header className="mb-2 flex items-center gap-2">
+          <h2 className="flex-1 font-semibold">
+            Concurrency lab
+            {relation && (
+              <span className="font-normal text-[var(--ag-muted)]">
+                {' '}
+                · {name(relation.sourceId)} writes {name(relation.targetId)}
+              </span>
+            )}
+          </h2>
+          <button
+            type="button"
+            className="ag-touch rounded p-1 hover:bg-[var(--ag-panel-2)]"
+            aria-label="Close"
+            onClick={onClose}
+          >
+            <X size={16} />
+          </button>
+        </header>
+        <ConcurrencyLab
+          initialControl={
+            LAB_CONTROLS.some((c) => c.id === control) ? (control as LabControl) : 'none'
+          }
+          applyLabel={relation ? 'Use on this arrow' : undefined}
+          onApply={
+            relation
+              ? (c) => {
+                  dispatch(
+                    [
+                      {
+                        op: 'updateRelation',
+                        id: relation.id,
+                        patch: {
+                          properties: { ...(relation.properties ?? {}), concurrencyControl: c },
+                        },
+                      },
+                    ],
+                    { label: 'Concurrency control' },
+                  );
+                  onClose();
+                }
+              : undefined
+          }
+        />
+      </div>
+    </div>
+  );
 }
 
 const STATUS_TEXT: Record<SaveStatus, string> = {

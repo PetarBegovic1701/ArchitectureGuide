@@ -37,11 +37,18 @@ export interface StoredHandle {
   openedAt: string;
 }
 
+/** Learner progress (§17.9): one row, the progress file as JSON. */
+export interface StoredProgress {
+  id: 'me';
+  json: string;
+}
+
 class ArchGuideDb extends Dexie {
   projects!: Table<StoredProject, string>;
   templates!: Table<StoredTemplate, string>;
   snapshots!: Table<StoredSnapshot, string>;
   handles!: Table<StoredHandle, string>;
+  progress!: Table<StoredProgress, string>;
 
   constructor() {
     super('archguide');
@@ -51,6 +58,13 @@ class ArchGuideDb extends Dexie {
       templates: 'id, name, createdAt',
       snapshots: 'id, projectId, createdAt',
       handles: 'id, openedAt',
+    });
+    this.version(3).stores({
+      projects: 'id, name, updatedAt',
+      templates: 'id, name, createdAt',
+      snapshots: 'id, projectId, createdAt',
+      handles: 'id, openedAt',
+      progress: 'id',
     });
   }
 }

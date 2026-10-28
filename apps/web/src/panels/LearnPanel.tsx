@@ -1,13 +1,16 @@
-import { RULE_PACKS } from '@archguide/core';
+import { useEffect } from 'react';
+import { RULE_PACKS, markRead } from '@archguide/core';
 import type { Element, LearningDoc, Level } from '@archguide/core';
 import { catalog, conceptOf } from '../lib/catalog';
 import { docFor, relatedDocs, textAt } from '../lib/learn';
 import { elementById } from '../lib/model';
 import { RULES, SEVERITY_COLOR, severityLabel } from '../lib/findings';
 import { useProject } from '../store/project';
+import { useProgress } from '../store/progress';
 import { useUi } from '../store/ui';
 import { ConceptGuide } from './ConceptGuide';
 import { Markdown } from './Markdown';
+import { Quiz } from './Quiz';
 
 /**
  * The Learn tab (§17.7): the learning text for the selection, a refused connection, or a
@@ -182,8 +185,21 @@ function Subject({
   );
 }
 
-function DocBody({ doc, level, compact }: { doc: LearningDoc; level: Level; compact: boolean }) {
+/** A learning text at the reader's level. The full view counts as read and shows the quiz. */
+export function DocBody({
+  doc,
+  level,
+  compact,
+}: {
+  doc: LearningDoc;
+  level: Level;
+  compact: boolean;
+}) {
   const view = textAt(doc, level);
+  useEffect(() => {
+    if (!compact)
+      useProgress.getState().update((p) => markRead(p, doc.id, new Date().toISOString()));
+  }, [doc.id, compact]);
   return (
     <div className="space-y-2">
       <p className="text-sm italic text-[var(--ag-muted)]">{doc.summary}</p>
@@ -227,6 +243,7 @@ function DocBody({ doc, level, compact }: { doc: LearningDoc; level: Level; comp
               </ul>
             </div>
           )}
+          <Quiz doc={doc} />
         </>
       )}
     </div>

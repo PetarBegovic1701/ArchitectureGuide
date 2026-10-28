@@ -87,6 +87,7 @@ export function Canvas() {
   const findings = project ? findingsOf(project) : NO_FINDINGS;
   const issues = useMemo(() => issuesByItem(findings, level), [findings, level]);
   const tourState = useUi((s) => s.tour);
+  const lessonFocus = useUi((s) => s.lessonFocus);
   const highlightIds = useMemo(() => {
     const f = activeFinding ? findings.find((x) => findingKey(x) === activeFinding) : undefined;
     const step =
@@ -94,8 +95,9 @@ export function Canvas() {
     return new Set<Id>([
       ...(f ? [...f.targetIds, ...f.relatedIds] : []),
       ...(step ? [...step.elementIds, ...step.relationIds] : []),
+      ...lessonFocus,
     ]);
-  }, [findings, activeFinding, tourState, project]);
+  }, [findings, activeFinding, tourState, project, lessonFocus]);
   const derivedNodes = useMemo((): CanvasNode[] => {
     if (!project || !view) return [];
     const shapes = toFlowNodes(project, view, {

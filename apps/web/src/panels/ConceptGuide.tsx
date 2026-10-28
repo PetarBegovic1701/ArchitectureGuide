@@ -120,7 +120,12 @@ function LearnLink({ kind }: { kind: string }) {
     <button
       type="button"
       className="text-[var(--ag-accent)] hover:underline"
-      onClick={() => useUi.getState().openLearn({ kind: 'doc', id: kind })}
+      onClick={() =>
+        // In the editor: the Learn tab. On the learning pages: the text's own page.
+        useProject.getState().project
+          ? useUi.getState().openLearn({ kind: 'doc', id: kind })
+          : (window.location.hash = `#/library/${encodeURIComponent(kind)}`)
+      }
     >
       {catalog.concepts.get(kind)?.name ?? kind}
     </button>

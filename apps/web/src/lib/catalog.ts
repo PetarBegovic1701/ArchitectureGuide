@@ -1,5 +1,5 @@
 import { CATEGORIES, SHAPES, createCatalog, shapeOf } from '@archguide/core';
-import type { Concept, Layer, LearningDoc, ShapeId } from '@archguide/core';
+import type { Concept, Layer, LearningDoc, Lesson, ShapeId } from '@archguide/core';
 import { PROFILE_ID, profile } from '@archguide/profile-react-node-postgres';
 
 /** The one catalog the app uses: core concepts + the React/Node/PostgreSQL profile. */
@@ -8,6 +8,10 @@ export const DEFAULT_PROFILE = PROFILE_ID;
 
 export const docs: ReadonlyMap<string, LearningDoc> = new Map(
   (profile.content?.docs ?? []).map((d) => [d.id, d]),
+);
+
+export const lessons: ReadonlyMap<string, Lesson> = new Map(
+  (profile.content?.lessons ?? []).map((l) => [l.id, l]),
 );
 
 export function conceptOf(kind: string): Concept | undefined {

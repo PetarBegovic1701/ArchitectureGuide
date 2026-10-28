@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   CheckSchema,
   ContentError,
+  adaptSolution,
   applySolution,
   checkStep,
   evaluateCheck,
@@ -252,5 +253,81 @@ steps:
       ContentError,
     );
     expect(() => parseLesson(LESSON.replace('hasRelation:', 'hasThing:'))).toThrow(ContentError);
+  });
+});
+
+describe('adaptSolution ("Show me" on the learner’s own model)', () => {
+  const lesson = parseLesson(
+    `id: lesson.adapt
+title: Adapt
+summary: Two steps.
+track: foundations
+level: beginner
+minutes: 5
+profile: test
+conceptIds: [t.service]
+start:
+  ops: []
+steps:
+  - id: app
+    title: App
+    body: Add an app.
+    check: { hasElement: { kind: t.app } }
+    solution:
+      - op: addElement
+        element: { id: app.web, kind: t.app, name: Web, status: planned }
+  - id: api
+    title: API
+    body: Add a service and call it.
+    check: { hasRelation: { type: calls, from: { kind: t.app }, to: { kind: t.service } } }
+    solution:
+      - op: addElement
+        element: { id: svc.api, kind: t.service, name: API, status: planned }
+      - op: addRelation
+        relation: { id: rel.web-api, type: calls, sourceId: app.web, targetId: svc.api, status: planned }
+`,
+    'adapt.yaml',
+  );
+  const step = lesson.steps[1]!;
+
+  it('maps the lesson’s IDs to the shapes the learner made', () => {
+    // The learner named the app "Mine", so its ID is not the lesson's "app.web".
+    const project = applySolution(
+      startLesson(lesson, testCatalog),
+      {
+        ...lesson.steps[0]!,
+        solution: [
+          {
+            op: 'addElement',
+            element: { id: 'app.mine', kind: 't.app', name: 'Mine', status: 'planned' },
+          },
+        ],
+      },
+      testCatalog,
+    );
+    expect(() => applySolution(project, step, testCatalog)).toThrow();
+    const ops = adaptSolution(project, lesson, step);
+    const done = applySolution(project, { ...step, solution: ops }, testCatalog);
+    expect(checkStep(done, step, { catalog: testCatalog }).passed).toBe(true);
+    expect(done.model.relations[0]).toMatchObject({ sourceId: 'app.mine', targetId: 'svc.api' });
+  });
+
+  it('skips what the learner already did', () => {
+    let project = applySolution(startLesson(lesson, testCatalog), lesson.steps[0]!, testCatalog);
+    project = applySolution(
+      project,
+      {
+        ...step,
+        solution: [
+          {
+            op: 'addElement',
+            element: { id: 'svc.api', kind: 't.service', name: 'API', status: 'planned' },
+          },
+        ],
+      },
+      testCatalog,
+    );
+    const ops = adaptSolution(project, lesson, step);
+    expect(ops.map((o) => o.op)).toEqual(['addRelation']);
   });
 });

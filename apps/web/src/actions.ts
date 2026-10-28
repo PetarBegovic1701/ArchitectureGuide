@@ -1,5 +1,6 @@
 import {
   RULE_PACKS,
+  applyOps,
   checkNesting,
   explainPair,
   makeElementId,
@@ -581,6 +582,21 @@ export function exportTemplateFile(file: TemplateFile): void {
 let elk: InstanceType<typeof ELK> | undefined;
 
 /** ELK runs in its own Web Worker, so a large layout does not freeze the canvas. */
+/**
+ * Lays out a whole project that is not open (a lesson's start model). Returns the project
+ * unchanged when the layout fails.
+ */
+export async function layoutProject(p: Project): Promise<Project> {
+  const view = activeView(p, p.views[0]?.id ?? 'main');
+  if (view.nodes.length === 0) return p;
+  try {
+    const result = applyOps(p, layoutOps(view, await layoutInWorker(toElkGraph(p, view))), catalog);
+    return result.ok ? result.project : p;
+  } catch {
+    return p;
+  }
+}
+
 function layoutInWorker(graph: ElkNode): Promise<ElkNode> {
   elk ??= new ELK({ workerFactory: () => new Worker(elkWorkerUrl) });
   return elk.layout(graph);

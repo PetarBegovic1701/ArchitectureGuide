@@ -451,6 +451,15 @@ function RelationForm({ relation: r }: { relation: Relation }) {
         >
           What does “{type?.name ?? r.type}” mean?
         </button>
+        {r.type === 'writes' && (
+          <button
+            type="button"
+            className="block text-xs text-[var(--ag-accent)] hover:underline"
+            onClick={() => useUi.getState().set({ dialog: 'lab', labRelation: r.id })}
+          >
+            Try it in the concurrency lab
+          </button>
+        )}
       </div>
       <Row label="Type" htmlFor="rel-type">
         <select

@@ -15,17 +15,51 @@ import { useProject } from './store/project';
 import { useUi } from './store/ui';
 
 export type Route =
-  { page: 'workspace' } | { page: 'editor'; projectId: string } | { page: 'gallery' };
+  | { page: 'workspace' }
+  | { page: 'editor'; projectId: string }
+  | { page: 'gallery' }
+  | { page: 'learn' }
+  | { page: 'library'; query?: string }
+  | { page: 'doc'; id: string }
+  | { page: 'lab' };
 
 function parseHash(hash: string): Route {
   const path = hash.replace(/^#/, '');
   const editor = /^\/p\/([^/]+)/.exec(path);
   if (editor) return { page: 'editor', projectId: decodeURIComponent(editor[1]!) };
   if (path.startsWith('/gallery')) return { page: 'gallery' };
+  const doc = /^\/library\/([^/?]+)/.exec(path);
+  if (doc) return { page: 'doc', id: decodeURIComponent(doc[1]!) };
+  if (path.startsWith('/library')) {
+    const query = new URLSearchParams(path.split('?')[1] ?? '').get('q');
+    return query ? { page: 'library', query } : { page: 'library' };
+  }
+  if (path.startsWith('/learn')) return { page: 'learn' };
+  if (path.startsWith('/lab')) return { page: 'lab' };
   return { page: 'workspace' };
 }
 
-/** Hash routes: `#/`, `#/p/<projectId>`, `#/gallery`. */
+/** The hash for a route (Phase 6 adds the learning pages, Implementation.md §17.7). */
+export function hrefFor(route: Route): string {
+  switch (route.page) {
+    case 'editor':
+      return `#/p/${encodeURIComponent(route.projectId)}`;
+    case 'gallery':
+      return '#/gallery';
+    case 'learn':
+      return '#/learn';
+    case 'library':
+      return route.query ? `#/library?q=${encodeURIComponent(route.query)}` : '#/library';
+    case 'doc':
+      return `#/library/${encodeURIComponent(route.id)}`;
+    case 'lab':
+      return '#/lab';
+    case 'workspace':
+      return '#/';
+  }
+}
+
+/** Hash routes: `#/`, `#/p/<projectId>`, `#/gallery`, `#/learn`, `#/library[/<id>]`, `#/lab`. */
 export function useRoute(): Route {
   const hash = useSyncExternalStore(
     (cb) => {
@@ -38,12 +72,7 @@ export function useRoute(): Route {
 }
 
 export function navigate(route: Route): void {
-  window.location.hash =
-    route.page === 'editor'
-      ? `#/p/${encodeURIComponent(route.projectId)}`
-      : route.page === 'gallery'
-        ? '#/gallery'
-        : '#/';
+  window.location.hash = hrefFor(route);
 }
 
 /** Applies the theme preference to <html data-theme>. */

@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { applySolution, checkStep, createCatalog, runRules, startLesson } from '@archguide/core';
-import type { Project } from '@archguide/core';
+import {
+  adaptSolution,
+  applySolution,
+  checkStep,
+  createCatalog,
+  runRules,
+  startLesson,
+} from '@archguide/core';
+import type { ModelOp, Project } from '@archguide/core';
 import { DOCS, LESSONS, PROFILE_ID, profile } from '.';
 
 const catalog = createCatalog([profile]);
@@ -80,4 +87,52 @@ describe('lessons', () => {
       expect(after.failures, `${step.id}: solution does not satisfy the check`).toEqual([]);
     }
   });
+
+  /**
+   * Learners name shapes their own way. Every other step is done "by the learner" with
+   * different IDs; "Show me" must still solve the steps in between (adaptSolution).
+   */
+  it.each(LESSONS.map((l) => [l.id, l] as const))(
+    '%s: "Show me" works on a learner\'s own model',
+    (_id, lesson) => {
+      const mine = new Map<string, string>();
+      const own = (id: string) => mine.get(id) ?? id;
+      const byLearner = (ops: ModelOp[]): ModelOp[] =>
+        ops.map((op) => {
+          if (op.op === 'addElement') {
+            mine.set(op.element.id, `${op.element.id}-mine`);
+            const parentId = op.element.parentId && own(op.element.parentId);
+            return {
+              ...op,
+              element: { ...op.element, id: own(op.element.id), ...(parentId ? { parentId } : {}) },
+            };
+          }
+          if (op.op === 'addRelation') {
+            mine.set(op.relation.id, `${op.relation.id}-mine`);
+            const r = op.relation;
+            return {
+              ...op,
+              relation: {
+                ...r,
+                id: own(r.id),
+                sourceId: own(r.sourceId),
+                targetId: own(r.targetId),
+              },
+            };
+          }
+          if (op.op === 'updateElement' || op.op === 'updateRelation')
+            return { ...op, id: own(op.id) };
+          return op;
+        });
+      let project = startLesson(lesson, catalog, '2026-10-27T00:00:00.000Z');
+      lesson.steps
+        .filter((s) => s.check)
+        .forEach((step, i) => {
+          const ops =
+            i % 2 === 0 ? byLearner(step.solution!) : adaptSolution(project, lesson, step);
+          project = applySolution(project, { ...step, solution: ops }, catalog);
+          expect(checkStep(project, step, ctx(project)).failures, step.id).toEqual([]);
+        });
+    },
+  );
 });

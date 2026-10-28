@@ -17,7 +17,7 @@ import { canOpenFolders, folder } from '../persistence/folder';
 import type { FolderProject } from '../persistence/folder';
 import { closeFolder, lastFolder, pickFolder, reopenFolder } from '../persistence/handles';
 import type { StoredProject } from '../persistence/db';
-import { navigate, useFolder } from '../hooks';
+import { hrefFor, navigate, useFolder } from '../hooks';
 import { useUi } from '../store/ui';
 
 /** Project list: create, open, import, duplicate, delete (§14.4). */
@@ -187,6 +187,30 @@ export function Workspace() {
           >
             Open the starter
           </button>
+          <p className="mb-2 mt-4 text-sm text-[var(--ag-muted)]">
+            Or learn step by step: lessons on the real canvas, a library of texts at your level, and
+            a lab that shows what goes wrong when two requests run at once.
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <a
+              href={hrefFor({ page: 'learn' })}
+              className="rounded bg-[var(--ag-accent)] px-3 py-1.5 text-sm font-semibold text-[var(--ag-accent-text)]"
+            >
+              Lessons
+            </a>
+            <a
+              href={hrefFor({ page: 'library' })}
+              className="rounded border border-[var(--ag-border)] px-3 py-1.5 text-sm font-semibold"
+            >
+              Library
+            </a>
+            <a
+              href={hrefFor({ page: 'lab' })}
+              className="rounded border border-[var(--ag-border)] px-3 py-1.5 text-sm font-semibold"
+            >
+              Concurrency lab
+            </a>
+          </div>
         </div>
       </section>
 
