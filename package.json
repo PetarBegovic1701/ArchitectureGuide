@@ -7,7 +7,7 @@
     "node": ">=22.12"
   },
   "scripts": {
-    "dev": "pnpm --filter @archguide/web run dev",
+    "dev": "pnpm --filter @archguide/web run dev --host 0.0.0.0",
     "archguide": "tsx packages/cli/src/bin.ts",
     "typecheck": "turbo run typecheck",
     "test": "vitest run",
