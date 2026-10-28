@@ -5,6 +5,8 @@ import { isDenyRule } from './types';
 import type {
   AllowRule,
   Concept,
+  ConceptGuide,
+  ConceptLink,
   DenyRule,
   RelationRule,
   RelationType,
@@ -17,6 +19,8 @@ export interface Catalog {
   readonly profiles: readonly StackProfile[];
   readonly concepts: ReadonlyMap<string, Concept>;
   readonly relationTypes: ReadonlyMap<string, RelationType>;
+  /** Real-world uses and typical connections per concept ID. */
+  readonly guides: ReadonlyMap<string, ConceptGuide>;
   readonly allowRules: readonly AllowRule[];
   /** Profile deny rules first, then core deny rules. */
   readonly denyRules: readonly DenyRule[];
@@ -29,6 +33,7 @@ export function createCatalog(profiles: readonly StackProfile[] = []): Catalog {
   const concepts = new Map<string, Concept>();
   const relationTypes = new Map<string, RelationType>();
   const prefixes = new Map<string, string>();
+  const guides = new Map<string, ConceptGuide>();
 
   const addConcept = (c: Concept) => {
     if (concepts.has(c.id)) throw new CatalogError(`Duplicate concept "${c.id}"`);
@@ -49,6 +54,10 @@ export function createCatalog(profiles: readonly StackProfile[] = []): Catalog {
     profile.concepts.forEach(addConcept);
     profile.relationTypes.forEach(addType);
     rules.push(...profile.relationRules);
+    for (const [id, guide] of Object.entries(profile.guides ?? {})) {
+      if (guides.has(id)) throw new CatalogError(`Duplicate guide for "${id}"`);
+      guides.set(id, guide);
+    }
   }
   rules.push(...CORE_RELATION_RULES);
 
@@ -56,6 +65,7 @@ export function createCatalog(profiles: readonly StackProfile[] = []): Catalog {
     profiles,
     concepts,
     relationTypes,
+    guides,
     allowRules: rules.filter((r): r is AllowRule => !isDenyRule(r)),
     denyRules: rules.filter(isDenyRule),
   };
@@ -301,4 +311,72 @@ export function explainPair(
   if (flip)
     message += ` Reverse it: ${target.name} ${catalog.relationTypes.get(flip)!.name} ${source.name}.`;
   return { allowed, message, ...(flip ? { flip } : {}) };
+}
+
+/**
+ * Problems in the concept guides: unknown concepts or relation types, and typical
+ * connections that the relation rules refuse. Profiles test that this is empty.
+ */
+export function checkGuides(catalog: Catalog): string[] {
+  const problems: string[] = [];
+  for (const [id, guide] of catalog.guides) {
+    if (!catalog.concepts.has(id)) problems.push(`Guide for unknown concept "${id}"`);
+    for (const link of guide.connections) {
+      const where = `${id} ${link.direction === 'out' ? '→' : '←'} ${link.type} ${link.kind}`;
+      if (!catalog.concepts.has(link.kind)) problems.push(`${where}: unknown concept`);
+      else if (!catalog.relationTypes.has(link.type))
+        problems.push(`${where}: unknown relation type`);
+      else {
+        // Two elements of the same concept (route → route) are fine; `self` is one element.
+        const [from, to] = link.direction === 'out' ? [id, link.kind] : [link.kind, id];
+        if (!validRelationTypes(catalog, from, to).some((t) => t.id === link.type))
+          problems.push(`${where}: not allowed by the relation rules`);
+      }
+    }
+  }
+  return problems;
+}
+
+/** One relation type in one direction, and the concepts it can connect to. */
+export interface ConnectionGroup {
+  direction: ConceptLink['direction'];
+  type: RelationType;
+  concepts: Concept[];
+}
+
+/**
+ * What a concept can connect to: the guide's typical connections first, then every other
+ * pair the relation rules allow, grouped by direction and relation type (best type first).
+ */
+export function conceptConnections(
+  catalog: Catalog,
+  kind: string,
+): { typical: ConceptLink[]; other: ConnectionGroup[] } {
+  const typical = catalog.guides.get(kind)?.connections ?? [];
+  const known = new Set(typical.map((l) => `${l.direction}|${l.type}|${l.kind}`));
+  const groups = new Map<string, ConnectionGroup & { rank: number }>();
+  const add = (direction: 'out' | 'in', other: Concept, types: RelationType[]) =>
+    types.forEach((type, rank) => {
+      if (known.has(`${direction}|${type.id}|${other.id}`)) return;
+      const key = `${direction}|${type.id}`;
+      const group = groups.get(key) ?? { direction, type, concepts: [], rank: Infinity };
+      group.concepts.push(other);
+      group.rank = Math.min(group.rank, type.defaultPriority + rank);
+      groups.set(key, group);
+    });
+  for (const other of catalog.concepts.values()) {
+    add('out', other, validRelationTypes(catalog, kind, other.id));
+    // Between two elements of the same concept, "out" already lists the pair.
+    if (other.id !== kind) add('in', other, validRelationTypes(catalog, other.id, kind));
+  }
+  const other = [...groups.values()]
+    .sort((a, b) =>
+      a.direction === b.direction ? a.rank - b.rank : a.direction === 'out' ? -1 : 1,
+    )
+    .map(({ direction, type, concepts }) => ({
+      direction,
+      type,
+      concepts: concepts.sort((a, b) => a.name.localeCompare(b.name)),
+    }));
+  return { typical, other };
 }

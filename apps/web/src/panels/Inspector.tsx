@@ -16,6 +16,7 @@ import { alignSelection, dispatch, distributeSelection } from '../actions';
 import type { Alignment } from '../lib/align';
 import { useProject } from '../store/project';
 import { useUi } from '../store/ui';
+import { GuideCard } from './ConceptGuide';
 import { LearnPanel } from './LearnPanel';
 import { DecisionsTab, NotesTab } from './Notes';
 import { FindingRow, useFindings } from './Problems';
@@ -87,6 +88,7 @@ function PropertiesTab() {
     return (
       <>
         <SelectionProblems id={element.id} />
+        <GuideCard element={element} />
         <ElementForm key={element.id} element={element} />
       </>
     );

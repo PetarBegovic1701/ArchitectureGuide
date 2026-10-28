@@ -151,4 +151,17 @@ test('dialogs and panels fit the screen', async ({ page }) => {
   }
   await expect(page.getByRole('dialog', { name: 'Inspector' })).toContainText(/React/);
   await noSidewaysScroll(page);
+
+  // The palette's info button opens the shape's guide in the sheet or drawer.
+  if (isPhone(page))
+    await page
+      .getByRole('navigation', { name: 'Toolbar' })
+      .getByRole('button', { name: 'Add' })
+      .tap();
+  else await page.getByRole('button', { name: 'Shapes' }).tap();
+  await page.getByRole('button', { name: 'About Node service' }).tap();
+  await expect(
+    page.getByRole('dialog', { name: 'Inspector' }).getByTestId('guide-node.service'),
+  ).toContainText('An Express API');
+  await noSidewaysScroll(page);
 });

@@ -817,6 +817,8 @@ A legend is generated for the active mode.
 | `react.hook` | Custom hook | rounded | `hook` | `react.app`, `react.feature` | – |
 | `react.server-state` | Server-state cache | cylinder-dashed | `qcache` | `react.app` | `lib: 'tanstack-query' \| 'swr' \| 'rtk-query' \| 'apollo'`, `staleTimeMs`, `optimisticUpdates` |
 | `react.client-store` | Client state store | cylinder-dashed | `store-ui` | `react.app`, `react.feature` | `lib: 'zustand' \| 'redux-toolkit' \| 'context' \| 'jotai'`, `persist: 'none' \| 'local-storage' \| 'session-storage' \| 'indexeddb'` |
+| `react.action` | Action / thunk | rounded | `act` | `react.app`, `react.feature` | `kind: 'redux-action' \| 'redux-thunk' \| 'zustand-action' \| 'reducer-case'`, `async` |
+| `react.effect` | Effect (useEffect) | rounded | `eff` | `react.app`, `react.feature` | `dependencies`, `cleanup` |
 | `react.api-client` | API client | plug | `apic` | `react.app` | `kind: 'fetch' \| 'axios' \| 'openapi-generated' \| 'trpc' \| 'graphql'` |
 
 ### 9.6 Node.js concepts
@@ -906,9 +908,11 @@ interface RelationType {
 | `listens` | async | dashed thin | `LISTEN` | RNP |
 | `connects-via` | sync | solid thin | DB connections through a pooler | RNP |
 | `replicates-to` | async | dotted | Replication | RNP |
-| `serves` | static | solid, open arrow | Node serves the SPA build | RNP |
-| `uses-state` | static | dotted | Component/route → store | RNP |
-| `fetches-via` | sync | solid thin | Server-state/hook → API client | RNP |
+| `serves` | static | solid, open arrow | Node, a BFF or a CDN serves the SPA build | RNP |
+| `uses-state` | static | dotted | Component/route/hook/effect → store | RNP |
+| `fetches-via` | sync | solid thin | Server-state/hook/action/effect → API client | RNP |
+| `dispatches` | sync | solid thin | UI code, hook or effect → action | RNP |
+| `updates` | sync | solid | Action → client store or server-state cache | RNP |
 | `invokes` | sync | solid, arrow | Runs a database function or procedure | RNP |
 | `fires-on` | static | dashed thin | A trigger runs when rows of a table or view change | RNP |
 
@@ -1164,7 +1168,7 @@ interface GraphQuery {
 | RNP-009 | No pooling at scale | `node.service` with `scaling: horizontal \| serverless` and no `connects-via` pooler | model | warn | Add PgBouncer (transaction mode) or a managed pooler |
 | RNP-010 | NOTIFY used for durable work | `pg.channel` listened to by a `node.worker` | model | info | NOTIFY is not durable; use `pg.job-queue` |
 | RNP-011 | Frontend calls many services | `react.app` `calls` > 2 Node deployables | model | warn | Add a Node BFF (T5) |
-| RNP-012 | Server data in the client store | `react.api-client` → `react.client-store` write path while a `react.server-state` exists; analysis: `createAsyncThunk` or fetch inside Zustand actions with TanStack Query present | model + analysis | info | Keep server data in the server-state cache |
+| RNP-012 | Server data in the client store | A `react.action` that `fetches-via` an API client and `updates` a `react.client-store`, while a `react.server-state` exists; analysis: `createAsyncThunk` or fetch inside Zustand actions with TanStack Query present | model + analysis | info | Keep server data in the server-state cache |
 | RNP-013 | FSD layer direction | Lower FSD layer imports a higher one (`app > pages > widgets > features > entities > shared`) | model + analysis | warn | Move code down; invert via props/slots |
 | RNP-014 | Feature-to-feature imports | `react.feature` depends on another `react.feature` | model + analysis | warn | Lift shared code to `entities`/`shared` |
 | RNP-015 | No validation at the boundary | `node.route-handler` without `validation`; analysis: no zod / joi / class-validator / type provider found | model + analysis | info | Add schema validation; share zod via `node.contract` |
@@ -1592,6 +1596,60 @@ phone (390 × 844) and tablet (820 × 1180) viewports with touch enabled.
   finding, connect, rename, template, export and Learn scenarios with taps. The
   desktop specs are not run on phone sizes, because they use desktop-only
   controls (palette drag, top-bar menus).
+
+### 13.11 Concept guides
+
+A user who picks a shape should learn, at that moment, what it is for, where it
+is used in real projects, and what it connects to. Example: pick a Redux store,
+and the builder says that it holds state that many components share, and that
+actions update it, components read it, and an effect or a click dispatches the
+actions.
+
+**Data.** Each concept has a guide (`StackProfile.guides`, `catalog.guides`):
+
+```ts
+interface ConceptGuide {
+  examples: string[];             // real-world scenarios, one sentence each
+  connections: ConceptLink[];     // most important first
+}
+interface ConceptLink {
+  direction: 'out' | 'in';        // this → kind, or kind → this
+  type: string;                   // relation type
+  kind: string;                   // the concept on the other end
+  note: string;                   // why the two connect, one sentence
+}
+```
+
+`checkGuides(catalog)` reports guides for unknown concepts and connections that
+the relation rules refuse; the profile test keeps it empty, and requires
+examples for every concept and at least two typical connections for every
+concept that can connect to anything. `conceptConnections(catalog, kind)`
+returns the typical connections, then every other pair the rules allow, grouped
+by direction and relation type.
+
+**UI.**
+
+- **Properties tab:** a collapsible "About" card above the properties of the
+  selected shape: description, "In real projects", "It connects to" and "What
+  connects to it". Open or closed is remembered per browser.
+- **Add connected:** each typical connection has a "+" button. It adds the
+  other shape next to the selected one (in the same container when the concept
+  may live there, else the nearest container above it that accepts it, else top
+  level) and connects the two, in one undo step. When shapes of that concept
+  already exist, the button opens a menu: a new shape, or "Connect" to an
+  existing one. The selected shape stays selected, so several connections can
+  be added in a row.
+- **Learn tab:** the same guide below the learning text, plus "Everything else
+  the rules allow". Concept names in a guide open that concept's guide.
+- **Palette:** an info button on each item opens the guide in the Learn tab
+  without adding a shape (on small screens, in the inspector drawer or sheet).
+
+**State management concepts.** To describe flows like "an effect dispatches a
+thunk, the thunk calls the API and updates the store", the profile has
+`react.action` (Redux action, thunk, Zustand action) and `react.effect`
+(`useEffect`), and the relation types `dispatches` and `updates` (§9.5, §10.2).
+With these, RNP-012 is a model rule: it reports an action that fetches via the
+API client and updates a client store while the app has a server-state cache.
 
 ---
 

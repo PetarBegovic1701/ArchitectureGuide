@@ -167,8 +167,53 @@ const REACT: Concept[] = [
       })
       .partial(),
     palette: { group: 'Frontend', order: 90, basic: false },
-    docs: 'Holds UI state that does not come from the server: Zustand, Redux Toolkit, Context, Jotai.',
-    aliases: ['redux', 'zustand', 'context', 'jotai', 'state'],
+    docs: 'Holds state that many parts of the app share in the browser (cart, filters, signed-in user, UI flags): Redux Toolkit, Zustand, Context, Jotai. Components read it; actions change it. Data from the server belongs in a server-state cache.',
+    aliases: ['redux', 'redux store', 'zustand', 'context', 'jotai', 'state', 'global state'],
+  },
+  {
+    id: 'react.action',
+    name: 'Action / thunk',
+    category: 'module',
+    icon: 'send',
+    idPrefix: 'act',
+    defaultLayer: 'presentation',
+    allowedParents: ['react.app', 'react.feature'],
+    propertySchema: z
+      .object({
+        kind: z.enum(['redux-action', 'redux-thunk', 'zustand-action', 'reducer-case']),
+        async: z.boolean(),
+      })
+      .partial(),
+    palette: { group: 'Frontend', order: 92, basic: false },
+    docs: 'A named change to client state: a Redux action and its reducer case, a thunk (`createAsyncThunk`) that calls the API first, or a Zustand action. UI code dispatches it; it updates the store.',
+    aliases: [
+      'redux action',
+      'thunk',
+      'createAsyncThunk',
+      'reducer',
+      'slice',
+      'dispatch',
+      'zustand action',
+    ],
+  },
+  {
+    id: 'react.effect',
+    name: 'Effect (useEffect)',
+    category: 'module',
+    icon: 'refresh-cw',
+    idPrefix: 'eff',
+    defaultLayer: 'presentation',
+    allowedParents: ['react.app', 'react.feature'],
+    propertySchema: z
+      .object({
+        /** What makes it run again, e.g. ["orderId"]; empty = on mount only. */
+        dependencies: z.array(z.string()),
+        cleanup: z.boolean(),
+      })
+      .partial(),
+    palette: { group: 'Frontend', order: 95, basic: false },
+    docs: 'Code that runs after React renders, to sync with something outside React: load data when a page opens, dispatch an action when an ID changes, subscribe to a WebSocket and clean up.',
+    aliases: ['useEffect', 'effect', 'side effect', 'on mount', 'lifecycle', 'useLayoutEffect'],
   },
   {
     id: 'react.api-client',

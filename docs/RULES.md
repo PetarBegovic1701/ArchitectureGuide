@@ -67,6 +67,7 @@ new projects start with: `core`, `frontend`, `security`, `concurrency`, `api`, `
 | [RNP-023](#rnp-023) | Retried call is not idempotent | warning | api, concurrency |
 | [RNP-024](#rnp-024) | Mutating endpoint without authentication | warning | security |
 | [RNP-025](#rnp-025) | Unpaginated list endpoint | info | api |
+| [RNP-012](#rnp-012) | Server data in the client store | info | react-node-postgres |
 | [RNP-026](#rnp-026) | Tokens in web storage | warning | security |
 | [RNP-027](#rnp-027) | Logic split between SQL and a service | info | react-node-postgres |
 | [RNP-028](#rnp-028) | Module writes another module's schema | warning | modular-monolith |
@@ -416,6 +417,16 @@ A list that returns every row is fast with test data and slow, or out of memory,
 **As a rule for agents:** Endpoints that return lists MUST paginate.
 
 Learn: `node.endpoint`.
+
+### RNP-012
+
+**Server data in the client store** · info · packs: React + Node.js + PostgreSQL (always on)
+
+A thunk that loads data from the API and puts it in a Redux or Zustand store must handle loading flags, errors, caching, refetching and stale data by hand. A server-state cache (TanStack Query, RTK Query) does all of that. Keep the client store for state the server does not own: the cart before checkout, filters, UI flags.
+
+**As a rule for agents:** Data loaded from the API SHOULD live in the server-state cache, not in the client store.
+
+Learn: `react.server-state`.
 
 ### RNP-026
 

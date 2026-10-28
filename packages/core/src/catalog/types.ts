@@ -146,6 +146,26 @@ export function isDenyRule(rule: RelationRule): rule is DenyRule {
   return 'deny' in rule;
 }
 
+/** One typical connection of a concept, with the reason it exists (Implementation.md §13.11). */
+export interface ConceptLink {
+  /** `out`: this concept → `kind`. `in`: `kind` → this concept. */
+  direction: 'out' | 'in';
+  /** Relation type ID. */
+  type: string;
+  /** The concept on the other end. */
+  kind: string;
+  /** Why the two connect, in one sentence. */
+  note: string;
+}
+
+/** What the builder tells a user who picks a concept: real-world uses and typical connections. */
+export interface ConceptGuide {
+  /** Real-world scenarios, one sentence each. */
+  examples: string[];
+  /** The connections people draw most often, most important first. */
+  connections: ConceptLink[];
+}
+
 /** A plug-in with stack-specific knowledge (Implementation.md §2, §9.1). */
 export interface StackProfile {
   id: string;
@@ -159,6 +179,8 @@ export interface StackProfile {
   rules?: Rule[];
   /** Built-in architecture templates (Implementation.md §12). */
   templates?: Template[];
+  /** Guides per concept ID; may cover core concepts too (Implementation.md §13.11). */
+  guides?: Record<string, ConceptGuide>;
   /** Learning texts and lessons (Implementation.md §17). */
   content?: { docs: readonly LearningDoc[]; lessons: readonly Lesson[] };
 }

@@ -10,6 +10,7 @@ import {
 } from '@archguide/core';
 import type {
   Annotation,
+  ConceptLink,
   Finding,
   Id,
   Op,
@@ -131,6 +132,70 @@ export function addElementFromPalette(kind: string): Id | undefined {
     );
   }
   return addElementAt(kind, canvasApi.center?.() ?? { x: 200, y: 200 });
+}
+
+/**
+ * Adds a shape of `link.kind` next to `anchorId` and connects the two with `link.type`, in
+ * one undo step (concept guides, Implementation.md §13.11). With `existingId`, only connects.
+ * The anchor stays selected, so its guide stays open for the next connection.
+ */
+export function addConnected(
+  anchorId: Id,
+  link: Pick<ConceptLink, 'direction' | 'type' | 'kind'>,
+  existingId?: Id,
+): Id | undefined {
+  const { project: p, viewId } = project();
+  const anchor = p && elementById(p, anchorId);
+  if (!p || !anchor) return undefined;
+  const view = activeView(p, viewId);
+  const ops: Op[] = [];
+  let partnerId = existingId;
+  if (!partnerId) {
+    // In the anchor's container when the concept may live there, else the nearest
+    // container above that accepts it, else top level.
+    let parentId = anchor.parentId;
+    while (parentId && !checkNesting(catalog, link.kind, elementById(p, parentId)!.kind).ok)
+      parentId = elementById(p, parentId)?.parentId;
+    const shown = view.nodes.some((n) => n.elementId === anchorId);
+    const pos = shown
+      ? absolutePosition(p, view, anchorId)
+      : (canvasApi.center?.() ?? { x: 0, y: 0 });
+    const size = shown ? nodeSize(p, view, anchorId) : { w: 0, h: 0 };
+    const own = defaultSize(link.kind);
+    const gap = 64;
+    const point =
+      link.direction === 'out'
+        ? { x: pos.x + size.w + gap + own.w / 2, y: pos.y + size.h / 2 }
+        : { x: pos.x - gap - own.w / 2, y: pos.y + size.h / 2 };
+    const result = newElementOps(
+      p,
+      view,
+      link.kind,
+      point,
+      parentId ? { parentId } : { topLevel: true },
+    );
+    if (result.error) {
+      ui().toast({
+        tone: 'error',
+        message: result.error,
+        actions: [{ label: 'Why?', run: () => ui().openLearn({ kind: 'doc', id: link.kind }) }],
+      });
+      return undefined;
+    }
+    ops.push(...result.ops);
+    partnerId = result.id;
+  }
+  const [sourceId, targetId] =
+    link.direction === 'out' ? [anchorId, partnerId] : [partnerId, anchorId];
+  ops.push(...newRelationOps(p, view, link.type, sourceId, targetId).ops);
+  const partnerName = conceptOf(link.kind)?.name ?? link.kind;
+  if (!dispatch(ops, { label: existingId ? `Connect: ${link.type}` : `Add ${partnerName}` }))
+    return undefined;
+  if (!existingId) {
+    ui().set({ freshIds: [...ui().freshIds, partnerId] });
+    canvasApi.reveal?.(partnerId);
+  }
+  return partnerId;
 }
 
 /** Finishes an inline rename. A fresh element also gets an ID that follows its new name. */

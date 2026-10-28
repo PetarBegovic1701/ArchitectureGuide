@@ -4,8 +4,10 @@ import {
   CORE_CONCEPTS,
   SHAPES,
   CatalogError,
+  checkGuides,
   checkNesting,
   checkRelation,
+  conceptConnections,
   createCatalog,
   isDenyRule,
   matchSelector,
@@ -188,5 +190,69 @@ describe('checkNesting', () => {
       ok: false,
       code: 'NESTING_NOT_ALLOWED',
     });
+  });
+});
+
+describe('concept guides', () => {
+  const guided = (guides: Record<string, unknown>) =>
+    createCatalog([{ ...testProfile, guides: guides as never }]);
+
+  it('accepts connections the relation rules allow', () => {
+    const catalog = guided({
+      't.app': {
+        examples: ['A shop front end.'],
+        connections: [{ direction: 'out', type: 'calls', kind: 't.service', note: 'Loads data.' }],
+      },
+    });
+    expect(checkGuides(catalog)).toEqual([]);
+  });
+
+  it('reports unknown concepts, unknown types and refused connections', () => {
+    const catalog = guided({
+      't.nope': { examples: [], connections: [] },
+      't.app': {
+        examples: [],
+        connections: [
+          { direction: 'out', type: 'calls', kind: 't.missing', note: '' },
+          { direction: 'out', type: 'teleports', kind: 't.service', note: '' },
+          { direction: 'in', type: 'implements', kind: 't.service', note: '' },
+        ],
+      },
+    });
+    expect(checkGuides(catalog)).toEqual([
+      'Guide for unknown concept "t.nope"',
+      't.app → calls t.missing: unknown concept',
+      't.app → teleports t.service: unknown relation type',
+      't.app ← implements t.service: not allowed by the relation rules',
+    ]);
+  });
+
+  it('refuses two guides for the same concept', () => {
+    const guides = { 't.app': { examples: [], connections: [] } };
+    expect(() =>
+      createCatalog([
+        { ...testProfile, guides },
+        { ...testProfile, id: 'other', concepts: [], relationTypes: [], relationRules: [], guides },
+      ]),
+    ).toThrow(CatalogError);
+  });
+
+  it('lists typical connections first and every other allowed pair grouped by type', () => {
+    const typical = { direction: 'out', type: 'calls', kind: 't.service', note: 'Loads data.' };
+    const catalog = guided({ 't.app': { examples: [], connections: [typical] } });
+    const { typical: first, other } = conceptConnections(catalog, 't.app');
+    expect(first).toEqual([typical]);
+    // The typical pair is not repeated in the other groups.
+    const calls = other.find((g) => g.direction === 'out' && g.type.id === 'calls');
+    expect(calls?.concepts.map((c) => c.id) ?? []).not.toContain('t.service');
+    // Every listed pair is valid.
+    for (const g of other)
+      for (const c of g.concepts) {
+        const [from, to] = g.direction === 'out' ? ['t.app', c.id] : [c.id, 't.app'];
+        expect(validRelationTypes(catalog, from, to).map((t) => t.id)).toContain(g.type.id);
+      }
+    // Outgoing groups come before incoming ones.
+    const firstIn = other.findIndex((g) => g.direction === 'in');
+    if (firstIn >= 0) expect(other.slice(firstIn).every((g) => g.direction === 'in')).toBe(true);
   });
 });

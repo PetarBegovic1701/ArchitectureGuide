@@ -792,6 +792,37 @@ const unpaginatedList: Rule = {
       })),
 };
 
+const serverDataInClientStore: Rule = {
+  id: 'RNP-012',
+  title: 'Server data in the client store',
+  severity: 'info',
+  packs: [PROFILE_PACK],
+  learnId: 'react.server-state',
+  rationale:
+    'A thunk that loads data from the API and puts it in a Redux or Zustand store must handle loading flags, errors, caching, refetching and stale data by hand. A server-state cache (TanStack Query, RTK Query) does all of that. Keep the client store for state the server does not own: the cart before checkout, filters, UI flags.',
+  invariant:
+    'Data loaded from the API SHOULD live in the server-state cache, not in the client store.',
+  appliesTo: ['react.action', 'react.client-store'],
+  // Only when the app already has a server-state cache: then there is a better place.
+  check: ({ graph: g }) =>
+    g.ofKind('react.server-state').length === 0
+      ? []
+      : g.ofKind('react.action').flatMap((a) => {
+          const fetches = g.outgoing(a.id, 'fetches-via');
+          const stores = g
+            .outgoing(a.id, 'updates')
+            .filter((r) => g.element(r.targetId)?.kind === 'react.client-store');
+          if (fetches.length === 0 || stores.length === 0) return [];
+          return [
+            {
+              targetIds: [a.id],
+              relatedIds: [...fetches, ...stores].map((r) => r.id),
+              message: `${a.name} loads data from the API into ${name(g, stores[0]!.targetId)}. The app has a server-state cache: let it hold server data.`,
+            },
+          ];
+        }),
+};
+
 const tokensInWebStorage: Rule = {
   id: 'RNP-026',
   title: 'Tokens in web storage',
@@ -904,6 +935,7 @@ export const RULES: Rule[] = [
   retriedNotIdempotent,
   mutatingWithoutAuth,
   unpaginatedList,
+  serverDataInClientStore,
   tokensInWebStorage,
   logicSplit,
   crossModuleWrite,

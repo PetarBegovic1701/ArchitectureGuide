@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { Info } from 'lucide-react';
 import { PALETTE_GROUPS } from '@archguide/core';
 import type { Concept } from '@archguide/core';
 import { catalog } from '../lib/catalog';
@@ -73,7 +74,7 @@ export function Palette({ variant = 'side' }: { variant?: 'side' | 'sheet' }) {
               {items.map((c) => {
                 const Icon = iconFor(c.icon);
                 return (
-                  <li key={c.id}>
+                  <li key={c.id} className="group/item flex items-center">
                     <button
                       type="button"
                       draggable
@@ -88,10 +89,23 @@ export function Palette({ variant = 'side' }: { variant?: 'side' | 'sheet' }) {
                         // On a phone the sheet covers the canvas: close it to show the new shape.
                         if (variant === 'sheet') useUi.getState().set({ panel: null });
                       }}
-                      className="ag-touch flex w-full cursor-grab items-center gap-2 rounded px-2 py-1 text-left text-sm hover:bg-[var(--ag-panel-2)]"
+                      className="ag-touch flex min-w-0 flex-1 cursor-grab items-center gap-2 rounded px-2 py-1 text-left text-sm hover:bg-[var(--ag-panel-2)]"
                     >
                       <Icon size={15} className="shrink-0 text-[var(--ag-muted)]" aria-hidden />
                       <span className="truncate">{c.name}</span>
+                    </button>
+                    <button
+                      type="button"
+                      aria-label={`About ${c.name}`}
+                      title="What it is, real-world uses, what it connects to"
+                      className="ag-touch shrink-0 rounded p-1 text-[var(--ag-muted)] opacity-60 hover:bg-[var(--ag-panel-2)] hover:text-[var(--ag-accent)] hover:opacity-100 focus-visible:opacity-100 group-hover/item:opacity-100"
+                      onClick={() => {
+                        useUi.getState().openLearn({ kind: 'doc', id: c.id });
+                        // Small screens: show the guide in the inspector drawer or sheet.
+                        if (variant === 'sheet') useUi.getState().set({ panel: 'inspector' });
+                      }}
+                    >
+                      <Info size={14} />
                     </button>
                   </li>
                 );

@@ -51,6 +51,8 @@ interface UiState {
   /** Last relation type picked per "sourceKind→targetKind", offered first next time. */
   preferredTypes: Record<string, string>;
   problemsOpen: boolean;
+  /** The concept guide above a shape's properties is open (§13.11). */
+  guideOpen: boolean;
 
   // Session state.
   inspectorTab: InspectorTab;
@@ -133,6 +135,7 @@ export const useUi = create<UiState>()(
       theme: 'system',
       preferredTypes: {},
       problemsOpen: true,
+      guideOpen: true,
       inspectorTab: 'properties',
       openNoteId: null,
       noteEditing: false,
@@ -182,6 +185,7 @@ export const useUi = create<UiState>()(
         theme: s.theme,
         preferredTypes: s.preferredTypes,
         problemsOpen: s.problemsOpen,
+        guideOpen: s.guideOpen,
       }),
     },
   ),

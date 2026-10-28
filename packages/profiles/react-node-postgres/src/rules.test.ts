@@ -449,6 +449,30 @@ describe('profile rules: frontend', () => {
     expect(targets(p, 'RNP-026')).toEqual([['app.web'], ['st.auth']]);
     expect(targets(fix(p, 'RNP-026'), 'RNP-026')).toEqual([['st.auth']]);
   });
+
+  it('RNP-012 a thunk that stores API data, only when a server-state cache exists', () => {
+    const els: ElSpec[] = [
+      ['app.web', 'react.app'],
+      ['st.cart', 'react.client-store', { parentId: 'app.web', name: 'Cart store' }],
+      ['act.load', 'react.action', { parentId: 'app.web', name: 'loadOrders' }],
+      ['act.add', 'react.action', { parentId: 'app.web', name: 'addToCart' }],
+      ['apic.http', 'react.api-client', { parentId: 'app.web' }],
+    ];
+    const rels: RelSpec[] = [
+      ['act.load', 'fetches-via', 'apic.http'],
+      ['act.load', 'updates', 'st.cart'],
+      ['act.add', 'updates', 'st.cart'],
+    ];
+    expect(targets(build(els, rels), 'RNP-012')).toEqual([]);
+    const withCache = build(
+      [...els, ['qcache.q', 'react.server-state', { parentId: 'app.web' }]],
+      rels,
+    );
+    expect(targets(withCache, 'RNP-012')).toEqual([['act.load']]);
+    expect(fire(withCache, 'RNP-012')[0]!.message).toContain(
+      'loadOrders loads data from the API into Cart store',
+    );
+  });
 });
 
 describe('profile rules: API and authentication', () => {

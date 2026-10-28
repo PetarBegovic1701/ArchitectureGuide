@@ -2,6 +2,7 @@ import type { StackProfile } from '@archguide/core';
 import { CONCEPTS } from './concepts';
 import { RELATION_RULES, RELATION_TYPES } from './relations';
 import { DOCS, LESSONS } from './content.generated';
+import { GUIDES } from './guides';
 import { RULES } from './rules';
 import { TEMPLATES } from './templates';
 
@@ -17,7 +18,8 @@ export const profile: StackProfile = {
   relationRules: RELATION_RULES,
   rules: RULES,
   templates: TEMPLATES,
+  guides: GUIDES,
   content: { docs: DOCS, lessons: LESSONS },
 };
 
-export { CONCEPTS, DOCS, LESSONS, RELATION_RULES, RELATION_TYPES, RULES, TEMPLATES };
+export { CONCEPTS, DOCS, GUIDES, LESSONS, RELATION_RULES, RELATION_TYPES, RULES, TEMPLATES };

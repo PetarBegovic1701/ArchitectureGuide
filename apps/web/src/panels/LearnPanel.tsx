@@ -1,23 +1,13 @@
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
 import { RULE_PACKS } from '@archguide/core';
-import type { LearningDoc, Level } from '@archguide/core';
+import type { Element, LearningDoc, Level } from '@archguide/core';
 import { catalog, conceptOf } from '../lib/catalog';
 import { docFor, relatedDocs, textAt } from '../lib/learn';
 import { elementById } from '../lib/model';
 import { RULES, SEVERITY_COLOR, severityLabel } from '../lib/findings';
 import { useProject } from '../store/project';
 import { useUi } from '../store/ui';
-
-export function Markdown({ children }: { children: string }) {
-  return (
-    <div className="ag-md text-sm leading-relaxed">
-      <ReactMarkdown remarkPlugins={[remarkGfm]} skipHtml>
-        {children}
-      </ReactMarkdown>
-    </div>
-  );
-}
+import { ConceptGuide } from './ConceptGuide';
+import { Markdown } from './Markdown';
 
 /**
  * The Learn tab (§17.7): the learning text for the selection, a refused connection, or a
@@ -64,7 +54,7 @@ export function LearnPanel() {
   const element =
     selection.elements.length === 1 ? elementById(project, selection.elements[0]!) : undefined;
   if (relation) return <Subject id={relation.type} level={level} onOpen={open} />;
-  if (element) return <Subject id={element.kind} level={level} onOpen={open} />;
+  if (element) return <Subject id={element.kind} level={level} onOpen={open} element={element} />;
   return (
     <p className="text-sm text-[var(--ag-muted)]">
       Select a shape or an arrow to learn what it is, when to use it, and the common mistakes.
@@ -138,12 +128,15 @@ function Subject({
   onOpen,
   back = false,
   compact = false,
+  element,
 }: {
   id: string;
   level: Level;
   onOpen: (id: string) => void;
   back?: boolean;
   compact?: boolean;
+  /** The selected element, when the subject is its concept: enables "add connected". */
+  element?: Element;
 }) {
   const concept = catalog.concepts.get(id);
   const relationType = catalog.relationTypes.get(id);
@@ -158,6 +151,7 @@ function Subject({
       <h3 className="text-sm font-semibold">{title}</h3>
       {description && !doc && <Markdown>{description}</Markdown>}
       {doc && <DocBody doc={doc} level={level} compact={compact} />}
+      {concept && !compact && <ConceptGuide kind={concept.id} element={element} showAll />}
       {!doc && !compact && (
         <p className="text-xs text-[var(--ag-muted)]">
           There is no full learning text for this yet.
