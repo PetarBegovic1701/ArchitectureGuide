@@ -3,6 +3,7 @@ import {
   adaptSolution,
   applySolution,
   checkStep,
+  contentCoverage,
   createCatalog,
   runRules,
   startLesson,
@@ -54,6 +55,14 @@ describe('learning texts', () => {
       expect(doc.related).not.toContain(doc.id);
     },
   );
+});
+
+describe('coverage (Implementation.md §17.6)', () => {
+  it('every concept and relation type has a learning text', () => {
+    const c = contentCoverage(catalog, DOCS);
+    expect(c.concepts.missing).toEqual([]);
+    expect(c.relationTypes.missing).toEqual([]);
+  });
 });
 
 describe('lessons', () => {

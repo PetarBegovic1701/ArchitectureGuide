@@ -70,19 +70,19 @@ The API saves the request and enqueues a job in the same transaction. A worker p
 
 ## Concepts
 
-- **User / actor** (`gen.actor`): A person or role that uses the system (customer, admin, support agent).
-- **External system** (`gen.external`): A system outside your control, for example Stripe, SendGrid or a partner API.
-- **Middleware** (`node.middleware`): Runs before or after handlers: auth, validation, rate limiting, error handling.
-- **Controller / route handler** (`node.route-handler`): Receives HTTP requests: an Express router, Fastify routes or a NestJS controller.
-- **Node service** (`node.service`): A Node.js process that serves requests (Express, Fastify or NestJS).
-- **Use case / application service** (`node.use-case`): One application action (`PlaceOrder`).
-- **Background worker** (`node.worker`): A Node process that runs jobs from a queue (pg-boss, graphile-worker).
-- **Database** (`pg.database`): A PostgreSQL database.
-- **Postgres job queue** (`pg.job-queue`): A durable job queue stored in Postgres tables (pg-boss, graphile-worker).
-- **Schema** (`pg.schema`): A namespace of tables.
-- **calls** (`calls`): Synchronous request/response.
-- **enqueues** (`enqueues`): Adds a job to a Postgres job queue.
-- **migrates** (`migrates`): This element owns the DDL (migrations) of the schema.
-- **processes** (`processes`): Runs jobs from a Postgres job queue.
-- **reads** (`reads`): Reads data from a store.
-- **writes** (`writes`): Writes data to a store.
+- **User / actor** (`gen.actor`): A person or role that uses the system — customer, admin, support agent. Diagrams start with who uses the system and why.
+- **External system** (`gen.external`): A system outside your control — Stripe, SendGrid, a partner API. It can be slow or down; design every call to it for failure.
+- **Middleware** (`node.middleware`): Code that runs before (or after) every handler of a route group — authentication, rate limiting, request logging, error handling.
+- **Controller / route handler** (`node.route-handler`): Code that receives an HTTP request, validates it, calls the business logic, and turns the result into an HTTP response. Thin by design.
+- **Node service** (`node.service`): A Node.js process that answers requests. It checks who is calling, validates input, applies business rules, and is the only part that talks to the database.
+- **Use case / application service** (`node.use-case`): One business action — PlaceOrder, RefundOrder — as one function or class. It loads data, asks the domain to apply the rules, saves, and starts follow-up work.
+- **Background worker** (`node.worker`): A Node process that runs jobs from a queue — emails, invoices, image resizing — outside the request, with retries when something fails.
+- **Database** (`pg.database`): A PostgreSQL database — the place where data survives restarts. Only backend code connects to it; schemas inside it group tables by owner.
+- **Postgres job queue** (`pg.job-queue`): A durable job queue stored in Postgres tables (pg-boss, graphile-worker). Jobs can be added in the same transaction as your data, so neither is lost.
+- **Schema** (`pg.schema`): A namespace of tables inside a database. In this tool it is also the ownership boundary — one service owns a schema and runs its migrations.
+- **calls** (`calls`): A synchronous request and response — the caller waits for the answer. Set the protocol, auth, timeout and whether it is safe to retry.
+- **enqueues** (`enqueues`): Adds a job to a Postgres job queue. Set inTransaction when the job is added in the same transaction as the data.
+- **migrates** (`migrates`): This element owns the schema's DDL — it runs the migrations that create and change tables. Exactly one owner per schema.
+- **processes** (`processes`): A worker (or service) takes jobs from a Postgres job queue and runs them, with retries.
+- **reads** (`reads`): Code reads data from a store. Set via (the data-access library) and, where it matters, the isolation level.
+- **writes** (`writes`): Code changes data in a store. Set via, the transaction settings, and concurrencyControl when several writers can change the same rows.

@@ -63,14 +63,14 @@ A React app calls one Node.js REST API, which owns one PostgreSQL schema. The sm
 
 ## Concepts
 
-- **User / actor** (`gen.actor`): A person or role that uses the system (customer, admin, support agent).
-- **Middleware** (`node.middleware`): Runs before or after handlers: auth, validation, rate limiting, error handling.
-- **Node service** (`node.service`): A Node.js process that serves requests (Express, Fastify or NestJS).
-- **Database** (`pg.database`): A PostgreSQL database.
-- **Schema** (`pg.schema`): A namespace of tables.
-- **React app** (`react.app`): A React single-page app built with Vite.
-- **Route / page** (`react.route`): A page reachable by URL (React Router or TanStack Router route).
-- **calls** (`calls`): Synchronous request/response.
-- **migrates** (`migrates`): This element owns the DDL (migrations) of the schema.
-- **reads** (`reads`): Reads data from a store.
-- **writes** (`writes`): Writes data to a store.
+- **User / actor** (`gen.actor`): A person or role that uses the system — customer, admin, support agent. Diagrams start with who uses the system and why.
+- **Middleware** (`node.middleware`): Code that runs before (or after) every handler of a route group — authentication, rate limiting, request logging, error handling.
+- **Node service** (`node.service`): A Node.js process that answers requests. It checks who is calling, validates input, applies business rules, and is the only part that talks to the database.
+- **Database** (`pg.database`): A PostgreSQL database — the place where data survives restarts. Only backend code connects to it; schemas inside it group tables by owner.
+- **Schema** (`pg.schema`): A namespace of tables inside a database. In this tool it is also the ownership boundary — one service owns a schema and runs its migrations.
+- **React app** (`react.app`): The part of the system that runs in the browser. It draws the screens and sends requests to the backend; it never holds secrets.
+- **Route / page** (`react.route`): A screen reachable by URL. The router picks the page for the current address, so links, the back button and bookmarks work.
+- **calls** (`calls`): A synchronous request and response — the caller waits for the answer. Set the protocol, auth, timeout and whether it is safe to retry.
+- **migrates** (`migrates`): This element owns the schema's DDL — it runs the migrations that create and change tables. Exactly one owner per schema.
+- **reads** (`reads`): Code reads data from a store. Set via (the data-access library) and, where it matters, the isolation level.
+- **writes** (`writes`): Code changes data in a store. Set via, the transaction settings, and concurrencyControl when several writers can change the same rows.

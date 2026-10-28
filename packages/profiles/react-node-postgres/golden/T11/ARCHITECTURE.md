@@ -64,11 +64,11 @@ The React code is split into layers (pages, widgets, features, entities, shared)
 
 ## Concepts
 
-- **Layer** (`group.layer`): A horizontal layer such as presentation, application, domain or infrastructure.
-- **API client** (`react.api-client`): The layer that talks to the backend: a fetch wrapper, axios, a generated OpenAPI client, or tRPC.
-- **React app** (`react.app`): A React single-page app built with Vite.
-- **Feature module** (`react.feature`): A folder that holds one feature: its components, hooks and state (for example `src/features/cart`).
+- **Layer** (`group.layer`): A horizontal band of a design — presentation, application, domain, infrastructure. Each layer may only depend on the layers below it.
+- **API client** (`react.api-client`): The one place in the frontend that talks HTTP to the backend — base URL, auth, error handling, and request and response types.
+- **React app** (`react.app`): The part of the system that runs in the browser. It draws the screens and sends requests to the backend; it never holds secrets.
+- **Feature module** (`react.feature`): A folder that holds everything for one feature — components, hooks, state and API calls — with a small public entry point.
 - **Server-state cache** (`react.server-state`): Data that belongs to the server (orders, users) needs caching and refetching; data that belongs to the UI (open dialogs, drafts) needs a simple store. Mixing them causes stale screens.
-- **depends on** (`depends-on`): Compile-time import of another module or package.
-- **fetches via** (`fetches-via`): Loads data through the API client.
-- **uses state** (`uses-state`): Reads or updates a client store or a server-state cache.
+- **depends on** (`depends-on`): A compile-time import — one module uses another's code. The direction of these arrows is the architecture.
+- **fetches via** (`fetches-via`): React code loads data through the API client — a query, a thunk or an effect calls the backend.
+- **uses state** (`uses-state`): React code reads or updates a client store or a server-state cache — a component reads the cart with a selector, a page reads orders from the query cache.

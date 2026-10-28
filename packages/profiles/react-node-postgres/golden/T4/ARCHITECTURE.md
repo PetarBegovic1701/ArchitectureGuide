@@ -71,13 +71,13 @@ One deployable split into modules. Each module owns its own schema and offers a 
 
 ## Concepts
 
-- **User / actor** (`gen.actor`): A person or role that uses the system (customer, admin, support agent).
-- **Middleware** (`node.middleware`): Runs before or after handlers: auth, validation, rate limiting, error handling.
-- **Module** (`node.module`): A NestJS module or a feature folder with a public API.
-- **Node service** (`node.service`): A Node.js process that serves requests (Express, Fastify or NestJS).
-- **Database** (`pg.database`): A PostgreSQL database.
-- **Schema** (`pg.schema`): A namespace of tables.
-- **calls** (`calls`): Synchronous request/response.
-- **depends on** (`depends-on`): Compile-time import of another module or package.
-- **migrates** (`migrates`): This element owns the DDL (migrations) of the schema.
-- **writes** (`writes`): Writes data to a store.
+- **User / actor** (`gen.actor`): A person or role that uses the system — customer, admin, support agent. Diagrams start with who uses the system and why.
+- **Middleware** (`node.middleware`): Code that runs before (or after) every handler of a route group — authentication, rate limiting, request logging, error handling.
+- **Module** (`node.module`): A part of a service with its own responsibility, its own tables and a small public API — "orders", "payments". Modules talk only through their public APIs.
+- **Node service** (`node.service`): A Node.js process that answers requests. It checks who is calling, validates input, applies business rules, and is the only part that talks to the database.
+- **Database** (`pg.database`): A PostgreSQL database — the place where data survives restarts. Only backend code connects to it; schemas inside it group tables by owner.
+- **Schema** (`pg.schema`): A namespace of tables inside a database. In this tool it is also the ownership boundary — one service owns a schema and runs its migrations.
+- **calls** (`calls`): A synchronous request and response — the caller waits for the answer. Set the protocol, auth, timeout and whether it is safe to retry.
+- **depends on** (`depends-on`): A compile-time import — one module uses another's code. The direction of these arrows is the architecture.
+- **migrates** (`migrates`): This element owns the schema's DDL — it runs the migrations that create and change tables. Exactly one owner per schema.
+- **writes** (`writes`): Code changes data in a store. Set via, the transaction settings, and concurrencyControl when several writers can change the same rows.

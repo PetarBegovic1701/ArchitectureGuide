@@ -80,17 +80,17 @@ A gateway in front of independent services. Each service has its own database on
 
 ## Concepts
 
-- **User / actor** (`gen.actor`): A person or role that uses the system (customer, admin, support agent).
-- **Auth provider** (`gen.auth-provider`): Issues and verifies identities: Auth0, Clerk, Cognito, Keycloak, or your own auth service.
-- **API gateway / reverse proxy** (`gen.gateway`): Single entry point that routes requests to services: nginx, Traefik, Kong, a cloud API gateway.
-- **Node service** (`node.service`): A Node.js process that serves requests (Express, Fastify or NestJS).
-- **Postgres server** (`pg.cluster`): A PostgreSQL server (instance) that holds one or more databases.
-- **Database** (`pg.database`): A PostgreSQL database.
-- **Postgres job queue** (`pg.job-queue`): A durable job queue stored in Postgres tables (pg-boss, graphile-worker).
-- **authenticates with** (`authenticates-with`): Uses an auth provider to sign in users or verify tokens.
-- **calls** (`calls`): Synchronous request/response.
-- **enqueues** (`enqueues`): Adds a job to a Postgres job queue.
-- **migrates** (`migrates`): This element owns the DDL (migrations) of the schema.
-- **processes** (`processes`): Runs jobs from a Postgres job queue.
-- **reads** (`reads`): Reads data from a store.
-- **writes** (`writes`): Writes data to a store.
+- **User / actor** (`gen.actor`): A person or role that uses the system — customer, admin, support agent. Diagrams start with who uses the system and why.
+- **Auth provider** (`gen.auth-provider`): The service that signs users in and issues identities — Auth0, Clerk, Cognito, Keycloak, or your own. Apps trust its tokens instead of storing passwords.
+- **API gateway / reverse proxy** (`gen.gateway`): The single entry point for requests from outside. It routes paths to services and handles TLS, rate limits and sometimes auth.
+- **Node service** (`node.service`): A Node.js process that answers requests. It checks who is calling, validates input, applies business rules, and is the only part that talks to the database.
+- **Postgres server** (`pg.cluster`): One running PostgreSQL server. It holds one or more databases and has limits that every app shares — connections, memory, CPU.
+- **Database** (`pg.database`): A PostgreSQL database — the place where data survives restarts. Only backend code connects to it; schemas inside it group tables by owner.
+- **Postgres job queue** (`pg.job-queue`): A durable job queue stored in Postgres tables (pg-boss, graphile-worker). Jobs can be added in the same transaction as your data, so neither is lost.
+- **authenticates with** (`authenticates-with`): Uses an auth provider to sign users in or to verify their tokens. Set the method — OIDC with PKCE, passwords, passkeys, API keys.
+- **calls** (`calls`): A synchronous request and response — the caller waits for the answer. Set the protocol, auth, timeout and whether it is safe to retry.
+- **enqueues** (`enqueues`): Adds a job to a Postgres job queue. Set inTransaction when the job is added in the same transaction as the data.
+- **migrates** (`migrates`): This element owns the schema's DDL — it runs the migrations that create and change tables. Exactly one owner per schema.
+- **processes** (`processes`): A worker (or service) takes jobs from a Postgres job queue and runs them, with retries.
+- **reads** (`reads`): Code reads data from a store. Set via (the data-access library) and, where it matters, the isolation level.
+- **writes** (`writes`): Code changes data in a store. Set via, the transaction settings, and concurrencyControl when several writers can change the same rows.

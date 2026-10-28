@@ -74,16 +74,16 @@ Each entity gets a route handler, a use case and a repository. Requests go down 
 
 ## Concepts
 
-- **User / actor** (`gen.actor`): A person or role that uses the system (customer, admin, support agent).
-- **Middleware** (`node.middleware`): Runs before or after handlers: auth, validation, rate limiting, error handling.
-- **Repository / data access** (`node.repository`): Reads and writes the database through an ORM or query builder.
-- **Controller / route handler** (`node.route-handler`): Receives HTTP requests: an Express router, Fastify routes or a NestJS controller.
-- **Node service** (`node.service`): A Node.js process that serves requests (Express, Fastify or NestJS).
-- **Use case / application service** (`node.use-case`): One application action (`PlaceOrder`).
-- **Database** (`pg.database`): A PostgreSQL database.
-- **Schema** (`pg.schema`): A namespace of tables.
+- **User / actor** (`gen.actor`): A person or role that uses the system — customer, admin, support agent. Diagrams start with who uses the system and why.
+- **Middleware** (`node.middleware`): Code that runs before (or after) every handler of a route group — authentication, rate limiting, request logging, error handling.
+- **Repository / data access** (`node.repository`): The code that reads and writes the database through an ORM or query builder (Prisma, Drizzle, Kysely), so the rest of the app does not write SQL.
+- **Controller / route handler** (`node.route-handler`): Code that receives an HTTP request, validates it, calls the business logic, and turns the result into an HTTP response. Thin by design.
+- **Node service** (`node.service`): A Node.js process that answers requests. It checks who is calling, validates input, applies business rules, and is the only part that talks to the database.
+- **Use case / application service** (`node.use-case`): One business action — PlaceOrder, RefundOrder — as one function or class. It loads data, asks the domain to apply the rules, saves, and starts follow-up work.
+- **Database** (`pg.database`): A PostgreSQL database — the place where data survives restarts. Only backend code connects to it; schemas inside it group tables by owner.
+- **Schema** (`pg.schema`): A namespace of tables inside a database. In this tool it is also the ownership boundary — one service owns a schema and runs its migrations.
 - **Table** (`pg.table`): Tables store your data; keys, constraints and indexes keep it correct and fast.
-- **calls** (`calls`): Synchronous request/response.
-- **migrates** (`migrates`): This element owns the DDL (migrations) of the schema.
-- **reads** (`reads`): Reads data from a store.
-- **writes** (`writes`): Writes data to a store.
+- **calls** (`calls`): A synchronous request and response — the caller waits for the answer. Set the protocol, auth, timeout and whether it is safe to retry.
+- **migrates** (`migrates`): This element owns the schema's DDL — it runs the migrations that create and change tables. Exactly one owner per schema.
+- **reads** (`reads`): Code reads data from a store. Set via (the data-access library) and, where it matters, the isolation level.
+- **writes** (`writes`): Code changes data in a store. Set via, the transaction settings, and concurrencyControl when several writers can change the same rows.

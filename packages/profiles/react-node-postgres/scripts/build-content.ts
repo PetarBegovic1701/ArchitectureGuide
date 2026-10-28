@@ -3,9 +3,15 @@
 import { readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { ContentError, parseLearningDoc, parseLesson } from '@archguide/core';
+import {
+  ContentError,
+  contentCoverage,
+  createCatalog,
+  parseLearningDoc,
+  parseLesson,
+} from '@archguide/core';
 import type { LearningDoc, Lesson } from '@archguide/core';
-import { CONCEPTS, RELATION_TYPES } from '../src';
+import { RULES, profile } from '../src';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
 const target = join(root, 'src/content.generated.ts');
@@ -50,12 +56,11 @@ export const DOCS: LearningDoc[] = ${JSON.stringify(docs, null, 2)};
 export const LESSONS: Lesson[] = ${JSON.stringify(lessons, null, 2)};
 `;
 
-const ids = new Set(docs.map((d) => d.id));
-const coverage = (list: { id: string }[]) =>
-  `${list.filter((x) => ids.has(x.id)).length}/${list.length}`;
+const c = contentCoverage(createCatalog([profile]), docs, RULES);
+const part = (x: { covered: number; total: number }) => `${x.covered}/${x.total}`;
 const summary =
-  `${docs.length} docs, ${lessons.length} lessons; ` +
-  `concepts with a doc: ${coverage(CONCEPTS)}, profile relation types with a doc: ${coverage(RELATION_TYPES)}`;
+  `${docs.length} docs, ${lessons.length} lessons; texts for concepts ${part(c.concepts)}, ` +
+  `relation types ${part(c.relationTypes)}, rules ${part(c.rules)}`;
 
 if (process.argv.includes('--check')) {
   let current = '';

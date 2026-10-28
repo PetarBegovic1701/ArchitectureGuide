@@ -3,6 +3,1475 @@ import type { LearningDoc, Lesson } from '@archguide/core';
 
 export const DOCS: LearningDoc[] = [
   {
+    "id": "authenticates-with",
+    "kind": "relation",
+    "title": "authenticates with",
+    "summary": "Uses an auth provider to sign users in or to verify their tokens. Set the method — OIDC with PKCE, passwords, passkeys, API keys.",
+    "level": "intermediate",
+    "tracks": [
+      "auth"
+    ],
+    "tags": [
+      "oidc",
+      "oauth",
+      "login"
+    ],
+    "explain": {
+      "beginner": "`App authenticates with Auth provider` means the app sends users to the provider to sign\nin, and gets back proof of who they are. `API authenticates with Auth provider` means the\nAPI checks that proof on each request.",
+      "intermediate": "- `method`: `oidc-code-pkce` for browser apps, `password`, `magic-link`, `passkey`,\n  `oauth-client-credentials` for machine clients, `api-key`.\n- Authentication says who; authorization (roles, ownership) is still your code's job.",
+      "senior": "- Prefer a BFF or HttpOnly session cookies over tokens in the browser.\n- Machine-to-machine calls use client credentials or mTLS, with narrow scopes."
+    },
+    "mistakes": [
+      "Authenticating users but never checking what they may access."
+    ],
+    "examples": [
+      {
+        "title": "Start an OIDC code flow with PKCE (server side)",
+        "language": "ts",
+        "code": "const verifier = randomBytes(32).toString('base64url');\nconst challenge = createHash('sha256').update(verifier).digest('base64url');\nredirect(\n  `${issuer}/authorize?response_type=code&client_id=${id}&code_challenge=${challenge}&code_challenge_method=S256`,\n);"
+      }
+    ],
+    "related": [
+      "gen.auth-provider",
+      "node.middleware",
+      "topic.authentication",
+      "node.bff"
+    ],
+    "references": [
+      {
+        "title": "RFC 7636 — PKCE",
+        "url": "https://datatracker.ietf.org/doc/html/rfc7636"
+      },
+      {
+        "title": "OWASP — Session management cheat sheet",
+        "url": "https://cheatsheetseries.owasp.org/cheatsheets/Session_Management_Cheat_Sheet.html"
+      }
+    ],
+    "source": "content/docs/authenticates-with.md"
+  },
+  {
+    "id": "calls",
+    "kind": "relation",
+    "title": "calls",
+    "summary": "A synchronous request and response — the caller waits for the answer. Set the protocol, auth, timeout and whether it is safe to retry.",
+    "level": "beginner",
+    "tracks": [
+      "foundations",
+      "api-design"
+    ],
+    "tags": [
+      "http",
+      "rpc",
+      "sync"
+    ],
+    "explain": {
+      "beginner": "`A calls B` means A sends B a request and **waits** for the answer: the React app calls\nthe API, the API calls the payment provider. If B is slow or down, A is slow or fails too.",
+      "intermediate": "- Properties on the arrow document the decisions: `protocol` (http, graphql, trpc),\n  `auth` (session cookie, bearer token, API key), `timeoutMs`, `idempotent`,\n  `idempotencyKey`.\n- Every call needs a timeout.\n- Retry only idempotent calls, or send an idempotency key.",
+      "senior": "- Chains of synchronous calls multiply latency and failure probability; prefer one hop\n  from the frontend (a BFF) and async messaging between services where possible.\n- This tool flags retried calls that are not idempotent (RNP-019) and frontends that call\n  many services (RNP-011)."
+    },
+    "mistakes": [
+      "No timeout.",
+      "Retrying POST without an idempotency key.",
+      "Long call chains on the request path."
+    ],
+    "examples": [
+      {
+        "title": "A call with timeout and retry only for safe methods",
+        "language": "ts",
+        "code": "const res = await fetch(url, { method: 'GET', signal: AbortSignal.timeout(2000) });"
+      }
+    ],
+    "related": [
+      "node.service",
+      "react.api-client",
+      "gen.external",
+      "publishes"
+    ],
+    "references": [
+      {
+        "title": "MDN — An overview of HTTP",
+        "url": "https://developer.mozilla.org/en-US/docs/Web/HTTP/Guides/Overview"
+      },
+      {
+        "title": "Microsoft — Retry pattern",
+        "url": "https://learn.microsoft.com/en-us/azure/architecture/patterns/retry"
+      }
+    ],
+    "source": "content/docs/calls.md"
+  },
+  {
+    "id": "connects-via",
+    "kind": "relation",
+    "title": "connects via",
+    "summary": "Database connections go through a connection pooler instead of straight to the database.",
+    "level": "intermediate",
+    "tracks": [
+      "concurrency-and-parallelism"
+    ],
+    "tags": [
+      "pooling",
+      "pgbouncer"
+    ],
+    "explain": {
+      "beginner": "`API connects via PgBouncer` means the API's database connections go to the pooler,\nwhich shares a few real connections to the database between many API instances.",
+      "intermediate": "- Draw `API → pooler` and `pooler → database`.\n- Know the pool mode: transaction mode breaks session features.",
+      "senior": "- The pooler becomes critical infrastructure: run it redundantly and monitor wait times."
+    },
+    "mistakes": [
+      "Large app-side pools behind a pooler."
+    ],
+    "examples": [
+      {
+        "title": "Point the app at the pooler",
+        "language": "bash",
+        "code": "DATABASE_URL=postgres://app@pgbouncer:6432/shop"
+      }
+    ],
+    "related": [
+      "pg.pooler",
+      "pg.cluster",
+      "node.service"
+    ],
+    "references": [
+      {
+        "title": "PgBouncer — Usage",
+        "url": "https://www.pgbouncer.org/usage.html"
+      }
+    ],
+    "source": "content/docs/connects-via.md"
+  },
+  {
+    "id": "consumes",
+    "kind": "relation",
+    "title": "consumes",
+    "summary": "Receives messages from a queue, topic or bus and processes them. Set the delivery guarantee — usually at-least-once, so handlers must be idempotent.",
+    "level": "intermediate",
+    "tracks": [
+      "concurrency-and-parallelism",
+      "patterns"
+    ],
+    "tags": [
+      "messaging",
+      "async",
+      "idempotency"
+    ],
+    "explain": {
+      "beginner": "`A consumes Q` means A takes messages from Q and handles them, at its own pace. If A is\ndown, messages wait in Q.",
+      "intermediate": "- `deliveryGuarantee`: `at-most-once` (may lose), `at-least-once` (may duplicate),\n  `effectively-once` (at-least-once plus deduplication).\n- Handlers must tolerate duplicates and out-of-order delivery.\n- For a Postgres job queue use `processes`.",
+      "senior": "- Poison messages need a dead-letter queue and alerting.\n- Scale consumers by partitions or competing consumers; keep per-key ordering where it\n  matters."
+    },
+    "mistakes": [
+      "Non-idempotent handlers."
+    ],
+    "examples": [
+      {
+        "title": "Deduplicate by message ID",
+        "language": "sql",
+        "code": "INSERT INTO processed_messages (id) VALUES ($1) ON CONFLICT DO NOTHING;"
+      }
+    ],
+    "related": [
+      "publishes",
+      "processes",
+      "gen.other-broker",
+      "node.worker"
+    ],
+    "references": [
+      {
+        "title": "Enterprise Integration Patterns — Idempotent receiver",
+        "url": "https://www.enterpriseintegrationpatterns.com/patterns/messaging/IdempotentReceiver.html"
+      }
+    ],
+    "source": "content/docs/consumes.md"
+  },
+  {
+    "id": "depends-on",
+    "kind": "relation",
+    "title": "depends on",
+    "summary": "A compile-time import — one module uses another's code. The direction of these arrows is the architecture.",
+    "level": "beginner",
+    "tracks": [
+      "patterns"
+    ],
+    "tags": [
+      "imports",
+      "dependencies",
+      "layering"
+    ],
+    "explain": {
+      "beginner": "`A depends on B` means A's code imports B's code. If B changes, A may have to change too.\nUnlike `calls`, nothing happens at runtime over the network; it is about the code.",
+      "intermediate": "- Arrows should point toward stable things: features → shared, handlers → use cases →\n  domain.\n- Browser code must not depend on server code (this tool refuses it); share types through\n  a contract package.\n- Cycles (A → B → A) mean the boundary is wrong.",
+      "senior": "- Enforce the intended direction in CI (dependency-cruiser, Nx, ESLint boundaries); this\n  tool can generate those rules from the model in a later phase.\n- Domain → infrastructure dependencies (RNP-006) are the classic violation."
+    },
+    "mistakes": [
+      "Import cycles.",
+      "The frontend importing server packages to \"share types\"."
+    ],
+    "examples": [
+      {
+        "title": "A dependency-cruiser rule: domain must not import infrastructure",
+        "language": "json",
+        "code": "{\n  \"name\": \"domain-is-pure\",\n  \"severity\": \"error\",\n  \"from\": { \"path\": \"^src/domain\" },\n  \"to\": { \"path\": \"^src/infrastructure\" }\n}"
+      }
+    ],
+    "related": [
+      "node.module",
+      "react.feature",
+      "implements",
+      "uses-port",
+      "group.layer"
+    ],
+    "references": [
+      {
+        "title": "dependency-cruiser — Rules reference",
+        "url": "https://github.com/sverweij/dependency-cruiser/blob/main/doc/rules-reference.md"
+      },
+      {
+        "title": "Robert C. Martin — The dependency rule (Clean Architecture)",
+        "url": "https://blog.cleancoder.com/uncle-bob/2012/08/13/the-clean-architecture.html"
+      }
+    ],
+    "source": "content/docs/depends-on.md"
+  },
+  {
+    "id": "dispatches",
+    "kind": "relation",
+    "title": "dispatches",
+    "summary": "Starts an action — dispatch(addToCart(item)), or calling a Zustand action. Pages, components, hooks and effects dispatch actions.",
+    "level": "beginner",
+    "tracks": [
+      "state-management"
+    ],
+    "tags": [
+      "redux",
+      "actions",
+      "events"
+    ],
+    "explain": {
+      "beginner": "`Button dispatches addToCart` means clicking the button starts the `addToCart` action,\nwhich then changes the store.\n\nAn **effect** can dispatch too: \"when the page opens, dispatch `fetchOrder(id)`\".",
+      "intermediate": "- Dispatch from event handlers for user actions; from effects only for synchronization\n  (page opened, ID changed).\n- Thunks can dispatch other actions (pending, fulfilled, rejected).",
+      "senior": "- Dispatching in render causes loops; dispatching in effects without the right\n  dependencies dispatches too often."
+    },
+    "mistakes": [
+      "Dispatching in render.",
+      "Effects that dispatch on every render."
+    ],
+    "examples": [
+      {
+        "title": "Dispatch from a click and from an effect",
+        "language": "tsx",
+        "code": "<button onClick={() => dispatch(itemAdded(product))}>Add</button>;\n\nuseEffect(() => {\n  dispatch(fetchOrder(orderId));\n}, [dispatch, orderId]);"
+      }
+    ],
+    "related": [
+      "react.action",
+      "react.effect",
+      "react.component",
+      "updates"
+    ],
+    "references": [
+      {
+        "title": "Redux — Dispatching actions",
+        "url": "https://redux.js.org/tutorials/fundamentals/part-3-state-actions-reducers#dispatching-actions"
+      }
+    ],
+    "source": "content/docs/dispatches.md"
+  },
+  {
+    "id": "emits",
+    "kind": "relation",
+    "title": "emits",
+    "summary": "Raises a domain or integration event — \"this happened\". The emitter does not know who listens.",
+    "level": "intermediate",
+    "tracks": [
+      "patterns"
+    ],
+    "tags": [
+      "events",
+      "ddd"
+    ],
+    "explain": {
+      "beginner": "`Orders emits OrderPlaced` means the orders code announces that an order was placed.\nOthers can react without the orders code knowing about them.",
+      "intermediate": "- Emit after the state change is saved, or in the same transaction through an outbox.\n- Events carry facts (IDs, amounts), not instructions.",
+      "senior": "- Domain events inside a process can be dispatched in memory after commit; integration\n  events across services need durable delivery."
+    },
+    "mistakes": [
+      "Emitting events for changes that are later rolled back."
+    ],
+    "examples": [
+      {
+        "title": "Collect events in the aggregate, dispatch after commit",
+        "language": "ts",
+        "code": "order.place(); // records OrderPlaced inside the aggregate\nawait repo.save(order); // same transaction writes the outbox\nawait outbox.flush(); // after commit"
+      }
+    ],
+    "related": [
+      "handles",
+      "node.event",
+      "node.domain",
+      "publishes"
+    ],
+    "references": [
+      {
+        "title": "Martin Fowler — Domain event",
+        "url": "https://martinfowler.com/eaaDev/DomainEvent.html"
+      }
+    ],
+    "source": "content/docs/emits.md"
+  },
+  {
+    "id": "enqueues",
+    "kind": "relation",
+    "title": "enqueues",
+    "summary": "Adds a job to a Postgres job queue. Set inTransaction when the job is added in the same transaction as the data.",
+    "level": "intermediate",
+    "tracks": [
+      "concurrency-and-parallelism"
+    ],
+    "tags": [
+      "jobs",
+      "queues",
+      "transactions"
+    ],
+    "explain": {
+      "beginner": "`Use case enqueues send-email` means the use case adds a job to the queue and moves on; a\nworker will send the email.",
+      "intermediate": "- `inTransaction: true` means the job is added in the same transaction as the business\n  data — both commit or neither does.\n- Pass IDs, not whole objects; the worker loads fresh data.",
+      "senior": "- Use a singleton key or deduplication when the same job must not be queued twice."
+    },
+    "mistakes": [
+      "Enqueuing outside the transaction (lost or orphaned jobs)."
+    ],
+    "examples": [
+      {
+        "title": "Enqueue in the transaction with a singleton key",
+        "language": "ts",
+        "code": "await boss.send('send-confirmation', { orderId }, { db: tx, singletonKey: orderId });"
+      }
+    ],
+    "related": [
+      "pg.job-queue",
+      "processes",
+      "node.worker",
+      "publishes"
+    ],
+    "references": [
+      {
+        "title": "pg-boss — send()",
+        "url": "https://timgit.github.io/pg-boss/#/./api/jobs?id=send"
+      }
+    ],
+    "source": "content/docs/enqueues.md"
+  },
+  {
+    "id": "fetches-via",
+    "kind": "relation",
+    "title": "fetches via",
+    "summary": "React code loads data through the API client — a query, a thunk or an effect calls the backend.",
+    "level": "beginner",
+    "tracks": [
+      "state-management",
+      "api-design"
+    ],
+    "tags": [
+      "fetch",
+      "api-client"
+    ],
+    "explain": {
+      "beginner": "`Orders query fetches via API client` means the data for the orders list is loaded by\ncalling the API client, which sends the HTTP request.",
+      "intermediate": "- Prefer fetching from a server-state cache (queries) over effects and thunks; it handles\n  caching, retries and deduplication.\n- All calls go through the one API client, never `fetch` scattered in components.",
+      "senior": "- Avoid request waterfalls: start independent fetches in parallel; prefetch on\n  navigation intent."
+    },
+    "mistakes": [
+      "Fetching the same data in several components without a shared cache."
+    ],
+    "examples": [
+      {
+        "title": "A query that fetches via the client",
+        "language": "ts",
+        "code": "useQuery({ queryKey: ['orders'], queryFn: () => api<Order[]>('/orders') });"
+      }
+    ],
+    "related": [
+      "react.api-client",
+      "react.server-state",
+      "react.action",
+      "react.effect"
+    ],
+    "references": [
+      {
+        "title": "TanStack Query — Query functions",
+        "url": "https://tanstack.com/query/latest/docs/framework/react/guides/query-functions"
+      }
+    ],
+    "source": "content/docs/fetches-via.md"
+  },
+  {
+    "id": "fires-on",
+    "kind": "relation",
+    "title": "fires on",
+    "summary": "A trigger runs when rows of this table (or view) change.",
+    "level": "intermediate",
+    "tracks": [
+      "data-and-models"
+    ],
+    "tags": [
+      "postgres",
+      "triggers"
+    ],
+    "explain": {
+      "beginner": "`Trigger fires on orders` means the trigger watches the `orders` table and runs whenever\nrows there are inserted, updated or deleted (as configured).",
+      "intermediate": "- Set `timing` (before/after/instead-of) and `events` on the trigger.\n- `INSTEAD OF` triggers on views make them writable.",
+      "senior": "- Every write to the table pays for the trigger; measure on hot tables."
+    },
+    "mistakes": [
+      "Forgetting that bulk updates fire row triggers once per row."
+    ],
+    "examples": [
+      {
+        "title": "Fire an audit trigger after updates",
+        "language": "sql",
+        "code": "CREATE TRIGGER price_audit AFTER UPDATE OF price ON products\nFOR EACH ROW EXECUTE FUNCTION write_price_audit();"
+      }
+    ],
+    "related": [
+      "pg.trigger",
+      "pg.table",
+      "invokes"
+    ],
+    "references": [
+      {
+        "title": "PostgreSQL docs — Triggers",
+        "url": "https://www.postgresql.org/docs/current/triggers.html"
+      }
+    ],
+    "source": "content/docs/fires-on.md"
+  },
+  {
+    "id": "gen.actor",
+    "kind": "concept",
+    "title": "User / actor",
+    "summary": "A person or role that uses the system — customer, admin, support agent. Diagrams start with who uses the system and why.",
+    "level": "beginner",
+    "tracks": [
+      "foundations"
+    ],
+    "tags": [
+      "c4",
+      "context",
+      "users"
+    ],
+    "explain": {
+      "beginner": "An **actor** is someone who uses the system: a customer who buys, an admin who manages\nproducts, a support agent who refunds orders. Start every diagram with the actors; they\nexplain why everything else exists.\n\nDifferent actors often use different apps (shop vs admin) and need different permissions.",
+      "intermediate": "- Name actors by role, not by person (\"Support agent\", not \"Anna\").\n- Actors call **apps**, not databases. If an actor talks to an external tool (a payment\n  page), draw that too.\n- Roles on actors map to roles in authorization (RBAC).",
+      "senior": "- Machine actors (partners, schedulers, other systems) belong here too; they have\n  different auth (API keys, client credentials) and rate limits.\n- Tours drafted by this tool start from actors and follow their calls."
+    },
+    "mistakes": [
+      "Diagrams with no actors, so nobody knows who the system is for."
+    ],
+    "examples": [
+      {
+        "title": "Roles as data for authorization",
+        "language": "ts",
+        "code": "type Role = 'customer' | 'admin' | 'support';\nconst can = { refund: ['support', 'admin'], editProducts: ['admin'] } satisfies Record<\n  string,\n  Role[]\n>;"
+      }
+    ],
+    "related": [
+      "react.app",
+      "gen.external",
+      "calls"
+    ],
+    "references": [
+      {
+        "title": "C4 model — System context diagram",
+        "url": "https://c4model.com/diagrams/system-context"
+      }
+    ],
+    "source": "content/docs/gen.actor.md"
+  },
+  {
+    "id": "gen.auth-provider",
+    "kind": "concept",
+    "title": "Auth provider",
+    "summary": "The service that signs users in and issues identities — Auth0, Clerk, Cognito, Keycloak, or your own. Apps trust its tokens instead of storing passwords.",
+    "level": "intermediate",
+    "tracks": [
+      "auth"
+    ],
+    "tags": [
+      "oidc",
+      "oauth",
+      "sso",
+      "identity"
+    ],
+    "explain": {
+      "beginner": "An **auth provider** handles sign-in: passwords, Google login, passkeys, two-factor. After\nsign-in it gives your app proof of who the user is (a token). Your API checks that proof\ninstead of storing passwords itself.",
+      "intermediate": "- Browser apps use the **authorization code flow with PKCE**; ideally a BFF runs it and\n  keeps tokens server-side.\n- The API verifies tokens (signature, issuer, audience, expiry) in auth middleware.\n- The provider says **who** the user is; your app still decides **what** they may do\n  (roles, ownership).",
+      "senior": "- Plan key rotation (JWKS) and token lifetimes; short access tokens with refresh tokens\n  held server-side.\n- Logout across apps and token revocation are harder with stateless JWTs; sessions are\n  simpler when you control both sides.\n- Service-to-service calls use client credentials or mTLS, not user tokens."
+    },
+    "mistakes": [
+      "Treating \"has a valid token\" as \"may do anything\".",
+      "Not checking the token audience, so tokens for another app work on yours."
+    ],
+    "examples": [
+      {
+        "title": "Verify a token with a remote JWKS (jose)",
+        "language": "ts",
+        "code": "import { createRemoteJWKSet, jwtVerify } from 'jose';\n\nconst jwks = createRemoteJWKSet(new URL('https://auth.example.com/.well-known/jwks.json'));\n\nexport async function verify(token: string) {\n  const { payload } = await jwtVerify(token, jwks, {\n    issuer: 'https://auth.example.com/',\n    audience: 'shop-api',\n  });\n  return payload;\n}"
+      }
+    ],
+    "related": [
+      "topic.authentication",
+      "node.middleware",
+      "node.bff",
+      "authenticates-with"
+    ],
+    "references": [
+      {
+        "title": "OpenID Connect — How it works",
+        "url": "https://openid.net/developers/how-connect-works/"
+      },
+      {
+        "title": "OWASP — Authentication cheat sheet",
+        "url": "https://cheatsheetseries.owasp.org/cheatsheets/Authentication_Cheat_Sheet.html"
+      }
+    ],
+    "source": "content/docs/gen.auth-provider.md"
+  },
+  {
+    "id": "gen.cdn",
+    "kind": "concept",
+    "title": "CDN / static hosting",
+    "summary": "Serves static files — the built React app, images — from servers near the users, so pages load fast and your API does not have to.",
+    "level": "beginner",
+    "tracks": [
+      "foundations"
+    ],
+    "tags": [
+      "cdn",
+      "cloudfront",
+      "cloudflare",
+      "netlify"
+    ],
+    "explain": {
+      "beginner": "After `vite build`, a React app is just files: HTML, JavaScript, CSS, images. A **CDN**\ncopies them to servers around the world and **serves** each user from a nearby one.",
+      "intermediate": "- Hashed file names (`app.3f9c.js`) can be cached for a year; `index.html` must not be\n  cached long, so new releases load.\n- SPAs need a fallback: unknown paths return `index.html`, and the router takes over.\n- The API usually stays on its own domain or path behind the gateway.",
+      "senior": "- Purge or version on deploy; keep the old assets for a while so open tabs still load\n  lazy chunks.\n- Security headers (CSP, HSTS) are often set at the CDN."
+    },
+    "mistakes": [
+      "Caching `index.html` for a long time, so users keep the old app.",
+      "No SPA fallback, so reloading `/orders/42` gives 404."
+    ],
+    "examples": [
+      {
+        "title": "Cache headers for a Vite build",
+        "language": "bash",
+        "code": "# hashed assets: cache forever\nCache-Control: public, max-age=31536000, immutable   # for /assets/*\n# the entry point: always revalidate\nCache-Control: no-cache                                # for /index.html"
+      }
+    ],
+    "related": [
+      "react.app",
+      "serves",
+      "gen.gateway"
+    ],
+    "references": [
+      {
+        "title": "MDN — CDN",
+        "url": "https://developer.mozilla.org/en-US/docs/Glossary/CDN"
+      },
+      {
+        "title": "MDN — HTTP caching",
+        "url": "https://developer.mozilla.org/en-US/docs/Web/HTTP/Guides/Caching"
+      }
+    ],
+    "source": "content/docs/gen.cdn.md"
+  },
+  {
+    "id": "gen.cross-cutting",
+    "kind": "concept",
+    "title": "Cross-cutting concern",
+    "summary": "Something many parts use — logging, configuration, feature flags, tracing. Shown once instead of drawing arrows from everything.",
+    "level": "intermediate",
+    "tracks": [
+      "foundations"
+    ],
+    "tags": [
+      "logging",
+      "observability",
+      "config",
+      "feature-flags"
+    ],
+    "explain": {
+      "beginner": "Some things are used by almost every part of the system: logging, configuration,\nfeature flags, error reporting. Drawing an arrow from every box would clutter the diagram,\nso this shape notes them once.",
+      "intermediate": "- Logs: structured (JSON) with a request ID, so one request can be followed across\n  services.\n- Config: from environment variables, validated at startup.\n- Feature flags: release code dark and turn features on gradually.",
+      "senior": "- Traces (OpenTelemetry) show where time goes across services and the database.\n- Treat flags as debt: remove them when a feature is fully released."
+    },
+    "mistakes": [
+      "Logs without request IDs.",
+      "Config read lazily, so a missing variable fails hours after deploy."
+    ],
+    "examples": [
+      {
+        "title": "Structured logging with a request ID (pino)",
+        "language": "ts",
+        "code": "const log = pino();\napp.addHook('onRequest', async (req) => {\n  req.log = log.child({ requestId: req.id });\n});"
+      }
+    ],
+    "related": [
+      "node.shared-lib",
+      "node.middleware"
+    ],
+    "references": [
+      {
+        "title": "OpenTelemetry — What is OpenTelemetry?",
+        "url": "https://opentelemetry.io/docs/what-is-opentelemetry/"
+      },
+      {
+        "title": "The Twelve-Factor App — Config",
+        "url": "https://12factor.net/config"
+      }
+    ],
+    "source": "content/docs/gen.cross-cutting.md"
+  },
+  {
+    "id": "gen.external",
+    "kind": "concept",
+    "title": "External system",
+    "summary": "A system outside your control — Stripe, SendGrid, a partner API. It can be slow or down; design every call to it for failure.",
+    "level": "beginner",
+    "tracks": [
+      "foundations",
+      "concurrency-and-parallelism"
+    ],
+    "tags": [
+      "third-party",
+      "integration",
+      "resilience"
+    ],
+    "explain": {
+      "beginner": "An **external system** is a service someone else runs: payments (Stripe), email\n(SendGrid), shipping labels, a partner's API. You cannot change it, and sometimes it is\nslow or unavailable.\n\nYour backend calls it; the browser usually does not (it would need your keys).",
+      "intermediate": "- Always set **timeouts**; a hanging call blocks your request.\n- Retry only safe calls, or send an **idempotency key** (Stripe supports this) so a retry\n  does not charge twice.\n- Slow or non-urgent calls (emails) belong in a background job.\n- Keep the provider behind a port/adapter so you can test without it and switch later.",
+      "senior": "- Use circuit breakers or bulkheads so a failing provider does not exhaust your\n  connections or event loop.\n- Webhooks from providers arrive at least once and out of order: verify signatures, store\n  and deduplicate by event ID.\n- Record what you sent and received for support and reconciliation."
+    },
+    "mistakes": [
+      "No timeout.",
+      "Retrying payments without an idempotency key.",
+      "Calling a slow provider inside a database transaction."
+    ],
+    "examples": [
+      {
+        "title": "A call with a timeout and an idempotency key",
+        "language": "ts",
+        "code": "await fetch('https://api.example-payments.com/charges', {\n  method: 'POST',\n  headers: { 'Idempotency-Key': orderId, Authorization: `Bearer ${KEY}` },\n  body: JSON.stringify({ amount, currency: 'eur' }),\n  signal: AbortSignal.timeout(5000),\n});"
+      }
+    ],
+    "related": [
+      "node.service",
+      "node.worker",
+      "calls"
+    ],
+    "references": [
+      {
+        "title": "Martin Fowler — Circuit breaker",
+        "url": "https://martinfowler.com/bliki/CircuitBreaker.html"
+      },
+      {
+        "title": "Stripe docs — Idempotent requests",
+        "url": "https://docs.stripe.com/api/idempotent_requests"
+      }
+    ],
+    "source": "content/docs/gen.external.md"
+  },
+  {
+    "id": "gen.gateway",
+    "kind": "concept",
+    "title": "API gateway / reverse proxy",
+    "summary": "The single entry point for requests from outside. It routes paths to services and handles TLS, rate limits and sometimes auth.",
+    "level": "intermediate",
+    "tracks": [
+      "foundations"
+    ],
+    "tags": [
+      "nginx",
+      "traefik",
+      "kong",
+      "proxy"
+    ],
+    "explain": {
+      "beginner": "A **gateway** (or reverse proxy) is the front door: all requests from the internet arrive\nthere first. It sends `/api/*` to the Node service and everything else to the static\nfrontend files, and handles HTTPS.",
+      "intermediate": "- Common jobs: TLS termination, routing, compression, request size limits, rate limits,\n  CORS, access logs.\n- Cloud gateways can also check API keys or JWTs before requests reach your services.\n- Keep business logic out of the gateway.",
+      "senior": "- The gateway is a single point of failure and a shared config: run it redundantly and\n  manage its config as code.\n- Forward the client IP and a request ID; services must trust these headers only from the\n  gateway."
+    },
+    "mistakes": [
+      "Business rules in gateway scripts.",
+      "Services also reachable directly from the internet, bypassing the gateway."
+    ],
+    "examples": [
+      {
+        "title": "Route API and static files (nginx)",
+        "language": "bash",
+        "code": "location /api/ { proxy_pass http://api:3000/; proxy_set_header X-Request-Id $request_id; }\nlocation / { root /srv/web; try_files $uri /index.html; }"
+      }
+    ],
+    "related": [
+      "node.service",
+      "gen.cdn",
+      "calls"
+    ],
+    "references": [
+      {
+        "title": "NGINX — Reverse proxy",
+        "url": "https://docs.nginx.com/nginx/admin-guide/web-server/reverse-proxy/"
+      },
+      {
+        "title": "microservices.io — API gateway pattern",
+        "url": "https://microservices.io/patterns/apigateway.html"
+      }
+    ],
+    "source": "content/docs/gen.gateway.md"
+  },
+  {
+    "id": "gen.other-broker",
+    "kind": "concept",
+    "title": "Other message broker",
+    "summary": "A broker outside this profile — Kafka, RabbitMQ, SQS. Producers publish messages; consumers process them at their own pace.",
+    "level": "senior",
+    "tracks": [
+      "concurrency-and-parallelism",
+      "patterns"
+    ],
+    "tags": [
+      "kafka",
+      "rabbitmq",
+      "sqs",
+      "messaging"
+    ],
+    "explain": {
+      "beginner": "A **message broker** sits between services: one **publishes** messages, others\n**consume** them later. Neither waits for the other, and messages are kept until they are\nprocessed.",
+      "intermediate": "- Queues (RabbitMQ, SQS) give each message to one consumer; logs (Kafka) keep messages so\n  several consumer groups read them independently.\n- Delivery is usually at-least-once: consumers must be idempotent.\n- For most single-database apps, a Postgres job queue is simpler.",
+      "senior": "- Ordering is per partition/queue, not global; design keys accordingly.\n- Publishing from a transaction needs an outbox.\n- Plan schemas and versioning of messages like a public API."
+    },
+    "mistakes": [
+      "Assuming exactly-once delivery.",
+      "Adding a broker before the problem needs one."
+    ],
+    "examples": [
+      {
+        "title": "An idempotent consumer",
+        "language": "ts",
+        "code": "consumer.on('message', async (msg) => {\n  const inserted = await db.query(\n    'INSERT INTO processed (id) VALUES ($1) ON CONFLICT DO NOTHING RETURNING id',\n    [msg.id],\n  );\n  if (inserted.rowCount === 0) return; // already handled\n  await handle(msg);\n});"
+      }
+    ],
+    "related": [
+      "publishes",
+      "consumes",
+      "pg.job-queue",
+      "node.event"
+    ],
+    "references": [
+      {
+        "title": "Apache Kafka — Introduction",
+        "url": "https://kafka.apache.org/intro"
+      },
+      {
+        "title": "microservices.io — Messaging",
+        "url": "https://microservices.io/patterns/communication-style/messaging.html"
+      }
+    ],
+    "source": "content/docs/gen.other-broker.md"
+  },
+  {
+    "id": "gen.other-store",
+    "kind": "concept",
+    "title": "Other data store",
+    "summary": "A data store outside this stack profile — Redis, S3, MongoDB, Elasticsearch. Only the generic rules apply to it.",
+    "level": "intermediate",
+    "tracks": [
+      "data-and-models"
+    ],
+    "tags": [
+      "redis",
+      "s3",
+      "cache",
+      "storage"
+    ],
+    "explain": {
+      "beginner": "Not everything belongs in PostgreSQL. **Redis** keeps sessions and caches in memory,\n**S3** stores files like product images, a search engine indexes text. Use this shape for\nthem; this tool applies only its generic rules to it.",
+      "intermediate": "- A cache is a copy: decide how it is invalidated and what happens when it is empty.\n- Files go to object storage; the database keeps the key and metadata.\n- Every extra store is another thing to back up, secure and monitor.",
+      "senior": "- Writing to two stores (Postgres and a search index) is a dual write (RNP-004): use an\n  outbox or change data capture to keep them consistent.\n- Prefer Postgres features (JSONB, full-text search, `pg_trgm`) until a separate store is\n  clearly needed."
+    },
+    "mistakes": [
+      "Using a cache as the source of truth.",
+      "Dual writes without an outbox."
+    ],
+    "examples": [
+      {
+        "title": "Cache-aside with Redis",
+        "language": "ts",
+        "code": "const cached = await redis.get(`product:${id}`);\nif (cached) return JSON.parse(cached);\nconst product = await products.findById(id);\nawait redis.set(`product:${id}`, JSON.stringify(product), { EX: 300 });\nreturn product;"
+      }
+    ],
+    "related": [
+      "reads",
+      "writes",
+      "pg.database"
+    ],
+    "references": [
+      {
+        "title": "Redis — Documentation",
+        "url": "https://redis.io/docs/latest/"
+      },
+      {
+        "title": "AWS — What is Amazon S3?",
+        "url": "https://docs.aws.amazon.com/AmazonS3/latest/userguide/Welcome.html"
+      }
+    ],
+    "source": "content/docs/gen.other-store.md"
+  },
+  {
+    "id": "group.context",
+    "kind": "concept",
+    "title": "Bounded context",
+    "summary": "A part of the business with its own model and words. \"Order\" in Ordering is not the same thing as \"order\" in Shipping, and that is fine.",
+    "level": "senior",
+    "tracks": [
+      "patterns",
+      "data-and-models"
+    ],
+    "tags": [
+      "ddd",
+      "bounded-context",
+      "boundaries"
+    ],
+    "explain": {
+      "beginner": "Large businesses use the same word for different things. In **Ordering**, an order has\nitems and a price; in **Shipping**, it has parcels and an address. A **bounded context**\ndraws a line around one of these meanings, so each part can have its own model.",
+      "intermediate": "- Each context has its own modules, tables and language.\n- Contexts talk through explicit contracts: APIs or events, translated at the border.\n- A context is a good candidate for a module in a modular monolith, or later a service.",
+      "senior": "- Draw context maps (customer/supplier, conformist, anti-corruption layer) to make\n  relationships explicit.\n- Wrong boundaries cause chatty calls and shared tables; move the line before splitting\n  deployables."
+    },
+    "mistakes": [
+      "One \"Order\" class used by every part of the system."
+    ],
+    "examples": [
+      {
+        "title": "Two models of an order",
+        "language": "ts",
+        "code": "// ordering\ntype Order = { id: string; lines: { sku: string; qty: number; price: number }[] };\n// shipping\ntype Shipment = { orderId: string; parcels: { weightKg: number }[]; address: string };"
+      }
+    ],
+    "related": [
+      "node.module",
+      "pattern.modular-monolith",
+      "node.event"
+    ],
+    "references": [
+      {
+        "title": "Martin Fowler — Bounded context",
+        "url": "https://martinfowler.com/bliki/BoundedContext.html"
+      }
+    ],
+    "source": "content/docs/group.context.md"
+  },
+  {
+    "id": "group.layer",
+    "kind": "concept",
+    "title": "Layer",
+    "summary": "A horizontal band of a design — presentation, application, domain, infrastructure. Each layer may only depend on the layers below it.",
+    "level": "intermediate",
+    "tracks": [
+      "patterns"
+    ],
+    "tags": [
+      "layered-architecture",
+      "groups"
+    ],
+    "explain": {
+      "beginner": "A **layer** groups code by its role: the **presentation** layer talks to users (HTTP\nhandlers, pages), the **application** layer runs use cases, the **domain** layer holds\nrules, the **infrastructure** layer talks to databases and providers.\n\nThe rule: a layer may use the layers below it, never the ones above.",
+      "intermediate": "- Draw a layer group and put shapes inside; arrows connect the shapes, not the group.\n- In a hexagonal design the domain is in the middle and infrastructure depends on it\n  (dependency inversion).",
+      "senior": "- Layers are a dependency rule, so enforce them in CI (dependency-cruiser), not only in\n  folders.\n- Strict layering everywhere can add ceremony for simple CRUD; apply it where the rules\n  are complex."
+    },
+    "mistakes": [
+      "Domain code importing infrastructure (RNP-006)."
+    ],
+    "examples": [
+      {
+        "title": "Folders by layer",
+        "language": "bash",
+        "code": "src/presentation/http/orders.ts\nsrc/application/placeOrder.ts\nsrc/domain/order.ts\nsrc/infrastructure/prismaOrderRepository.ts"
+      }
+    ],
+    "related": [
+      "pattern.layered",
+      "pattern.hexagonal",
+      "node.use-case"
+    ],
+    "references": [
+      {
+        "title": "Martin Fowler — Presentation domain data layering",
+        "url": "https://martinfowler.com/bliki/PresentationDomainDataLayering.html"
+      }
+    ],
+    "source": "content/docs/group.layer.md"
+  },
+  {
+    "id": "group.team",
+    "kind": "concept",
+    "title": "Team boundary",
+    "summary": "The elements one team owns. Ownership boundaries should match architecture boundaries, or every change needs a meeting.",
+    "level": "intermediate",
+    "tracks": [
+      "patterns"
+    ],
+    "tags": [
+      "ownership",
+      "conways-law",
+      "teams"
+    ],
+    "explain": {
+      "beginner": "A **team boundary** shows who owns what. When a team owns a service, its schema and its\nfrontend feature, it can change them without waiting for others.",
+      "intermediate": "- Ownership should follow the architecture: one owner per schema, per module, per\n  service.\n- Shared things (a UI kit, a gateway config) need an explicit owner too.",
+      "senior": "- Conway's law: systems mirror the communication structure of the teams that build them.\n  Use it on purpose: shape teams around the boundaries you want.\n- Cross-team arrows are coordination costs; few and stable is the goal."
+    },
+    "mistakes": [
+      "Two teams editing the same tables."
+    ],
+    "examples": [
+      {
+        "title": "A CODEOWNERS file that matches the boundaries",
+        "language": "bash",
+        "code": "/services/orders/   @shop/checkout-team\n/web/src/features/cart/   @shop/checkout-team\n/services/catalog/  @shop/catalog-team"
+      }
+    ],
+    "related": [
+      "group.context",
+      "node.module",
+      "pg.schema"
+    ],
+    "references": [
+      {
+        "title": "Martin Fowler — Conway's law",
+        "url": "https://martinfowler.com/bliki/ConwaysLaw.html"
+      },
+      {
+        "title": "Team Topologies — Key concepts",
+        "url": "https://teamtopologies.com/key-concepts"
+      }
+    ],
+    "source": "content/docs/group.team.md"
+  },
+  {
+    "id": "group.zone",
+    "kind": "concept",
+    "title": "Deployment zone",
+    "summary": "A network or deployment boundary — the public internet side, a private network, a region. It shows what is reachable from where.",
+    "level": "intermediate",
+    "tracks": [
+      "foundations",
+      "auth"
+    ],
+    "tags": [
+      "network",
+      "vpc",
+      "deployment"
+    ],
+    "explain": {
+      "beginner": "A **zone** shows where things run and who can reach them. The gateway sits in a public\nzone; services and the database sit in a private network that the internet cannot reach\ndirectly.",
+      "intermediate": "- Put databases and workers in private zones; only the gateway is public.\n- Regions are zones too: data residency rules may require some data to stay in one.",
+      "senior": "- Network boundaries are defense in depth, not authorization; services still\n  authenticate each other.\n- Cross-zone calls add latency and cost; draw them to make them visible."
+    },
+    "mistakes": [
+      "A database with a public IP."
+    ],
+    "examples": [
+      {
+        "title": "Only the gateway is public (sketch)",
+        "language": "yaml",
+        "code": "public: [gateway, cdn]\nprivate: [api, worker, postgres]"
+      }
+    ],
+    "related": [
+      "gen.gateway",
+      "pg.database",
+      "node.service"
+    ],
+    "references": [
+      {
+        "title": "AWS — VPCs and subnets",
+        "url": "https://docs.aws.amazon.com/vpc/latest/userguide/configure-subnets.html"
+      }
+    ],
+    "source": "content/docs/group.zone.md"
+  },
+  {
+    "id": "handles",
+    "kind": "relation",
+    "title": "handles",
+    "summary": "Reacts to an event — the warehouse module handles OrderPlaced by reserving stock. Handlers must be idempotent.",
+    "level": "intermediate",
+    "tracks": [
+      "patterns"
+    ],
+    "tags": [
+      "events",
+      "handlers"
+    ],
+    "explain": {
+      "beginner": "`Warehouse handles OrderPlaced` means whenever an order is placed, the warehouse code runs\nits reaction (reserve stock, plan picking).",
+      "intermediate": "- A handler may run twice (redelivery): check whether the work is already done.\n- One event, many handlers: each handler should be independent of the others.",
+      "senior": "- Handler failures must not block other handlers; isolate them with separate queues or\n  retries per handler."
+    },
+    "mistakes": [
+      "Handlers that assume they run exactly once."
+    ],
+    "examples": [
+      {
+        "title": "An idempotent handler",
+        "language": "ts",
+        "code": "on('OrderPlaced', async ({ orderId }) => {\n  if (await reservations.exists(orderId)) return;\n  await reservations.create(orderId);\n});"
+      }
+    ],
+    "related": [
+      "emits",
+      "node.event",
+      "node.module",
+      "consumes"
+    ],
+    "references": [
+      {
+        "title": "microservices.io — Idempotent consumer",
+        "url": "https://microservices.io/patterns/communication-style/idempotent-consumer.html"
+      }
+    ],
+    "source": "content/docs/handles.md"
+  },
+  {
+    "id": "implements",
+    "kind": "relation",
+    "title": "implements",
+    "summary": "An adapter realizes a port — PrismaOrderRepository implements OrderRepository. Only adapters implement ports.",
+    "level": "senior",
+    "tracks": [
+      "patterns"
+    ],
+    "tags": [
+      "hexagonal",
+      "ports-and-adapters"
+    ],
+    "explain": {
+      "beginner": "`Adapter implements Port` means the adapter keeps the promise the port describes, using a\nreal technology: a Prisma repository implements `OrderRepository`; a Stripe client\nimplements `PaymentGateway`.",
+      "intermediate": "- The use case depends on the port (`uses port`); the adapter implements it. Wiring\n  happens at startup.\n- Several adapters can implement one port: Postgres in production, in-memory in tests.",
+      "senior": "- The arrow points from infrastructure to the application, which is the dependency\n  inversion that keeps the core independent.\n- This tool refuses the reverse direction (\"ports implement adapters\")."
+    },
+    "mistakes": [
+      "Ports that leak adapter types."
+    ],
+    "examples": [
+      {
+        "title": "Two implementations of one port",
+        "language": "ts",
+        "code": "class InMemoryOrders implements OrderRepository {\n  /* tests */\n}\nclass PrismaOrders implements OrderRepository {\n  /* production */\n}"
+      }
+    ],
+    "related": [
+      "node.port",
+      "node.repository",
+      "uses-port",
+      "pattern.hexagonal"
+    ],
+    "references": [
+      {
+        "title": "Alistair Cockburn — Hexagonal architecture",
+        "url": "https://alistair.cockburn.us/hexagonal-architecture/"
+      }
+    ],
+    "source": "content/docs/implements.md"
+  },
+  {
+    "id": "invokes",
+    "kind": "relation",
+    "title": "invokes",
+    "summary": "Runs a database function or procedure — SELECT fn(…), CALL proc(…), or EXECUTE FUNCTION from a trigger.",
+    "level": "intermediate",
+    "tracks": [
+      "data-and-models"
+    ],
+    "tags": [
+      "postgres",
+      "functions",
+      "procedures"
+    ],
+    "explain": {
+      "beginner": "`Repository invokes reserve_stock` means the code runs a function stored in PostgreSQL\ninstead of sending its own SQL. The work happens next to the data.",
+      "intermediate": "- Functions are called with `SELECT fn(...)`; procedures with `CALL proc(...)`.\n- Triggers invoke functions by themselves when rows change.\n- Use `invokes`, not `calls`: this tool refuses `calls` to database code.",
+      "senior": "- Logic in the database is shared by every client but versioned through migrations; keep\n  it in the same repository and review it like code."
+    },
+    "mistakes": [
+      "Hidden SQL logic that the service team does not know about."
+    ],
+    "examples": [
+      {
+        "title": "Invoke a function from Node",
+        "language": "ts",
+        "code": "const { rows } = await pool.query('SELECT reserve_stock($1, $2) AS ok', [productId, qty]);"
+      }
+    ],
+    "related": [
+      "pg.function",
+      "pg.trigger",
+      "fires-on"
+    ],
+    "references": [
+      {
+        "title": "PostgreSQL docs — CALL",
+        "url": "https://www.postgresql.org/docs/current/sql-call.html"
+      }
+    ],
+    "source": "content/docs/invokes.md"
+  },
+  {
+    "id": "listens",
+    "kind": "relation",
+    "title": "listens",
+    "summary": "Runs LISTEN on a channel and receives its notifications while connected.",
+    "level": "intermediate",
+    "tracks": [
+      "concurrency-and-parallelism"
+    ],
+    "tags": [
+      "listen",
+      "realtime"
+    ],
+    "explain": {
+      "beginner": "`Gateway listens to stock_changed` means the gateway keeps a database connection open and\ngets every notification sent on that channel.",
+      "intermediate": "- Needs a dedicated connection (not through a transaction-mode pooler).\n- After a reconnect, refetch state: messages sent while disconnected are gone.",
+      "senior": "- One listener per process is enough; fan out inside the process."
+    },
+    "mistakes": [
+      "Listening through PgBouncer in transaction mode."
+    ],
+    "examples": [
+      {
+        "title": "Listen on a dedicated client",
+        "language": "ts",
+        "code": "const client = new pg.Client(config);\nawait client.connect();\nawait client.query('LISTEN stock_changed');"
+      }
+    ],
+    "related": [
+      "pg.channel",
+      "notifies",
+      "node.ws-gateway"
+    ],
+    "references": [
+      {
+        "title": "PostgreSQL docs — LISTEN",
+        "url": "https://www.postgresql.org/docs/current/sql-listen.html"
+      }
+    ],
+    "source": "content/docs/listens.md"
+  },
+  {
+    "id": "migrates",
+    "kind": "relation",
+    "title": "migrates",
+    "summary": "This element owns the schema's DDL — it runs the migrations that create and change tables. Exactly one owner per schema.",
+    "level": "beginner",
+    "tracks": [
+      "data-and-models"
+    ],
+    "tags": [
+      "migrations",
+      "ownership",
+      "ddl"
+    ],
+    "explain": {
+      "beginner": "Tables change over time: a new column, a new index. Those changes are **migrations**,\nsmall versioned scripts. `API migrates orders` means the API owns the `orders` schema and\nis the only one that runs its migrations.",
+      "intermediate": "- Run migrations in the deploy pipeline before the new code starts.\n- Make them backward compatible (expand and contract) so old and new code can run at the\n  same time.",
+      "senior": "- Two migration owners for one schema (RNP-002) leads to conflicting histories and broken\n  deploys.\n- Large table changes need online techniques (`CREATE INDEX CONCURRENTLY`, batched\n  backfills)."
+    },
+    "mistakes": [
+      "Several services migrating one schema.",
+      "Renaming a column in one step while old code still reads it."
+    ],
+    "examples": [
+      {
+        "title": "An expand step that old code tolerates",
+        "language": "sql",
+        "code": "ALTER TABLE orders ADD COLUMN currency text NOT NULL DEFAULT 'EUR';"
+      }
+    ],
+    "related": [
+      "pg.schema",
+      "node.service",
+      "writes"
+    ],
+    "references": [
+      {
+        "title": "Prisma — Migrate",
+        "url": "https://www.prisma.io/docs/orm/prisma-migrate"
+      },
+      {
+        "title": "Martin Fowler — Evolutionary database design",
+        "url": "https://martinfowler.com/articles/evodb.html"
+      }
+    ],
+    "source": "content/docs/migrates.md"
+  },
+  {
+    "id": "navigates",
+    "kind": "relation",
+    "title": "navigates to",
+    "summary": "UI navigation — a link, button or redirect takes the user from one page to another.",
+    "level": "beginner",
+    "tracks": [
+      "foundations"
+    ],
+    "tags": [
+      "routing",
+      "links",
+      "ux"
+    ],
+    "explain": {
+      "beginner": "`Cart navigates to Checkout` means the user can go from the cart page to the checkout page\n(a link, a button, or a redirect after an action).",
+      "intermediate": "- Users navigate to **routes**, not components (this tool refuses navigation to a\n  component).\n- Navigation arrows show the main user journeys; use them for tours and onboarding.",
+      "senior": "- Redirects after mutations (POST → redirect → GET) avoid double submission on reload.\n- Deep links must work: every route should load on its own."
+    },
+    "mistakes": [
+      "Navigating to a component instead of a route."
+    ],
+    "examples": [
+      {
+        "title": "Navigate after placing an order",
+        "language": "tsx",
+        "code": "const navigate = useNavigate();\nawait placeOrder.mutateAsync(input);\nnavigate(`/orders/${order.id}`);"
+      }
+    ],
+    "related": [
+      "react.route",
+      "react.layout",
+      "renders"
+    ],
+    "references": [
+      {
+        "title": "React Router — Navigating",
+        "url": "https://reactrouter.com/start/framework/navigating"
+      }
+    ],
+    "source": "content/docs/navigates.md"
+  },
+  {
+    "id": "node.bff",
+    "kind": "concept",
+    "title": "Backend-for-Frontend (BFF)",
+    "summary": "A small backend made for one frontend. It combines calls to other services into the shape that screen needs, and can keep tokens out of the browser.",
+    "level": "intermediate",
+    "tracks": [
+      "patterns",
+      "auth",
+      "api-design"
+    ],
+    "tags": [
+      "bff",
+      "aggregation",
+      "gateway"
+    ],
+    "explain": {
+      "beginner": "When a screen needs data from several backend services, the browser could call all of\nthem. That is slow on mobile networks and spreads backend details into the frontend.\n\nA **Backend-for-Frontend** is one service per frontend (web, mobile) that does those calls\n**for** the screen and returns exactly what it needs, in one response.",
+      "intermediate": "- The frontend team owns its BFF; it changes with the UI.\n- Call backend services in parallel with timeouts; decide per field what a partial\n  failure shows.\n- A BFF is a good place for the sign-in flow: it runs OpenID Connect, keeps tokens on the\n  server, and gives the browser an HttpOnly session cookie.\n- This tool flags a React app that calls more than two services directly (RNP-011).",
+      "senior": "- Avoid business rules in the BFF; it composes and adapts, the services decide.\n- One BFF per experience, not one per team or per page; too many BFFs duplicate code.\n- Watch for a BFF that becomes a distributed monolith's front door; share code through\n  libraries, not by making BFFs call each other."
+    },
+    "mistakes": [
+      "Putting domain logic in the BFF.",
+      "Calling services one after another instead of in parallel.",
+      "A single \"BFF\" shared by web and mobile, which then serves neither well."
+    ],
+    "examples": [
+      {
+        "title": "Aggregate two services in parallel",
+        "language": "ts",
+        "code": "app.get('/home', async () => {\n  const [user, recommendations] = await Promise.all([\n    fetch(`${USERS}/me`, { signal: AbortSignal.timeout(800) }).then((r) => r.json()),\n    fetch(`${RECS}/for-me`, { signal: AbortSignal.timeout(800) })\n      .then((r) => r.json())\n      .catch(() => []), // the home screen still works without recommendations\n  ]);\n  return { name: user.name, recommendations };\n});"
+      }
+    ],
+    "related": [
+      "pattern.bff",
+      "react.app",
+      "node.service",
+      "topic.authentication"
+    ],
+    "references": [
+      {
+        "title": "Sam Newman — Backends for Frontends",
+        "url": "https://samnewman.io/patterns/architectural/bff/"
+      },
+      {
+        "title": "OAuth 2.0 for Browser-Based Apps (IETF draft) — BFF",
+        "url": "https://datatracker.ietf.org/doc/html/draft-ietf-oauth-browser-based-apps"
+      }
+    ],
+    "source": "content/docs/node.bff.md"
+  },
+  {
+    "id": "node.contract",
+    "kind": "concept",
+    "title": "API contract package",
+    "summary": "The shared description of an API — OpenAPI, zod schemas, a tRPC router type — that both the client and the server use, so they cannot drift apart.",
+    "level": "intermediate",
+    "tracks": [
+      "api-design"
+    ],
+    "tags": [
+      "openapi",
+      "zod",
+      "trpc",
+      "contract-first"
+    ],
+    "explain": {
+      "beginner": "The frontend and backend must agree on every request and response: the path, the fields,\ntheir types. An **API contract** writes that agreement down in one place.\n\nBoth sides use it: the server to validate requests, the client to get typed functions.\nWhen the contract changes, type errors show what to update.",
+      "intermediate": "- **Contract-first:** write `openapi.yaml`, generate server stubs and the client.\n- **Code-first:** write zod schemas or a tRPC router, and derive types and docs from them.\n- Put endpoints and their data shapes (DTOs) inside the contract shape on the canvas.\n- Browser code may depend on the contract package; it may not depend on server code.",
+      "senior": "- Version and evolve compatibly: add optional fields, never change the meaning of an\n  existing one; deprecate before removing.\n- Run contract tests in CI (schema diff, consumer tests) to catch breaking changes.\n- For public APIs, publish the OpenAPI document and generate SDKs."
+    },
+    "mistakes": [
+      "Sharing server code with the client to \"share types\" (and leaking server-only code).",
+      "Types that say one thing while the server returns another; validate at the boundary."
+    ],
+    "examples": [
+      {
+        "title": "A zod contract used by client and server",
+        "language": "ts",
+        "code": "// packages/api-contract/src/orders.ts\nimport { z } from 'zod';\n\nexport const CreateOrder = z.object({ productId: z.string(), quantity: z.number().int().min(1) });\nexport const OrderSummary = z.object({\n  id: z.string(),\n  status: z.enum(['new', 'paid']),\n  total: z.number(),\n});\nexport type CreateOrder = z.infer<typeof CreateOrder>;"
+      }
+    ],
+    "related": [
+      "node.endpoint",
+      "node.dto",
+      "react.api-client",
+      "depends-on"
+    ],
+    "references": [
+      {
+        "title": "OpenAPI Specification",
+        "url": "https://spec.openapis.org/oas/latest.html"
+      },
+      {
+        "title": "tRPC — Introduction",
+        "url": "https://trpc.io/docs"
+      }
+    ],
+    "source": "content/docs/node.contract.md"
+  },
+  {
+    "id": "node.domain",
+    "kind": "concept",
+    "title": "Domain model / aggregate",
+    "summary": "The business rules and state, written as plain code without database or HTTP — an Order that refuses to ship before it is paid.",
+    "level": "intermediate",
+    "tracks": [
+      "data-and-models",
+      "patterns"
+    ],
+    "tags": [
+      "ddd",
+      "aggregate",
+      "entity",
+      "value-object"
+    ],
+    "explain": {
+      "beginner": "The **domain model** is where the business rules live: \"an order can only be shipped\nwhen it is paid\", \"a discount cannot exceed 50%\". It is plain TypeScript: no SQL, no\nExpress, no fetch.\n\nBecause it has no I/O, it is easy to read and to test, and the rules are in one place.",
+      "intermediate": "- An **aggregate** is a cluster of objects changed together and saved together (an Order\n  with its lines). Other code changes it only through its methods.\n- **Value objects** (Money, Email) validate themselves and are compared by value.\n- The domain may **emit events** (`OrderPlaced`) that other parts react to.\n- It does not read or write the database; a repository loads and saves it (this tool\n  refuses `reads`/`writes` from domain shapes).",
+      "senior": "- Aggregate boundaries are consistency boundaries: one transaction changes one\n  aggregate; across aggregates, use events and accept eventual consistency.\n- Keep aggregates small; large ones cause lock contention and lost updates.\n- Not every app needs a rich domain model: for CRUD-heavy areas a layered design with\n  validation is simpler."
+    },
+    "mistakes": [
+      "Domain classes importing Prisma or Express (RNP-006).",
+      "An \"anemic\" model: data classes with all rules in services."
+    ],
+    "examples": [
+      {
+        "title": "An aggregate that guards its rules",
+        "language": "ts",
+        "code": "export class Order {\n  private constructor(\n    readonly id: string,\n    private status: 'new' | 'paid' | 'shipped',\n  ) {}\n\n  ship() {\n    if (this.status !== 'paid') throw new Error('Only paid orders can be shipped');\n    this.status = 'shipped';\n  }\n}"
+      }
+    ],
+    "related": [
+      "topic.models",
+      "node.use-case",
+      "node.port",
+      "node.event",
+      "emits"
+    ],
+    "references": [
+      {
+        "title": "Martin Fowler — DDD aggregate",
+        "url": "https://martinfowler.com/bliki/DDD_Aggregate.html"
+      },
+      {
+        "title": "Martin Fowler — Anemic domain model",
+        "url": "https://martinfowler.com/bliki/AnemicDomainModel.html"
+      }
+    ],
+    "source": "content/docs/node.domain.md"
+  },
+  {
+    "id": "node.dto",
+    "kind": "concept",
+    "title": "Data shape (DTO)",
+    "summary": "The shape of data that crosses a boundary — a request body, a response, an event payload. Not the same as the table or the domain object.",
+    "level": "beginner",
+    "tracks": [
+      "data-and-models",
+      "api-design"
+    ],
+    "tags": [
+      "dto",
+      "schema",
+      "zod",
+      "payload"
+    ],
+    "explain": {
+      "beginner": "A **DTO** (data transfer object) describes data that travels between parts: what the\nbrowser sends to create an order, what the API returns for an order list, what an event\ncarries.\n\nIt is often different from the database table: a user row has a password hash; the\n`UserResponse` DTO must not.",
+      "intermediate": "- One DTO per direction and purpose: `CreateOrderRequest`, `OrderSummary`,\n  `OrderDetails`.\n- Validate request DTOs at the boundary; map rows or domain objects to response DTOs.\n- Share DTOs through a contract package; the frontend may depend on it.\n- In this tool, a DTO can list its fields; endpoints point to their request and response\n  DTOs.",
+      "senior": "- DTOs are your compatibility surface: evolve them additively.\n- Avoid \"god DTOs\" reused everywhere with optional fields for every case.\n- For events, include a version and only the facts consumers need."
+    },
+    "mistakes": [
+      "Returning ORM entities (leaks fields, couples API to schema).",
+      "One DTO for create, update and read with everything optional."
+    ],
+    "examples": [
+      {
+        "title": "Request and response DTOs",
+        "language": "ts",
+        "code": "export const CreateOrderRequest = z.object({\n  productId: z.string().uuid(),\n  quantity: z.number().int().min(1).max(10),\n});\n\nexport type OrderSummary = { id: string; status: 'new' | 'paid' | 'shipped'; total: number };"
+      }
+    ],
+    "related": [
+      "topic.models",
+      "node.endpoint",
+      "node.contract",
+      "pg.table",
+      "node.domain"
+    ],
+    "references": [
+      {
+        "title": "Martin Fowler — Data transfer object",
+        "url": "https://martinfowler.com/eaaCatalog/dataTransferObject.html"
+      },
+      {
+        "title": "Zod — Basic usage",
+        "url": "https://zod.dev/basics"
+      }
+    ],
+    "quiz": [
+      {
+        "question": "Why not return the database row of a user directly from GET /me?",
+        "options": [
+          "Rows are too slow",
+          "The row may contain fields the client must not see — like a password hash — and ties the API to the table",
+          "JSON cannot hold rows",
+          "There is no reason"
+        ],
+        "answer": 1,
+        "explanation": "A response DTO lists exactly what the client gets, so internal columns never leak and the table can change without breaking clients."
+      }
+    ],
+    "source": "content/docs/node.dto.md"
+  },
+  {
     "id": "node.endpoint",
     "kind": "concept",
     "title": "Designing API endpoints",
@@ -89,6 +1558,681 @@ export const DOCS: LearningDoc[] = [
       }
     ],
     "source": "content/docs/node.endpoint.md"
+  },
+  {
+    "id": "node.event",
+    "kind": "concept",
+    "title": "Domain / integration event",
+    "summary": "A fact that happened — OrderPlaced, PaymentFailed. The part that raises it does not know who reacts; other parts handle it in their own time.",
+    "level": "intermediate",
+    "tracks": [
+      "patterns",
+      "concurrency-and-parallelism"
+    ],
+    "tags": [
+      "events",
+      "ddd",
+      "outbox",
+      "pubsub"
+    ],
+    "explain": {
+      "beginner": "An **event** is a short message about something that already happened: \"order 42 was\nplaced\". The orders module **emits** it; the warehouse and email modules **handle** it.\n\nThe orders module does not need to know about warehouses or emails, so you can add a new\nreaction without touching it.",
+      "intermediate": "- Name events in the past tense, with the facts handlers need (`OrderPlaced { orderId,\ntotal }`).\n- **Domain events** stay inside a service or module; **integration events** cross\n  services and need a stable, versioned shape.\n- Handlers must be idempotent; events can be delivered twice.",
+      "senior": "- Publishing an event and saving data must not drift apart: use a **transactional\n  outbox** (write the event in the same transaction, publish it afterwards), or a Postgres\n  job queue in the same transaction.\n- Events give eventual consistency; design the UI for \"processing\" states.\n- Avoid chains of events that together implement one business process nobody can see;\n  sometimes an explicit workflow is clearer."
+    },
+    "mistakes": [
+      "Publishing after the commit without an outbox (lost events) or before it (events for data that was rolled back).",
+      "Events named as commands (\"SendEmail\")."
+    ],
+    "examples": [
+      {
+        "title": "Record the event in the same transaction (outbox)",
+        "language": "sql",
+        "code": "BEGIN;\nINSERT INTO orders (id, user_id, total) VALUES ($1, $2, $3);\nINSERT INTO outbox (topic, payload) VALUES ('OrderPlaced', jsonb_build_object('orderId', $1));\nCOMMIT;"
+      }
+    ],
+    "related": [
+      "node.module",
+      "node.domain",
+      "emits",
+      "handles",
+      "pg.job-queue"
+    ],
+    "references": [
+      {
+        "title": "Martin Fowler — What do you mean by \"event-driven\"?",
+        "url": "https://martinfowler.com/articles/201701-event-driven.html"
+      },
+      {
+        "title": "microservices.io — Transactional outbox",
+        "url": "https://microservices.io/patterns/data/transactional-outbox.html"
+      }
+    ],
+    "source": "content/docs/node.event.md"
+  },
+  {
+    "id": "node.middleware",
+    "kind": "concept",
+    "title": "Middleware",
+    "summary": "Code that runs before (or after) every handler of a route group — authentication, rate limiting, request logging, error handling.",
+    "level": "beginner",
+    "tracks": [
+      "auth",
+      "api-design"
+    ],
+    "tags": [
+      "express",
+      "fastify",
+      "auth",
+      "rate-limit"
+    ],
+    "explain": {
+      "beginner": "Some checks apply to many endpoints: \"is the user signed in?\", \"has this IP sent too\nmany requests?\". Instead of repeating them in every handler, a **middleware** runs before\nthe handlers and stops the request early when a check fails (401, 429).",
+      "intermediate": "- **Auth middleware** answers \"who is calling?\": it reads the session cookie or the\n  bearer token, verifies it, and attaches the user to the request.\n- **Authorization** (\"may this user cancel _this_ order?\") usually needs the data, so it\n  belongs in the use case, not only in middleware.\n- Order matters: logging and request IDs first, then auth, then validation, then the\n  handler, then the error handler last.",
+      "senior": "- Verify JWTs properly: algorithm allow-list, issuer, audience, expiry, key rotation\n  (JWKS caching).\n- Rate limits per user and per IP, stored in a shared store when you run several\n  instances.\n- A central error handler maps exceptions to one error format and never leaks stack\n  traces."
+    },
+    "mistakes": [
+      "Checking \"signed in\" but not \"allowed to touch this record\" (broken object-level authorization).",
+      "Forgetting the auth middleware on new routes; prefer secure-by-default route groups."
+    ],
+    "examples": [
+      {
+        "title": "Session check middleware (Express)",
+        "language": "ts",
+        "code": "export function requireSession(req: Request, res: Response, next: NextFunction) {\n  const session = sessions.verify(req.cookies.sid);\n  if (!session) return res.status(401).json({ title: 'Sign in required' });\n  req.user = session.user;\n  next();\n}"
+      }
+    ],
+    "related": [
+      "topic.authentication",
+      "node.route-handler",
+      "gen.auth-provider",
+      "authenticates-with"
+    ],
+    "references": [
+      {
+        "title": "Express — Using middleware",
+        "url": "https://expressjs.com/en/guide/using-middleware.html"
+      },
+      {
+        "title": "OWASP — Authentication cheat sheet",
+        "url": "https://cheatsheetseries.owasp.org/cheatsheets/Authentication_Cheat_Sheet.html"
+      }
+    ],
+    "source": "content/docs/node.middleware.md"
+  },
+  {
+    "id": "node.module",
+    "kind": "concept",
+    "title": "Module (backend)",
+    "summary": "A part of a service with its own responsibility, its own tables and a small public API — \"orders\", \"payments\". Modules talk only through their public APIs.",
+    "level": "intermediate",
+    "tracks": [
+      "patterns"
+    ],
+    "tags": [
+      "modular-monolith",
+      "nestjs",
+      "boundaries"
+    ],
+    "explain": {
+      "beginner": "A big service is easier to change when it is split into **modules**, each responsible for\none area: orders, payments, catalog. A module has a **public API** (functions other\nmodules may call) and keeps everything else private.",
+      "intermediate": "- Each module owns **its tables** (its schema); other modules do not read them directly.\n- Modules talk through public calls or **events** (`OrderPlaced`) instead of reaching\n  into each other's code.\n- This is the core of a **modular monolith**: one deployable, clear inner boundaries,\n  easy to split later.",
+      "senior": "- Enforce boundaries in CI (dependency-cruiser, ESLint boundaries, Nx tags); this tool's\n  rules check them in the model (cross-module writes, shared tables).\n- Synchronous calls between modules couple their availability and transactions; events\n  decouple them but add eventual consistency.\n- Cyclic dependencies between modules are the first sign a boundary is wrong."
+    },
+    "mistakes": [
+      "Module A writing module B's tables.",
+      "A \"common\" module that every module depends on and that holds business logic."
+    ],
+    "examples": [
+      {
+        "title": "A module's public API",
+        "language": "ts",
+        "code": "// modules/orders/index.ts — other modules import only this\nexport { placeOrder, getOrder } from './application';\nexport type { OrderSummary } from './contracts';"
+      }
+    ],
+    "related": [
+      "pattern.modular-monolith",
+      "node.event",
+      "emits",
+      "handles",
+      "depends-on"
+    ],
+    "references": [
+      {
+        "title": "NestJS — Modules",
+        "url": "https://docs.nestjs.com/modules"
+      },
+      {
+        "title": "Kamil Grzybek — Modular monolith primer",
+        "url": "https://www.kamilgrzybek.com/blog/posts/modular-monolith-primer"
+      }
+    ],
+    "source": "content/docs/node.module.md"
+  },
+  {
+    "id": "node.port",
+    "kind": "concept",
+    "title": "Port (interface)",
+    "summary": "An interface the application needs — OrderRepository, PaymentGateway — written in its own terms. Adapters implement it with a real database or service.",
+    "level": "senior",
+    "tracks": [
+      "patterns"
+    ],
+    "tags": [
+      "hexagonal",
+      "ports-and-adapters",
+      "dependency-inversion"
+    ],
+    "explain": {
+      "beginner": "A **port** is a promise: \"I need something that can save and load orders\". The\napplication code depends only on that promise (an interface). A separate **adapter**\nkeeps it, for example with Prisma and PostgreSQL.\n\nIn tests you can plug in a simple in-memory adapter.",
+      "intermediate": "- Ports are named in business terms (`OrderRepository.findById`), not technical ones\n  (`PrismaClient`).\n- Use cases **use ports**; adapters **implement** them (`implements` relation).\n- Wire adapters to ports at startup (manual wiring or a DI container like NestJS).",
+      "senior": "- The direction is the point: infrastructure depends on the application, not the other\n  way round. Check it with dependency rules.\n- Do not create ports \"just in case\" for everything; add them where you need to swap or\n  isolate (databases, payment providers, clocks).\n- Leaky ports (returning ORM entities) undo the benefit."
+    },
+    "mistakes": [
+      "Ports that mirror the ORM API.",
+      "Use cases importing the adapter directly."
+    ],
+    "examples": [
+      {
+        "title": "A port and its adapter",
+        "language": "ts",
+        "code": "// application/ports/OrderRepository.ts\nexport interface OrderRepository {\n  findById(id: string): Promise<Order | undefined>;\n  save(order: Order): Promise<void>;\n}\n\n// infrastructure/PrismaOrderRepository.ts\nexport class PrismaOrderRepository implements OrderRepository {\n  constructor(private readonly db: PrismaClient) {}\n  async findById(id: string) {\n    const row = await this.db.order.findUnique({ where: { id } });\n    return row ? Order.fromRow(row) : undefined;\n  }\n  async save(order: Order) {\n    await this.db.order.upsert({\n      where: { id: order.id },\n      create: order.toRow(),\n      update: order.toRow(),\n    });\n  }\n}"
+      }
+    ],
+    "related": [
+      "pattern.hexagonal",
+      "node.repository",
+      "node.use-case",
+      "implements",
+      "uses-port"
+    ],
+    "references": [
+      {
+        "title": "Alistair Cockburn — Hexagonal architecture",
+        "url": "https://alistair.cockburn.us/hexagonal-architecture/"
+      },
+      {
+        "title": "Martin Fowler — Dependency injection",
+        "url": "https://martinfowler.com/articles/injection.html"
+      }
+    ],
+    "source": "content/docs/node.port.md"
+  },
+  {
+    "id": "node.repository",
+    "kind": "concept",
+    "title": "Repository / data access",
+    "summary": "The code that reads and writes the database through an ORM or query builder (Prisma, Drizzle, Kysely), so the rest of the app does not write SQL.",
+    "level": "beginner",
+    "tracks": [
+      "data-and-models"
+    ],
+    "tags": [
+      "prisma",
+      "drizzle",
+      "kysely",
+      "orm",
+      "sql"
+    ],
+    "explain": {
+      "beginner": "A **repository** is the part of the backend that talks to the database. The rest of the\ncode asks it for things in plain words — `orders.findById(id)`, `orders.save(order)` —\nand does not need to know SQL or table names.\n\nIt usually uses an ORM or query builder: Prisma, Drizzle, Kysely, TypeORM.",
+      "intermediate": "- One repository per aggregate or table group (orders, products).\n- Pass the transaction in (`tx`) so a use case can make several calls atomic.\n- Watch for **N+1 queries**: loading 50 orders, then each order's lines one by one.\n  Load them together (`include`, a join, or `WHERE id = ANY($1)`).\n- Paginate list queries.",
+      "senior": "- Contended writes need a strategy: `SELECT … FOR UPDATE`, a version column, or an atomic\n  `UPDATE … SET stock = stock - $1 WHERE stock >= $1`. The concurrency lab shows why.\n- Keep ORM types inside the repository; return domain objects or DTOs.\n- Know the SQL your ORM generates; check plans (`EXPLAIN ANALYZE`) for hot queries."
+    },
+    "mistakes": [
+      "N+1 queries.",
+      "Read-modify-write without concurrency control (lost updates).",
+      "ORM entities leaking into HTTP responses."
+    ],
+    "examples": [
+      {
+        "title": "An atomic stock update instead of read-then-write",
+        "language": "ts",
+        "code": "const updated = await db\n  .updateTable('products')\n  .set((eb) => ({ stock: eb('stock', '-', quantity) }))\n  .where('id', '=', productId)\n  .where('stock', '>=', quantity)\n  .executeTakeFirst();\nif (Number(updated.numUpdatedRows) === 0) throw new OutOfStock(productId);"
+      }
+    ],
+    "related": [
+      "pg.table",
+      "pg.schema",
+      "node.port",
+      "reads",
+      "writes",
+      "topic.transactions-and-isolation"
+    ],
+    "references": [
+      {
+        "title": "Martin Fowler — Repository",
+        "url": "https://martinfowler.com/eaaCatalog/repository.html"
+      },
+      {
+        "title": "Prisma — Transactions",
+        "url": "https://www.prisma.io/docs/orm/prisma-client/queries/transactions"
+      }
+    ],
+    "source": "content/docs/node.repository.md"
+  },
+  {
+    "id": "node.route-handler",
+    "kind": "concept",
+    "title": "Controller / route handler",
+    "summary": "Code that receives an HTTP request, validates it, calls the business logic, and turns the result into an HTTP response. Thin by design.",
+    "level": "beginner",
+    "tracks": [
+      "api-design"
+    ],
+    "tags": [
+      "express",
+      "fastify",
+      "nestjs",
+      "controller"
+    ],
+    "explain": {
+      "beginner": "A **route handler** (a controller in NestJS) is where a request enters your code:\n\n1. read the request (path, query, body),\n2. **validate** it,\n3. call the business logic (a use case),\n4. turn the result into a response with the right **status code**.\n\nKeep it thin: no SQL, no business rules. Those belong in the use case and the repository.",
+      "intermediate": "- Validate with a schema (zod, TypeBox, class-validator) and return 400 with details on\n  failure (RNP-015 flags handlers without validation).\n- Map domain errors to HTTP: \"out of stock\" → 409, \"not found\" → 404.\n- One handler groups the endpoints of one resource (`/orders`, `/orders/:id`).",
+      "senior": "- Handlers are adapters: the same use case should be callable from HTTP, a job, a CLI.\n- Keep auth decisions explicit: middleware for \"who are you\", the use case for \"may you\n  do this to that order\" (ownership).\n- Use one error shape across the API (Problem Details, RFC 9457)."
+    },
+    "mistakes": [
+      "Queries and business rules in handlers (RNP-005).",
+      "Returning 200 with `{ error: … }`.",
+      "No input validation."
+    ],
+    "examples": [
+      {
+        "title": "A thin handler (Express + zod)",
+        "language": "ts",
+        "code": "const Body = z.object({ productId: z.string(), quantity: z.number().int().min(1) });\n\nrouter.post('/orders', requireSession, async (req, res) => {\n  const input = Body.safeParse(req.body);\n  if (!input.success) return res.status(400).json({ errors: input.error.issues });\n  const order = await placeOrder(req.user.id, input.data);\n  res.status(201).location(`/orders/${order.id}`).json(order);\n});"
+      }
+    ],
+    "related": [
+      "node.endpoint",
+      "node.use-case",
+      "node.middleware",
+      "node.dto"
+    ],
+    "references": [
+      {
+        "title": "Express — Routing",
+        "url": "https://expressjs.com/en/guide/routing.html"
+      },
+      {
+        "title": "NestJS — Controllers",
+        "url": "https://docs.nestjs.com/controllers"
+      }
+    ],
+    "quiz": [
+      {
+        "question": "A handler for POST /orders runs SQL queries to check stock and insert rows. What is the main problem?",
+        "options": [
+          "SQL is slow",
+          "Business rules end up in the HTTP layer and cannot be reused by jobs or tests without HTTP",
+          "Handlers cannot use SQL",
+          "Nothing"
+        ],
+        "answer": 1,
+        "explanation": "Handlers should translate HTTP; a use case holds the rules and a repository runs the queries (RNP-005)."
+      }
+    ],
+    "source": "content/docs/node.route-handler.md"
+  },
+  {
+    "id": "node.scheduler",
+    "kind": "concept",
+    "title": "Scheduled job",
+    "summary": "Work that runs on a schedule — nightly clean-ups, reminders, reports — by cron syntax, ideally through the job queue so it runs once even with many instances.",
+    "level": "intermediate",
+    "tracks": [
+      "concurrency-and-parallelism"
+    ],
+    "tags": [
+      "cron",
+      "pg-boss",
+      "schedule"
+    ],
+    "explain": {
+      "beginner": "Some work happens at fixed times, not because a user clicked something: \"every night at\n02:00, delete carts older than 30 days\", \"every Monday, email the sales report\".\n\nA **scheduled job** describes when to run (a cron expression like `0 2 * * *`) and what\nto run.",
+      "intermediate": "- With several API instances, an in-process timer (`node-cron`) runs once **per\n  instance**. Use a scheduler that coordinates through the database (pg-boss schedules,\n  `pg_cron`) so the job runs once.\n- Let the schedule only **enqueue** a job; a worker runs it with retries.\n- Make it idempotent and safe to run late: \"delete carts older than 30 days\", not\n  \"delete yesterday's carts\".",
+      "senior": "- Time zones and daylight saving: schedule in UTC or state the time zone explicitly.\n- Long jobs should process in batches and record progress, so a restart continues.\n- Monitor \"last successful run\" and alert when it is too old."
+    },
+    "mistakes": [
+      "`setInterval` in the API, running on every instance.",
+      "Jobs that assume they run exactly on time."
+    ],
+    "examples": [
+      {
+        "title": "A nightly clean-up with pg-boss",
+        "language": "ts",
+        "code": "await boss.schedule('purge-carts', '0 2 * * *', {}, { tz: 'UTC' });\nawait boss.work('purge-carts', async () => {\n  await db.query(`DELETE FROM carts WHERE updated_at < now() - interval '30 days'`);\n});"
+      }
+    ],
+    "related": [
+      "node.worker",
+      "pg.job-queue",
+      "enqueues"
+    ],
+    "references": [
+      {
+        "title": "pg-boss — Scheduling",
+        "url": "https://timgit.github.io/pg-boss/#/./api/scheduling"
+      },
+      {
+        "title": "crontab.guru — cron expressions",
+        "url": "https://crontab.guru/"
+      }
+    ],
+    "source": "content/docs/node.scheduler.md"
+  },
+  {
+    "id": "node.service",
+    "kind": "concept",
+    "title": "Node service (API)",
+    "summary": "A Node.js process that answers requests. It checks who is calling, validates input, applies business rules, and is the only part that talks to the database.",
+    "level": "beginner",
+    "tracks": [
+      "foundations",
+      "concurrency-and-parallelism"
+    ],
+    "tags": [
+      "express",
+      "fastify",
+      "nestjs",
+      "backend"
+    ],
+    "explain": {
+      "beginner": "The **API** (a Node service) is the part of the system that runs on your servers. The\nbrowser sends it requests (`POST /api/orders`); it answers with data (JSON).\n\nIt has three jobs the browser cannot do safely:\n\n1. **Check who is calling** and what they may do.\n2. **Validate** every request, because requests can come from anywhere.\n3. **Read and write the database**, applying the business rules (prices, stock, limits).\n\nFrameworks: Express (small, popular), Fastify (fast, schema-based), NestJS (structured,\nwith modules and dependency injection).",
+      "intermediate": "- Inside a service you usually find **route handlers** (HTTP in and out), **use cases**\n  (one business action each) and **repositories** (database access).\n- Configure it with environment variables; keep secrets out of the code.\n- Run several **instances** behind a load balancer for availability; each has its own\n  database **connection pool**.\n- Return clear errors: 400 for bad input, 401/403 for auth, 404, 409 for conflicts.",
+      "senior": "- One Node process runs JavaScript on one thread: CPU-heavy work (image processing, big\n  JSON, crypto loops) blocks every other request. Move it to worker threads or a\n  background worker.\n- `instances × poolSize` must stay below the database's `max_connections`, or use a\n  pooler.\n- Stateless instances (sessions in a store or a cookie) scale horizontally; in-memory\n  state does not survive a restart or a second instance.\n- Graceful shutdown: stop accepting, finish in-flight requests, close the pool."
+    },
+    "analogy": "The API is the bank clerk: it checks your ID, checks the request makes sense, and only\nthen goes to the vault (database). Customers never enter the vault themselves.",
+    "mistakes": [
+      "Trusting data from the browser.",
+      "Business rules spread across route handlers.",
+      "CPU-heavy work on the request path.",
+      "Too many connections: instances × pool size above the database limit."
+    ],
+    "examples": [
+      {
+        "title": "A minimal Fastify service with validation",
+        "language": "ts",
+        "code": "import Fastify from 'fastify';\n\nconst app = Fastify({ logger: true });\n\napp.post(\n  '/orders',\n  {\n    schema: {\n      body: {\n        type: 'object',\n        required: ['productId', 'quantity'],\n        properties: { productId: { type: 'string' }, quantity: { type: 'integer', minimum: 1 } },\n      },\n    },\n  },\n  async (req, reply) => reply.code(201).send({ id: 'ord_1' }),\n);\n\nawait app.listen({ port: 3000 });"
+      }
+    ],
+    "related": [
+      "node.route-handler",
+      "node.use-case",
+      "node.repository",
+      "topic.event-loop-and-parallelism",
+      "pg.schema",
+      "calls"
+    ],
+    "references": [
+      {
+        "title": "Node.js — Introduction",
+        "url": "https://nodejs.org/en/learn/getting-started/introduction-to-nodejs"
+      },
+      {
+        "title": "Fastify — Getting started",
+        "url": "https://fastify.dev/docs/latest/Guides/Getting-Started/"
+      },
+      {
+        "title": "Express — Hello world",
+        "url": "https://expressjs.com/en/starter/hello-world.html"
+      }
+    ],
+    "quiz": [
+      {
+        "question": "Why must the API validate a request even if the React app already checked the form?",
+        "options": [
+          "It does not need to",
+          "Requests can come from anywhere — scripts and other clients included",
+          "Browsers are slow",
+          "Validation is only for TypeScript"
+        ],
+        "answer": 1,
+        "explanation": "Anyone can send HTTP requests to your API without your frontend. The server is the only place where checks are enforced."
+      }
+    ],
+    "source": "content/docs/node.service.md"
+  },
+  {
+    "id": "node.shared-lib",
+    "kind": "concept",
+    "title": "Shared package",
+    "summary": "A workspace package used by several apps — configuration, logging, small utilities, types. Useful in small doses; dangerous when business logic moves in.",
+    "level": "intermediate",
+    "tracks": [
+      "patterns"
+    ],
+    "tags": [
+      "monorepo",
+      "pnpm-workspaces",
+      "packages"
+    ],
+    "explain": {
+      "beginner": "In a monorepo, code used by several apps — reading configuration, a logger, date helpers\n— can live in a **shared package** that the apps depend on, instead of being copied.",
+      "intermediate": "- Keep shared packages small and stable; every change affects every app.\n- Good candidates: config loading, logging, error types, API contracts.\n- Bad candidates: business rules of one module (\"shared\" becomes \"everyone's\").",
+      "senior": "- Shared code couples release cycles. Prefer duplication over the wrong abstraction for\n  small helpers.\n- Give each package a clear owner and run its tests in CI for every consumer change."
+    },
+    "mistakes": [
+      "A `common` package that grows into the real application.",
+      "Shared packages importing app code (cycles)."
+    ],
+    "examples": [
+      {
+        "title": "A shared config package",
+        "language": "ts",
+        "code": "// packages/config/src/index.ts\nimport { z } from 'zod';\n\nexport const config = z\n  .object({ DATABASE_URL: z.string().url(), PORT: z.coerce.number().default(3000) })\n  .parse(process.env);"
+      }
+    ],
+    "related": [
+      "node.module",
+      "node.contract",
+      "depends-on"
+    ],
+    "references": [
+      {
+        "title": "pnpm — Workspaces",
+        "url": "https://pnpm.io/workspaces"
+      },
+      {
+        "title": "Turborepo — Structuring a repository",
+        "url": "https://turborepo.com/docs/crafting-your-repository/structuring-a-repository"
+      }
+    ],
+    "source": "content/docs/node.shared-lib.md"
+  },
+  {
+    "id": "node.use-case",
+    "kind": "concept",
+    "title": "Use case / application service",
+    "summary": "One business action — PlaceOrder, RefundOrder — as one function or class. It loads data, asks the domain to apply the rules, saves, and starts follow-up work.",
+    "level": "intermediate",
+    "tracks": [
+      "patterns",
+      "data-and-models"
+    ],
+    "tags": [
+      "application-service",
+      "clean-architecture",
+      "transactions"
+    ],
+    "explain": {
+      "beginner": "A **use case** is one thing the system does for someone: place an order, cancel a\nbooking, refund a payment. It is written once and called from wherever the action starts:\nan HTTP handler, a background job, an admin script.\n\nIt coordinates the steps: load what is needed, check the rules, save the changes, and\nstart follow-up work (send the email).",
+      "intermediate": "- One use case = one **transaction** boundary in most designs: either everything is saved\n  or nothing.\n- It depends on **ports** (interfaces like `OrderRepository`) or on repositories directly\n  in a layered design, never on HTTP objects.\n- Return a result or a domain error; let the handler choose the status code.\n- Enqueue follow-up jobs in the same transaction.",
+      "senior": "- Use cases are the natural unit for authorization (\"may this user refund this order?\"),\n  idempotency (an idempotency key per command) and auditing.\n- Keep them small; a use case calling other use cases often hides a missing domain\n  concept or event.\n- Under concurrency, the use case decides the strategy for contended writes (version\n  check, row lock) — see the concurrency lab."
+    },
+    "mistakes": [
+      "Business rules split between handlers and repositories, with nothing in between.",
+      "Use cases that take `req` and `res`.",
+      "Sending emails before the transaction commits."
+    ],
+    "examples": [
+      {
+        "title": "PlaceOrder with a transaction and a job",
+        "language": "ts",
+        "code": "export async function placeOrder(userId: string, input: PlaceOrderInput) {\n  return db.transaction(async (tx) => {\n    const product = await products.lockById(tx, input.productId); // SELECT … FOR UPDATE\n    if (product.stock < input.quantity) throw new OutOfStock(product.id);\n    await products.updateStock(tx, product.id, product.stock - input.quantity);\n    const order = await orders.insert(tx, { userId, ...input });\n    await jobs.send(tx, 'send-confirmation', { orderId: order.id });\n    return order;\n  });\n}"
+      }
+    ],
+    "related": [
+      "node.domain",
+      "node.port",
+      "node.repository",
+      "pattern.layered",
+      "pattern.hexagonal",
+      "topic.transactions-and-isolation"
+    ],
+    "references": [
+      {
+        "title": "Martin Fowler — Service layer",
+        "url": "https://martinfowler.com/eaaCatalog/serviceLayer.html"
+      },
+      {
+        "title": "Alistair Cockburn — Hexagonal architecture",
+        "url": "https://alistair.cockburn.us/hexagonal-architecture/"
+      }
+    ],
+    "source": "content/docs/node.use-case.md"
+  },
+  {
+    "id": "node.worker",
+    "kind": "concept",
+    "title": "Background worker",
+    "summary": "A Node process that runs jobs from a queue — emails, invoices, image resizing — outside the request, with retries when something fails.",
+    "level": "intermediate",
+    "tracks": [
+      "concurrency-and-parallelism"
+    ],
+    "tags": [
+      "pg-boss",
+      "graphile-worker",
+      "jobs",
+      "async"
+    ],
+    "explain": {
+      "beginner": "Some work is slow or can fail for reasons outside your control: sending an email, making\na PDF invoice, calling a shipping API. The user should not wait for it.\n\nThe API **enqueues** a job (\"send confirmation for order 42\") and answers right away. A\n**worker**, a separate Node process, **processes** jobs from the queue one by one and\nretries the ones that fail.",
+      "intermediate": "- Jobs must be **idempotent**: a job can run twice (a crash after the work, before the\n  \"done\" mark). Sending an email twice is bad; check \"already sent?\" first.\n- Set **retries with backoff** and a **dead-letter** queue for jobs that keep failing.\n- `concurrency` controls how many jobs one worker runs at once; `instances` how many\n  workers run.\n- Enqueue in the **same transaction** as the data (`inTransaction`), so an order never\n  exists without its email job, and a rolled-back order never sends one.",
+      "senior": "- With a Postgres job queue, `SELECT … FOR UPDATE SKIP LOCKED` lets many workers take\n  jobs without blocking each other.\n- Separate queues by latency class (emails vs reports) so a slow job type does not starve\n  fast ones.\n- Observe queue depth and age of the oldest job; alert when they grow.\n- CPU-heavy jobs still block the worker's event loop; use worker threads inside the worker\n  or a dedicated process."
+    },
+    "mistakes": [
+      "Non-idempotent jobs (double charges, duplicate emails).",
+      "Enqueuing after the commit, so a crash loses the job.",
+      "No dead-letter handling: failing jobs retry forever."
+    ],
+    "examples": [
+      {
+        "title": "Enqueue in the transaction, process in a worker (pg-boss)",
+        "language": "ts",
+        "code": "// API: in the same transaction as the order\nawait boss.send('send-confirmation', { orderId }, { db: tx });\n\n// Worker\nawait boss.work('send-confirmation', async ([job]) => {\n  if (await emails.alreadySent(job.data.orderId)) return; // idempotent\n  await mailer.sendConfirmation(job.data.orderId);\n});"
+      }
+    ],
+    "related": [
+      "pg.job-queue",
+      "processes",
+      "enqueues",
+      "pattern.background-jobs",
+      "topic.event-loop-and-parallelism"
+    ],
+    "references": [
+      {
+        "title": "pg-boss — README",
+        "url": "https://github.com/timgit/pg-boss"
+      },
+      {
+        "title": "Graphile Worker — Introduction",
+        "url": "https://worker.graphile.org/docs"
+      }
+    ],
+    "source": "content/docs/node.worker.md"
+  },
+  {
+    "id": "node.ws-gateway",
+    "kind": "concept",
+    "title": "Realtime gateway (WebSocket)",
+    "summary": "Keeps open connections to browsers and pushes updates — \"your order shipped\", live stock — instead of making the browser ask again and again.",
+    "level": "intermediate",
+    "tracks": [
+      "patterns",
+      "concurrency-and-parallelism"
+    ],
+    "tags": [
+      "websocket",
+      "socket.io",
+      "realtime",
+      "push"
+    ],
+    "explain": {
+      "beginner": "Normally the browser asks and the server answers. For live updates — chat messages, an\norder status, stock levels — asking every few seconds is wasteful and slow.\n\nA **realtime gateway** keeps a WebSocket connection open to each browser and **pushes**\nmessages when something changes.",
+      "intermediate": "- Authenticate the connection (cookie or token at connect time) and authorize each\n  subscription (\"may this user see order 42?\").\n- With several gateway instances, a message must reach the instance that holds the\n  user's connection: use a pub/sub channel (Postgres LISTEN/NOTIFY, Redis).\n- Push a small \"something changed\" message and let the client refetch, or push the data\n  itself if it is small.",
+      "senior": "- NOTIFY is not durable: clients that are offline miss messages. On reconnect, the client\n  must refetch the current state.\n- Connections are long-lived: plan for many idle sockets per instance, heartbeats, and\n  load balancers that support WebSockets.\n- Backpressure: a slow client must not make the gateway buffer unlimited messages."
+    },
+    "mistakes": [
+      "No refetch after reconnect, so the screen stays stale.",
+      "Broadcasting private data to everyone subscribed to a broad channel."
+    ],
+    "examples": [
+      {
+        "title": "Push an invalidation and let the client refetch",
+        "language": "ts",
+        "code": "// server (Socket.IO)\nio.to(`user:${userId}`).emit('invalidate', ['orders', orderId]);\n\n// client\nsocket.on('invalidate', (key) => queryClient.invalidateQueries({ queryKey: key }));"
+      }
+    ],
+    "related": [
+      "pg.channel",
+      "listens",
+      "react.server-state",
+      "node.service"
+    ],
+    "references": [
+      {
+        "title": "MDN — The WebSocket API",
+        "url": "https://developer.mozilla.org/en-US/docs/Web/API/WebSockets_API"
+      },
+      {
+        "title": "Socket.IO — Introduction",
+        "url": "https://socket.io/docs/v4/"
+      }
+    ],
+    "source": "content/docs/node.ws-gateway.md"
+  },
+  {
+    "id": "notifies",
+    "kind": "relation",
+    "title": "notifies",
+    "summary": "Sends NOTIFY on a LISTEN/NOTIFY channel — a fast signal that is lost if nobody is listening.",
+    "level": "intermediate",
+    "tracks": [
+      "concurrency-and-parallelism"
+    ],
+    "tags": [
+      "notify",
+      "realtime"
+    ],
+    "explain": {
+      "beginner": "`Service notifies stock_changed` means the service sends a short signal on a channel when\nstock changes; listeners react right away.",
+      "intermediate": "- Inside a transaction the signal is sent at commit.\n- Send IDs only; listeners load fresh data.",
+      "senior": "- Not durable: use it to wake up or invalidate, not to carry work (RNP-010)."
+    },
+    "mistakes": [
+      "Relying on NOTIFY for work that must happen."
+    ],
+    "examples": [
+      {
+        "title": "Notify with a payload",
+        "language": "sql",
+        "code": "SELECT pg_notify('stock_changed', $1::text);"
+      }
+    ],
+    "related": [
+      "pg.channel",
+      "listens",
+      "node.ws-gateway"
+    ],
+    "references": [
+      {
+        "title": "PostgreSQL docs — pg_notify",
+        "url": "https://www.postgresql.org/docs/current/functions-info.html#FUNCTIONS-INFO-SESSION"
+      }
+    ],
+    "source": "content/docs/notifies.md"
   },
   {
     "id": "pattern.background-jobs",
@@ -681,6 +2825,171 @@ export const DOCS: LearningDoc[] = [
     "source": "content/docs/pattern.starter.md"
   },
   {
+    "id": "pg.channel",
+    "kind": "concept",
+    "title": "LISTEN/NOTIFY channel",
+    "summary": "A Postgres message channel. Fast and simple for \"something changed\" signals, but not durable — listeners that are not connected miss messages.",
+    "level": "intermediate",
+    "tracks": [
+      "concurrency-and-parallelism"
+    ],
+    "tags": [
+      "notify",
+      "listen",
+      "pubsub",
+      "realtime"
+    ],
+    "explain": {
+      "beginner": "`NOTIFY stock_changed, '42'` sends a short message on a **channel**. Every connection that\nran `LISTEN stock_changed` receives it right away.\n\nIt is handy for \"something changed, refresh your view\" signals, for example to tell a\nrealtime gateway to push an update.",
+      "intermediate": "- Messages are delivered only to listeners connected **at that moment**; nothing is\n  stored. Use a job queue for work that must happen.\n- NOTIFY inside a transaction is sent at commit; rolled-back transactions send nothing.\n- `LISTEN` needs a dedicated session connection; it does not work through a\n  transaction-mode pooler.",
+      "senior": "- Payloads are limited (8000 bytes by default); send IDs, not data.\n- Many notifications in one transaction with the same payload are collapsed.\n- Good for cache invalidation across instances and for waking up workers early (with the\n  queue as the source of truth)."
+    },
+    "mistakes": [
+      "Using NOTIFY for durable work (RNP-010).",
+      "Listening through PgBouncer in transaction mode."
+    ],
+    "examples": [
+      {
+        "title": "Notify from a trigger, listen in Node",
+        "language": "ts",
+        "code": "const client = await pool.connect(); // a dedicated connection\nawait client.query('LISTEN stock_changed');\nclient.on('notification', (msg) => gateway.push('stock', msg.payload));"
+      }
+    ],
+    "related": [
+      "notifies",
+      "listens",
+      "node.ws-gateway",
+      "pg.job-queue"
+    ],
+    "references": [
+      {
+        "title": "PostgreSQL docs — NOTIFY",
+        "url": "https://www.postgresql.org/docs/current/sql-notify.html"
+      },
+      {
+        "title": "PostgreSQL docs — LISTEN",
+        "url": "https://www.postgresql.org/docs/current/sql-listen.html"
+      }
+    ],
+    "source": "content/docs/pg.channel.md"
+  },
+  {
+    "id": "pg.cluster",
+    "kind": "concept",
+    "title": "Postgres server (instance)",
+    "summary": "One running PostgreSQL server. It holds one or more databases and has limits that every app shares — connections, memory, CPU.",
+    "level": "intermediate",
+    "tracks": [
+      "data-and-models",
+      "concurrency-and-parallelism"
+    ],
+    "tags": [
+      "postgres",
+      "rds",
+      "neon",
+      "supabase",
+      "hosting"
+    ],
+    "explain": {
+      "beginner": "A **Postgres server** (PostgreSQL calls it a cluster) is one running database program on\none machine or managed service. It can hold several **databases**.\n\nEverything on the same server shares its resources: if one app opens too many\nconnections or runs a huge report, the others feel it.",
+      "intermediate": "- Managed hosting (RDS, Cloud SQL, Neon, Supabase) handles backups, upgrades and\n  failover; you still own schema design and queries.\n- `max_connections` is a hard limit for all apps together; each Node instance's pool\n  counts against it.\n- A primary server takes writes; **read replicas** can serve read-only queries.",
+      "senior": "- Size by working set (data that must fit in memory) and write volume, not disk size.\n- Plan failover: what happens to in-flight transactions and to connection strings.\n- Separate noisy workloads (analytics) onto replicas or another server."
+    },
+    "mistakes": [
+      "Many services each with a large pool on one small server.",
+      "No tested restore from backup."
+    ],
+    "examples": [
+      {
+        "title": "Check how close you are to the connection limit",
+        "language": "sql",
+        "code": "SELECT count(*) AS used, current_setting('max_connections')::int AS max\nFROM pg_stat_activity;"
+      }
+    ],
+    "related": [
+      "pg.database",
+      "pg.replica",
+      "pg.pooler"
+    ],
+    "references": [
+      {
+        "title": "PostgreSQL docs — Creating a database cluster",
+        "url": "https://www.postgresql.org/docs/current/creating-cluster.html"
+      },
+      {
+        "title": "PostgreSQL docs — Connections and authentication (max_connections)",
+        "url": "https://www.postgresql.org/docs/current/runtime-config-connection.html"
+      }
+    ],
+    "source": "content/docs/pg.cluster.md"
+  },
+  {
+    "id": "pg.database",
+    "kind": "concept",
+    "title": "Database",
+    "summary": "A PostgreSQL database — the place where data survives restarts. Only backend code connects to it; schemas inside it group tables by owner.",
+    "level": "beginner",
+    "tracks": [
+      "foundations",
+      "data-and-models"
+    ],
+    "tags": [
+      "postgres",
+      "postgresql",
+      "sql"
+    ],
+    "explain": {
+      "beginner": "The **database** keeps your data safe: orders, users, products. When servers restart, the\ndata is still there.\n\nOnly the backend (the API, workers) connects to it. The browser never does: the\nconnection needs a password, and everything in the browser is public.\n\nInside a database, **schemas** group tables, and **tables** hold rows.",
+      "intermediate": "- Use transactions for changes that belong together.\n- Run schema changes as **migrations** owned by one service.\n- Back up regularly and test restores.\n- One database can serve several services if each owns its own schema; or each service\n  gets its own database (database per service).",
+      "senior": "- A shared database is the strongest coupling between services; make ownership explicit\n  per schema and enforce it with database roles.\n- Connection budget, vacuum, and index health are operational duties, not afterthoughts.\n- Use constraints (foreign keys, `CHECK`, unique) as the last line of defense for data\n  rules."
+    },
+    "analogy": "The database is the vault of a bank. Only clerks (backend code) with the key go in, and\nonly to do what the rules allow.",
+    "mistakes": [
+      "Connecting from the browser or a mobile app.",
+      "Two services writing the same tables without an owner.",
+      "No constraints, so bad data slips in through a bug."
+    ],
+    "examples": [
+      {
+        "title": "Create a database and a role that owns it",
+        "language": "sql",
+        "code": "CREATE ROLE shop_app LOGIN PASSWORD 'change-me';\nCREATE DATABASE shop OWNER shop_app;"
+      }
+    ],
+    "related": [
+      "pg.schema",
+      "pg.table",
+      "node.service",
+      "pattern.database-per-service",
+      "reads",
+      "writes"
+    ],
+    "references": [
+      {
+        "title": "PostgreSQL docs — Tutorial",
+        "url": "https://www.postgresql.org/docs/current/tutorial.html"
+      },
+      {
+        "title": "PostgreSQL docs — Managing databases",
+        "url": "https://www.postgresql.org/docs/current/managing-databases.html"
+      }
+    ],
+    "quiz": [
+      {
+        "question": "Why can the React app not connect to PostgreSQL directly?",
+        "options": [
+          "Browsers cannot speak SQL fast enough",
+          "The database credentials would be public and anyone could run any query",
+          "PostgreSQL blocks browsers by IP",
+          "It can if you use HTTPS"
+        ],
+        "answer": 1,
+        "explanation": "Everything in the browser is public. The API holds the credentials, checks every request and only runs the queries it allows."
+      }
+    ],
+    "source": "content/docs/pg.database.md"
+  },
+  {
     "id": "pg.function",
     "kind": "concept",
     "title": "Stored functions and procedures",
@@ -762,6 +3071,215 @@ export const DOCS: LearningDoc[] = [
       }
     ],
     "source": "content/docs/pg.function.md"
+  },
+  {
+    "id": "pg.job-queue",
+    "kind": "concept",
+    "title": "Postgres job queue",
+    "summary": "A durable job queue stored in Postgres tables (pg-boss, graphile-worker). Jobs can be added in the same transaction as your data, so neither is lost.",
+    "level": "intermediate",
+    "tracks": [
+      "concurrency-and-parallelism"
+    ],
+    "tags": [
+      "pg-boss",
+      "graphile-worker",
+      "skip-locked",
+      "jobs"
+    ],
+    "explain": {
+      "beginner": "A **job queue** is a list of work to do later: \"send the email for order 42\", \"build the\ninvoice PDF\". The API adds jobs; workers take them and run them, with retries.\n\nA **Postgres** job queue keeps the jobs in tables of your database. You need no extra\nsystem, and you can add a job in the **same transaction** as the order.",
+      "intermediate": "- Workers take jobs with `SELECT … FOR UPDATE SKIP LOCKED`, so several workers never take\n  the same job and never wait for each other.\n- Set retries, backoff, expiry and a dead-letter queue.\n- Jobs must be idempotent.\n- `inTransaction: true` on the `enqueues` relation documents the transactional enqueue.",
+      "senior": "- Throughput is fine for most apps (thousands of jobs per second with tuning); for very\n  high volumes or many consumers per message, a broker may fit better.\n- Keep job tables small: archive or delete completed jobs, or vacuum will suffer.\n- Unlike LISTEN/NOTIFY, jobs survive restarts and offline workers (RNP-010)."
+    },
+    "mistakes": [
+      "Using NOTIFY for work that must not be lost.",
+      "Non-idempotent jobs.",
+      "Enqueuing outside the transaction."
+    ],
+    "examples": [
+      {
+        "title": "How a worker takes one job safely",
+        "language": "sql",
+        "code": "UPDATE jobs SET state = 'active', started_at = now()\nWHERE id = (\n  SELECT id FROM jobs\n  WHERE state = 'created' AND run_after <= now()\n  ORDER BY priority DESC, id\n  FOR UPDATE SKIP LOCKED\n  LIMIT 1\n)\nRETURNING id, name, data;"
+      }
+    ],
+    "related": [
+      "node.worker",
+      "enqueues",
+      "processes",
+      "pattern.background-jobs",
+      "pg.channel"
+    ],
+    "references": [
+      {
+        "title": "PostgreSQL docs — SELECT … FOR UPDATE SKIP LOCKED",
+        "url": "https://www.postgresql.org/docs/current/sql-select.html#SQL-FOR-UPDATE-SHARE"
+      },
+      {
+        "title": "pg-boss — README",
+        "url": "https://github.com/timgit/pg-boss"
+      }
+    ],
+    "quiz": [
+      {
+        "question": "Why enqueue the confirmation email job in the same transaction as the order?",
+        "options": [
+          "It is faster",
+          "So an order never exists without its job and a rolled-back order never sends an email",
+          "Postgres requires it",
+          "To avoid using a worker"
+        ],
+        "answer": 1,
+        "explanation": "The job and the order commit or roll back together — no lost emails and no emails for orders that do not exist."
+      }
+    ],
+    "source": "content/docs/pg.job-queue.md"
+  },
+  {
+    "id": "pg.pooler",
+    "kind": "concept",
+    "title": "Connection pooler (PgBouncer)",
+    "summary": "Shares a small number of real database connections between many app instances, so scaling out the API does not exhaust the database.",
+    "level": "intermediate",
+    "tracks": [
+      "concurrency-and-parallelism"
+    ],
+    "tags": [
+      "pgbouncer",
+      "rds-proxy",
+      "connections",
+      "pool"
+    ],
+    "explain": {
+      "beginner": "Each database connection costs memory on the PostgreSQL server, and the server allows\nonly a limited number. If 20 API instances each keep 20 connections, that is 400 — more\nthan many servers allow.\n\nA **pooler** (PgBouncer, RDS Proxy, Supavisor) sits in between: apps connect to it, and it\nshares a few real connections between them.",
+      "intermediate": "- **Transaction mode** gives a real connection to a client only for one transaction. It\n  is the most efficient, but session features (session-level `SET`, advisory locks held\n  across transactions, `LISTEN`) do not work through it.\n- **Session mode** keeps the connection for the whole client session.\n- Keep each app's own pool small when a pooler is in front.",
+      "senior": "- Budget: sum of (instances × pool size) across services ≤ pooler client limit; pooler\n  server connections ≤ `max_connections` minus admin headroom. RNP-007 and RNP-020 check\n  parts of this.\n- Prepared statements need care in transaction mode (supported in newer PgBouncer).\n- Serverless functions almost always need a pooler or a data API."
+    },
+    "mistakes": [
+      "Using session features through a transaction-mode pooler.",
+      "Large app pools behind a pooler, multiplying idle connections."
+    ],
+    "examples": [
+      {
+        "title": "PgBouncer in transaction mode",
+        "language": "bash",
+        "code": "[databases]\nshop = host=db.internal dbname=shop\n\n[pgbouncer]\npool_mode = transaction\nmax_client_conn = 2000\ndefault_pool_size = 40"
+      }
+    ],
+    "related": [
+      "connects-via",
+      "pg.cluster",
+      "node.service",
+      "topic.event-loop-and-parallelism"
+    ],
+    "references": [
+      {
+        "title": "PgBouncer — Features and pooling modes",
+        "url": "https://www.pgbouncer.org/features.html"
+      },
+      {
+        "title": "PostgreSQL docs — max_connections",
+        "url": "https://www.postgresql.org/docs/current/runtime-config-connection.html"
+      }
+    ],
+    "source": "content/docs/pg.pooler.md"
+  },
+  {
+    "id": "pg.replica",
+    "kind": "concept",
+    "title": "Read replica",
+    "summary": "A read-only copy of a database that follows the primary. It takes reports and read traffic off the primary, a little behind in time.",
+    "level": "senior",
+    "tracks": [
+      "data-and-models",
+      "concurrency-and-parallelism"
+    ],
+    "tags": [
+      "postgres",
+      "replication",
+      "scaling"
+    ],
+    "explain": {
+      "beginner": "A **read replica** is a copy of the database that only allows reading. The primary sends\nit every change. Heavy reads — reports, exports, search — can run there without slowing\ndown checkouts on the primary.",
+      "intermediate": "- Replicas lag behind (usually milliseconds, sometimes seconds). A user who just saved\n  something may not see it on a replica yet: read your own writes from the primary.\n- Writes to a replica fail; this tool refuses `writes` to a replica.\n- Replicas also serve as standbys for failover.",
+      "senior": "- Route reads deliberately (per query or per endpoint), not \"all GETs to the replica\".\n- Long queries on a replica can conflict with replication (`hot_standby_feedback`,\n  `max_standby_streaming_delay` trade-offs).\n- Logical replication can feed other systems (search, analytics)."
+    },
+    "mistakes": [
+      "Reading just-written data from a lagging replica.",
+      "Treating a replica as a backup (deletes replicate too)."
+    ],
+    "examples": [
+      {
+        "title": "Check replication lag on a replica",
+        "language": "sql",
+        "code": "SELECT now() - pg_last_xact_replay_timestamp() AS lag;"
+      }
+    ],
+    "related": [
+      "pg.database",
+      "replicates-to",
+      "pg.view"
+    ],
+    "references": [
+      {
+        "title": "PostgreSQL docs — High availability, load balancing and replication",
+        "url": "https://www.postgresql.org/docs/current/high-availability.html"
+      }
+    ],
+    "source": "content/docs/pg.replica.md"
+  },
+  {
+    "id": "pg.schema",
+    "kind": "concept",
+    "title": "Schema (ownership boundary)",
+    "summary": "A namespace of tables inside a database. In this tool it is also the ownership boundary — one service owns a schema and runs its migrations.",
+    "level": "beginner",
+    "tracks": [
+      "data-and-models",
+      "auth"
+    ],
+    "tags": [
+      "postgres",
+      "migrations",
+      "ownership",
+      "rls"
+    ],
+    "explain": {
+      "beginner": "A **schema** is a folder for tables inside a database: `orders.orders`,\n`orders.order_items`, `catalog.products`. The default schema is called `public`.\n\nIn this tool a schema also marks **ownership**: one service owns it. Only that service\nchanges its tables (**migrates**) and writes to them; others ask that service.",
+      "intermediate": "- **Migrations** are versioned scripts (Prisma Migrate, Drizzle Kit, node-pg-migrate) that\n  create and change tables. Exactly one owner runs them.\n- Other services that need the data call the owner's API, or read a published view or\n  replica.\n- Database roles per service (`GRANT USAGE ON SCHEMA orders TO orders_app`) enforce the\n  boundary.\n- **Row Level Security** (`rls`) restricts rows per user or tenant inside the database.",
+      "senior": "- Shared tables are the hardest coupling to undo; this tool flags them (RNP-001) and\n  migrations by several owners (RNP-002).\n- Expand-and-contract migrations (add, backfill, switch, remove) keep deploys zero\n  downtime.\n- With RLS, set the tenant or user per transaction (`SET LOCAL app.user_id`) and test the\n  policies like code."
+    },
+    "mistakes": [
+      "Several services running migrations on the same schema.",
+      "Everything in `public` with no ownership.",
+      "RLS enabled without tests, so a policy silently allows everything."
+    ],
+    "examples": [
+      {
+        "title": "One schema per owner, with a role",
+        "language": "sql",
+        "code": "CREATE SCHEMA orders AUTHORIZATION orders_app;\nREVOKE ALL ON SCHEMA orders FROM PUBLIC;\nGRANT USAGE ON SCHEMA orders TO reporting_reader;"
+      }
+    ],
+    "related": [
+      "pg.table",
+      "pg.database",
+      "migrates",
+      "node.service",
+      "topic.models"
+    ],
+    "references": [
+      {
+        "title": "PostgreSQL docs — Schemas",
+        "url": "https://www.postgresql.org/docs/current/ddl-schemas.html"
+      },
+      {
+        "title": "PostgreSQL docs — Row security policies",
+        "url": "https://www.postgresql.org/docs/current/ddl-rowsecurity.html"
+      }
+    ],
+    "source": "content/docs/pg.schema.md"
   },
   {
     "id": "pg.table",
@@ -852,6 +3370,825 @@ export const DOCS: LearningDoc[] = [
     "source": "content/docs/pg.table.md"
   },
   {
+    "id": "pg.trigger",
+    "kind": "concept",
+    "title": "Trigger",
+    "summary": "Runs a function automatically when rows in a table change — keep updated_at fresh, write an audit log, maintain a counter.",
+    "level": "intermediate",
+    "tracks": [
+      "data-and-models"
+    ],
+    "tags": [
+      "postgres",
+      "plpgsql",
+      "audit"
+    ],
+    "explain": {
+      "beginner": "A **trigger** tells PostgreSQL: \"whenever a row in this table is inserted, updated or\ndeleted, run this function\". It runs inside the same transaction, every time, no matter\nwhich app made the change.\n\nGood uses: setting `updated_at`, writing an audit log row, keeping a denormalized counter\ncorrect.",
+      "intermediate": "- `BEFORE` triggers can change the row (`NEW.updated_at = now()`); `AFTER` triggers see\n  the final row and can write elsewhere.\n- Row-level triggers run per row; statement-level once per statement.\n- Triggers are invisible from the application code; document them (this tool draws\n  `fires on` and `invokes`).",
+      "senior": "- Business logic in triggers splits rules between SQL and the service (RNP-027). Decide\n  deliberately and record the decision.\n- Triggers add work to every write and can cause lock contention (hot counters).\n- Prefer constraints for validation; triggers for derived data and auditing."
+    },
+    "mistakes": [
+      "Hidden business rules nobody knows about.",
+      "Triggers that call other triggers in long chains."
+    ],
+    "examples": [
+      {
+        "title": "Keep updated_at current",
+        "language": "sql",
+        "code": "CREATE FUNCTION set_updated_at() RETURNS trigger LANGUAGE plpgsql AS $$\nBEGIN\n  NEW.updated_at := now();\n  RETURN NEW;\nEND $$;\n\nCREATE TRIGGER orders_updated_at\nBEFORE UPDATE ON orders\nFOR EACH ROW EXECUTE FUNCTION set_updated_at();"
+      }
+    ],
+    "related": [
+      "pg.function",
+      "pg.table",
+      "fires-on",
+      "invokes"
+    ],
+    "references": [
+      {
+        "title": "PostgreSQL docs — CREATE TRIGGER",
+        "url": "https://www.postgresql.org/docs/current/sql-createtrigger.html"
+      },
+      {
+        "title": "PostgreSQL docs — Trigger functions in PL/pgSQL",
+        "url": "https://www.postgresql.org/docs/current/plpgsql-trigger.html"
+      }
+    ],
+    "source": "content/docs/pg.trigger.md"
+  },
+  {
+    "id": "pg.view",
+    "kind": "concept",
+    "title": "View / materialized view",
+    "summary": "A saved query that you read like a table. A materialized view stores its result — fast reads for reports, refreshed on a schedule.",
+    "level": "intermediate",
+    "tracks": [
+      "data-and-models"
+    ],
+    "tags": [
+      "postgres",
+      "reporting",
+      "read-model"
+    ],
+    "explain": {
+      "beginner": "A **view** is a named query: `daily_sales` can join orders and order lines and group them\nby day. Code reads it like a table, without repeating the query.\n\nA **materialized view** stores the result, so reading it is fast; it must be refreshed\nwhen the data changes (for example every hour).",
+      "intermediate": "- Views hide columns (a `public_products` view without the purchase price) and give other\n  teams a stable read interface over your tables.\n- `REFRESH MATERIALIZED VIEW CONCURRENTLY` keeps it readable during refresh (needs a\n  unique index).\n- Views are read-only by default; this tool refuses `writes` to a view.",
+      "senior": "- A materialized view is a simple read model (CQRS-lite): accept staleness in exchange\n  for cheap reads.\n- Published views are a way to share data across service boundaries without sharing\n  tables; version them like an API."
+    },
+    "mistakes": [
+      "Expecting a materialized view to be up to date without refreshing it.",
+      "Writing to views instead of their tables."
+    ],
+    "examples": [
+      {
+        "title": "A materialized view for a dashboard",
+        "language": "sql",
+        "code": "CREATE MATERIALIZED VIEW daily_sales AS\nSELECT date_trunc('day', created_at) AS day, sum(total) AS revenue, count(*) AS orders\nFROM orders GROUP BY 1;\n\nCREATE UNIQUE INDEX ON daily_sales (day);\nREFRESH MATERIALIZED VIEW CONCURRENTLY daily_sales;"
+      }
+    ],
+    "related": [
+      "pg.table",
+      "pg.replica",
+      "reads"
+    ],
+    "references": [
+      {
+        "title": "PostgreSQL docs — Views",
+        "url": "https://www.postgresql.org/docs/current/tutorial-views.html"
+      },
+      {
+        "title": "PostgreSQL docs — Materialized views",
+        "url": "https://www.postgresql.org/docs/current/rules-materializedviews.html"
+      }
+    ],
+    "source": "content/docs/pg.view.md"
+  },
+  {
+    "id": "processes",
+    "kind": "relation",
+    "title": "processes",
+    "summary": "A worker (or service) takes jobs from a Postgres job queue and runs them, with retries.",
+    "level": "intermediate",
+    "tracks": [
+      "concurrency-and-parallelism"
+    ],
+    "tags": [
+      "jobs",
+      "workers"
+    ],
+    "explain": {
+      "beginner": "`Worker processes jobs` means the worker takes jobs from the queue one by one (or several\nat a time) and runs them.",
+      "intermediate": "- Set concurrency, retries and backoff; route failed jobs to a dead-letter queue.\n- Jobs must be idempotent: a crash after the work but before \"done\" runs them again.",
+      "senior": "- Several workers share the queue safely with `FOR UPDATE SKIP LOCKED`."
+    },
+    "mistakes": [
+      "Non-idempotent job handlers."
+    ],
+    "examples": [
+      {
+        "title": "Process with a concurrency limit",
+        "language": "ts",
+        "code": "await boss.work('resize-image', { batchSize: 4 }, async (jobs) => {\n  await Promise.all(jobs.map((j) => resize(j.data.imageId)));\n});"
+      }
+    ],
+    "related": [
+      "pg.job-queue",
+      "node.worker",
+      "enqueues",
+      "consumes"
+    ],
+    "references": [
+      {
+        "title": "pg-boss — work()",
+        "url": "https://timgit.github.io/pg-boss/#/./api/jobs?id=work"
+      }
+    ],
+    "source": "content/docs/processes.md"
+  },
+  {
+    "id": "publishes",
+    "kind": "relation",
+    "title": "publishes",
+    "summary": "Sends messages or events to a queue, topic or bus and does not wait for anyone to process them.",
+    "level": "intermediate",
+    "tracks": [
+      "concurrency-and-parallelism",
+      "patterns"
+    ],
+    "tags": [
+      "messaging",
+      "async",
+      "events"
+    ],
+    "explain": {
+      "beginner": "`A publishes to Q` means A drops a message into Q and carries on. Whoever consumes Q will\nhandle it later. A does not wait, and does not know who the consumers are.",
+      "intermediate": "- For a Postgres job queue use the more specific `enqueues`; for LISTEN/NOTIFY use\n  `notifies`.\n- Messages need a stable, versioned shape.",
+      "senior": "- Publishing and saving data must be atomic: use a transactional outbox, or a broker that\n  shares your database transaction (a Postgres queue). Otherwise RNP-004 (dual write)\n  applies."
+    },
+    "mistakes": [
+      "Publishing before the transaction commits, or after it without an outbox."
+    ],
+    "examples": [
+      {
+        "title": "Outbox row instead of publishing directly",
+        "language": "sql",
+        "code": "INSERT INTO outbox (topic, payload) VALUES ('order.placed', '{\"orderId\": \"42\"}');"
+      }
+    ],
+    "related": [
+      "consumes",
+      "gen.other-broker",
+      "node.event",
+      "enqueues"
+    ],
+    "references": [
+      {
+        "title": "Enterprise Integration Patterns — Publish-subscribe channel",
+        "url": "https://www.enterpriseintegrationpatterns.com/patterns/messaging/PublishSubscribeChannel.html"
+      }
+    ],
+    "source": "content/docs/publishes.md"
+  },
+  {
+    "id": "react.action",
+    "kind": "concept",
+    "title": "Action / thunk",
+    "summary": "A named change to client state. UI code dispatches it; the store's reducer applies it. A thunk can call the API first, then dispatch the result.",
+    "level": "intermediate",
+    "tracks": [
+      "state-management"
+    ],
+    "tags": [
+      "redux",
+      "thunk",
+      "createAsyncThunk",
+      "zustand"
+    ],
+    "explain": {
+      "beginner": "An **action** describes something that should change in the store: \"add this item to the\ncart\", \"set the filter to shoes\". UI code **dispatches** the action; the store **updates**\nits state.\n\nBecause every change goes through a named action, you can see in the developer tools what\nhappened and in which order.\n\nA **thunk** is an action that does work first, for example calls the API, and then\ndispatches the result.",
+      "intermediate": "- In Redux Toolkit, `createSlice` generates actions from reducers; `createAsyncThunk`\n  generates `pending`, `fulfilled` and `rejected` actions around an async call.\n- In Zustand, actions are the functions on the store (`add`, `setFilter`).\n- Name actions after events (`itemAdded`) rather than setters (`setItems`).\n- Keep reducers pure: no API calls, no random values, no dates; do those in thunks.",
+      "senior": "- A thunk that loads server data into a client store re-implements caching, loading and\n  error state by hand. With a server-state cache in the app, prefer a query (RNP-012).\n  Thunks remain right for workflows: multi-step checkout, optimistic UI coordination,\n  analytics.\n- Make thunks cancel or ignore stale responses (request IDs, `AbortController`) so a slow\n  old response cannot overwrite a newer one.\n- Actions are a log: in big apps, listeners/middleware can react to them (sync to\n  `localStorage`, analytics) without coupling components."
+    },
+    "mistakes": [
+      "API calls inside reducers.",
+      "Thunks that store server lists in Redux next to a TanStack Query cache.",
+      "Ignoring the `rejected` case, so errors leave a spinner forever."
+    ],
+    "examples": [
+      {
+        "title": "A thunk that loads orders and the reducer cases for it",
+        "language": "ts",
+        "code": "import { createAsyncThunk, createSlice } from '@reduxjs/toolkit';\nimport { api } from '../api';\n\nexport const fetchOrders = createAsyncThunk('orders/fetch', () => api.get('/orders'));\n\nconst orders = createSlice({\n  name: 'orders',\n  initialState: { list: [] as unknown[], status: 'idle' as 'idle' | 'loading' | 'failed' },\n  reducers: {},\n  extraReducers: (b) => {\n    b.addCase(fetchOrders.pending, (s) => void (s.status = 'loading'));\n    b.addCase(fetchOrders.fulfilled, (s, a) => {\n      s.status = 'idle';\n      s.list = a.payload as unknown[];\n    });\n    b.addCase(fetchOrders.rejected, (s) => void (s.status = 'failed'));\n  },\n});\n\nexport default orders.reducer;"
+      }
+    ],
+    "related": [
+      "react.client-store",
+      "react.effect",
+      "react.api-client",
+      "dispatches",
+      "updates"
+    ],
+    "references": [
+      {
+        "title": "Redux — Actions and reducers",
+        "url": "https://redux.js.org/tutorials/fundamentals/part-3-state-actions-reducers"
+      },
+      {
+        "title": "Redux Toolkit — createAsyncThunk",
+        "url": "https://redux-toolkit.js.org/api/createAsyncThunk"
+      }
+    ],
+    "source": "content/docs/react.action.md"
+  },
+  {
+    "id": "react.api-client",
+    "kind": "concept",
+    "title": "API client",
+    "summary": "The one place in the frontend that talks HTTP to the backend — base URL, auth, error handling, and request and response types.",
+    "level": "beginner",
+    "tracks": [
+      "api-design",
+      "state-management"
+    ],
+    "tags": [
+      "fetch",
+      "axios",
+      "openapi",
+      "trpc"
+    ],
+    "explain": {
+      "beginner": "Instead of writing `fetch('https://…')` all over the app, put the details in one\n**API client**: the base URL, the headers, what to do on errors, and the shape of each\nrequest and response.\n\nThe rest of the app calls `api.getOrders()` or `api.post('/orders', body)`; if the\nbackend changes, you change one file.",
+      "intermediate": "- Turn HTTP errors into typed errors (status, problem details), so the UI can show a good\n  message and retry where it makes sense.\n- Send cookies (`credentials: 'include'`) or tokens in one place.\n- Generate the client from the API contract (OpenAPI, tRPC, GraphQL codegen), so types\n  match the server.\n- The server-state cache, hooks and thunks use the client; components do not call it\n  directly.",
+      "senior": "- Add timeouts (`AbortSignal.timeout`) and decide which calls may retry: only idempotent\n  ones, or with an idempotency key.\n- Validate responses at the boundary (zod) when the backend is not under your control.\n- Correlate requests with a request ID header for tracing."
+    },
+    "mistakes": [
+      "`fetch` calls scattered through components.",
+      "Ignoring non-2xx responses (`fetch` does not throw on 404 or 500).",
+      "Retrying POST requests without an idempotency key."
+    ],
+    "examples": [
+      {
+        "title": "A small typed fetch wrapper",
+        "language": "ts",
+        "code": "export class ApiError extends Error {\n  constructor(\n    readonly status: number,\n    message: string,\n  ) {\n    super(message);\n  }\n}\n\nexport async function api<T>(path: string, init?: RequestInit): Promise<T> {\n  const res = await fetch(`/api${path}`, {\n    credentials: 'include',\n    headers: { 'Content-Type': 'application/json' },\n    signal: AbortSignal.timeout(10_000),\n    ...init,\n  });\n  if (!res.ok) throw new ApiError(res.status, await res.text());\n  return (await res.json()) as T;\n}"
+      }
+    ],
+    "related": [
+      "node.contract",
+      "node.dto",
+      "react.server-state",
+      "fetches-via",
+      "calls"
+    ],
+    "references": [
+      {
+        "title": "MDN — Using the Fetch API",
+        "url": "https://developer.mozilla.org/en-US/docs/Web/API/Fetch_API/Using_Fetch"
+      },
+      {
+        "title": "openapi-typescript — Introduction",
+        "url": "https://openapi-ts.dev/introduction"
+      }
+    ],
+    "source": "content/docs/react.api-client.md"
+  },
+  {
+    "id": "react.app",
+    "kind": "concept",
+    "title": "React app (single-page app)",
+    "summary": "The part of the system that runs in the browser. It draws the screens and sends requests to the backend; it never holds secrets.",
+    "level": "beginner",
+    "tracks": [
+      "foundations"
+    ],
+    "tags": [
+      "react",
+      "vite",
+      "spa",
+      "frontend"
+    ],
+    "explain": {
+      "beginner": "A **React app** is the code that runs in the user's browser. The browser downloads it\nonce (HTML, JavaScript, CSS); after that the app draws every screen itself and only asks\nthe server for **data**.\n\n- It shows screens, reacts to clicks and typing, and checks forms for obvious mistakes.\n- It sends **requests** to the backend (`GET /api/products`, `POST /api/orders`).\n- It never talks to the database, and it never holds secrets: anyone can read its code\n  with the browser's developer tools.\n\nIn this tool, a React app is a top-level shape. Routes, features, stores and the API\nclient go **inside** it.",
+      "intermediate": "- **Build:** Vite bundles the code into static files. Any static host (a CDN, or the\n  Node service with the `serves` relation) can deliver them.\n- **Routing:** a router (React Router, TanStack Router) maps URLs to pages without a full\n  page load.\n- **State:** server data in a server-state cache (TanStack Query), shared UI state in a\n  small store, the rest in components.\n- **Config:** `import.meta.env.VITE_*` values are baked into the bundle at build time.\n  They are public.\n- **Validation in the browser is for comfort only.** The API must validate everything\n  again.",
+      "senior": "- A SPA moves rendering cost to the client: watch bundle size (code-split routes with\n  `lazy`), first paint, and slow devices.\n- Auth in a SPA: prefer an HttpOnly session cookie, or a backend-for-frontend that keeps\n  tokens server-side. Tokens in `localStorage` are readable by any XSS.\n- Treat the app as an untrusted client of your API. Every rule that matters (prices,\n  permissions, stock) is enforced on the server.\n- Deploy the static build with long cache lifetimes and hashed file names; keep\n  `index.html` uncached so new releases load.\n- Server-side rendering (Next.js, RSC) is a different deployment model and outside this\n  profile."
+    },
+    "analogy": "The React app is the shop window and the counter: it shows things and takes orders, but\nthe stockroom and the cash register are in the back (the API and the database).",
+    "whenToUse": [
+      "Interactive applications: dashboards, shops, editors, admin tools.",
+      "When the same API also serves mobile apps or partners."
+    ],
+    "whenNotToUse": [
+      "Mostly static content that must load instantly for search engines (consider static generation or SSR)."
+    ],
+    "mistakes": [
+      "Putting API keys or secrets in the frontend code or `VITE_` variables.",
+      "Trusting browser validation instead of validating again in the API.",
+      "Calling five backend services directly from the browser instead of one API or a BFF.",
+      "Storing auth tokens in `localStorage`."
+    ],
+    "examples": [
+      {
+        "title": "The entry point of a Vite + React app",
+        "language": "tsx",
+        "code": "import { StrictMode } from 'react';\nimport { createRoot } from 'react-dom/client';\nimport { App } from './App';\n\ncreateRoot(document.getElementById('root')!).render(\n  <StrictMode>\n    <App />\n  </StrictMode>,\n);"
+      }
+    ],
+    "related": [
+      "react.route",
+      "react.api-client",
+      "node.service",
+      "topic.authentication",
+      "serves"
+    ],
+    "references": [
+      {
+        "title": "React docs — Quick start",
+        "url": "https://react.dev/learn"
+      },
+      {
+        "title": "Vite — Getting started",
+        "url": "https://vite.dev/guide/"
+      },
+      {
+        "title": "MDN — Single-page application (SPA)",
+        "url": "https://developer.mozilla.org/en-US/docs/Glossary/SPA"
+      }
+    ],
+    "quiz": [
+      {
+        "question": "Where may a React app keep the secret key for the payment provider?",
+        "options": [
+          "In an environment variable read by Vite",
+          "In localStorage",
+          "Nowhere — only the backend may hold it",
+          "In a hidden form field"
+        ],
+        "answer": 2,
+        "explanation": "Everything shipped to the browser can be read with the developer tools, including Vite environment variables. Secrets stay on the server."
+      }
+    ],
+    "source": "content/docs/react.app.md"
+  },
+  {
+    "id": "react.client-store",
+    "kind": "concept",
+    "title": "Client state store (Redux, Zustand, Context)",
+    "summary": "Holds state that many components share in the browser — cart, filters, signed-in user flags. Components read it; actions change it.",
+    "level": "beginner",
+    "tracks": [
+      "state-management"
+    ],
+    "tags": [
+      "redux",
+      "redux-toolkit",
+      "zustand",
+      "context",
+      "jotai"
+    ],
+    "explain": {
+      "beginner": "Some state is needed in many places at once. The cart count in the header, the cart page\nand the checkout must agree. A **store** keeps that state in one place:\n\n- components **read** it (and re-render when it changes),\n- **actions** change it (`addToCart(item)`), and nothing else does.\n\nCommon libraries: **Redux Toolkit** (actions and reducers), **Zustand** (a small store\nwith functions), React **Context** (for values that rarely change, like the theme).",
+      "intermediate": "- Keep the store for state the **browser owns**: UI flags, drafts, selections, the cart\n  before checkout, filters. Data from the API belongs in a server-state cache.\n- Read with **selectors** (`useStore((s) => s.items.length)`), so a component re-renders\n  only when its slice changes.\n- Derive values (totals) instead of storing them.\n- `persist` to `localStorage` is fine for preferences and drafts, never for tokens.",
+      "senior": "- A global store that mirrors server tables is a cache you now maintain by hand:\n  loading flags, errors, staleness, invalidation. That is what RNP-012 flags.\n- Context re-renders every consumer on each change; split contexts or use a store with\n  selectors for frequently changing values.\n- Model actions as events (\"itemAdded\"), not setters, when several parts of the state\n  react to them; it keeps reducers testable and the history readable in devtools."
+    },
+    "analogy": "A whiteboard in the office: everyone looks at the same board, and only people with a\nmarker (actions) may change it.",
+    "whenToUse": [
+      "State shared by distant components: cart, filters, wizard steps, UI preferences."
+    ],
+    "whenNotToUse": [
+      "Data from the server (use a server-state cache).",
+      "State one component needs (use `useState`)."
+    ],
+    "mistakes": [
+      "Fetching in an effect and copying the result into the store.",
+      "One giant store for everything.",
+      "Storing derived values that drift out of sync.",
+      "Persisting auth tokens to `localStorage`."
+    ],
+    "examples": [
+      {
+        "title": "A Redux Toolkit slice: the store and its actions",
+        "language": "ts",
+        "code": "import { createSlice, type PayloadAction } from '@reduxjs/toolkit';\n\ntype Item = { id: string; price: number; quantity: number };\n\nconst cart = createSlice({\n  name: 'cart',\n  initialState: { items: [] as Item[] },\n  reducers: {\n    itemAdded(state, action: PayloadAction<Item>) {\n      state.items.push(action.payload);\n    },\n    itemRemoved(state, action: PayloadAction<string>) {\n      state.items = state.items.filter((i) => i.id !== action.payload);\n    },\n  },\n});\n\nexport const { itemAdded, itemRemoved } = cart.actions;\nexport default cart.reducer;"
+      },
+      {
+        "title": "The same with Zustand",
+        "language": "ts",
+        "code": "import { create } from 'zustand';\n\ntype Cart = { items: { id: string }[]; add: (id: string) => void };\n\nexport const useCartStore = create<Cart>((set) => ({\n  items: [],\n  add: (id) => set((s) => ({ items: [...s.items, { id }] })),\n}));"
+      }
+    ],
+    "related": [
+      "react.action",
+      "react.server-state",
+      "react.hook",
+      "uses-state",
+      "updates",
+      "dispatches"
+    ],
+    "references": [
+      {
+        "title": "Redux — Redux essentials, part 1",
+        "url": "https://redux.js.org/tutorials/essentials/part-1-overview-concepts"
+      },
+      {
+        "title": "Zustand — Introduction",
+        "url": "https://zustand.docs.pmnd.rs/getting-started/introduction"
+      },
+      {
+        "title": "React docs — Choosing the state structure",
+        "url": "https://react.dev/learn/choosing-the-state-structure"
+      }
+    ],
+    "quiz": [
+      {
+        "question": "Which data belongs in a client store rather than a server-state cache?",
+        "options": [
+          "The list of products from the API",
+          "The orders of the signed-in user",
+          "Whether the cart drawer is open and the filters the user picked",
+          "The current stock of a product"
+        ],
+        "answer": 2,
+        "explanation": "UI state that exists only in the browser belongs in a client store. Data the server owns belongs in a server-state cache."
+      }
+    ],
+    "source": "content/docs/react.client-store.md"
+  },
+  {
+    "id": "react.component",
+    "kind": "concept",
+    "title": "Shared component",
+    "summary": "A reusable piece of UI — a product card, a date picker — used by several pages. It gets data through props and stays free of page-specific logic.",
+    "level": "beginner",
+    "tracks": [
+      "foundations"
+    ],
+    "tags": [
+      "react",
+      "components",
+      "props"
+    ],
+    "explain": {
+      "beginner": "A **component** is a function that returns a piece of UI. A **shared component** is one\nthat several pages use: a `ProductCard` on the home page, the search page and the\nrecommendations.\n\nIt receives what it needs as **props** (`<ProductCard product={p} />`) instead of\nfetching it or reading the URL itself. That is what makes it reusable.",
+      "intermediate": "- Keep shared components presentational: props in, events out (`onAddToCart`).\n- Components **render** other components; complex logic moves into custom hooks.\n- Co-locate a component's styles and tests with it.\n- A component that knows about one specific page is not shared; keep it in that page's\n  feature.",
+      "senior": "- Stable props and memoization matter only where profiling shows re-render cost; start\n  simple.\n- Accessibility is part of the component contract: labels, keyboard support, focus.\n- When several apps share components, move them into a UI kit package with its own\n  versioning."
+    },
+    "mistakes": [
+      "Shared components that fetch data or read global stores, so they only work in one place.",
+      "Copy-pasting a component instead of adding a prop.",
+      "Components that do everything (giant props objects with many boolean flags)."
+    ],
+    "examples": [
+      {
+        "title": "A presentational component with props and an event",
+        "language": "tsx",
+        "code": "type Props = { name: string; price: number; onAdd: () => void };\n\nexport function ProductCard({ name, price, onAdd }: Props) {\n  return (\n    <article>\n      <h3>{name}</h3>\n      <p>{price.toFixed(2)} €</p>\n      <button onClick={onAdd}>Add to cart</button>\n    </article>\n  );\n}"
+      }
+    ],
+    "related": [
+      "react.design-system",
+      "react.route",
+      "renders",
+      "react.hook"
+    ],
+    "references": [
+      {
+        "title": "React docs — Your first component",
+        "url": "https://react.dev/learn/your-first-component"
+      },
+      {
+        "title": "React docs — Passing props to a component",
+        "url": "https://react.dev/learn/passing-props-to-a-component"
+      }
+    ],
+    "quiz": [
+      {
+        "question": "A ProductCard is used on three pages. Where should it get the product it shows?",
+        "options": [
+          "It fetches the product itself by reading the URL",
+          "From props passed by the page or feature",
+          "From a global variable",
+          "From localStorage"
+        ],
+        "answer": 1,
+        "explanation": "Props keep the component reusable and easy to test; the page decides which data it shows."
+      }
+    ],
+    "source": "content/docs/react.component.md"
+  },
+  {
+    "id": "react.design-system",
+    "kind": "concept",
+    "title": "UI kit / design system",
+    "summary": "A shared library of components and design rules (buttons, inputs, dialogs, colors, spacing) so every screen looks and behaves the same.",
+    "level": "intermediate",
+    "tracks": [
+      "foundations"
+    ],
+    "tags": [
+      "design-system",
+      "ui-kit",
+      "shadcn",
+      "storybook"
+    ],
+    "explain": {
+      "beginner": "A **design system** is a box of ready-made parts — buttons, inputs, dialogs, tables —\nplus rules for colors, spacing and type. Every screen uses the same parts, so the app\nlooks consistent and new screens are faster to build.\n\nIt is often its own package (`@shop/ui`) that features depend on.",
+      "intermediate": "- Build on accessible primitives (Radix, React Aria) instead of hand-rolling dialogs and\n  menus.\n- Design tokens (CSS variables) for colors and spacing make themes and dark mode cheap.\n- Document components in Storybook with their states (loading, error, disabled).",
+      "senior": "- Version the kit and release it like an API; breaking changes need migration notes.\n- Keep business logic out: the kit knows \"Button\", not \"BuyButton\".\n- Measure adoption; a kit nobody uses is a cost, not an asset."
+    },
+    "mistakes": [
+      "Putting feature logic into kit components.",
+      "Forking a component instead of extending it with a variant."
+    ],
+    "examples": [
+      {
+        "title": "A themed button using design tokens",
+        "language": "tsx",
+        "code": "export function Button(props: React.ButtonHTMLAttributes<HTMLButtonElement>) {\n  return (\n    <button\n      {...props}\n      style={{ background: 'var(--color-accent)', padding: 'var(--space-2) var(--space-3)' }}\n    />\n  );\n}"
+      }
+    ],
+    "related": [
+      "react.component",
+      "react.feature",
+      "depends-on"
+    ],
+    "references": [
+      {
+        "title": "shadcn/ui — Introduction",
+        "url": "https://ui.shadcn.com/docs"
+      },
+      {
+        "title": "Storybook — Why Storybook",
+        "url": "https://storybook.js.org/docs/get-started/why-storybook"
+      }
+    ],
+    "source": "content/docs/react.design-system.md"
+  },
+  {
+    "id": "react.effect",
+    "kind": "concept",
+    "title": "Effect (useEffect)",
+    "summary": "Code that runs after React renders, to sync with something outside React — a subscription, a timer, the document title, or dispatching an action when an ID changes.",
+    "level": "intermediate",
+    "tracks": [
+      "state-management"
+    ],
+    "tags": [
+      "useEffect",
+      "side-effects",
+      "lifecycle"
+    ],
+    "explain": {
+      "beginner": "Rendering should only compute what to show. Some things must happen **after** the screen\nis drawn: start a timer, open a WebSocket, update the page title, or dispatch an action\nthat loads an order when the page opens. That is what an **effect** (`useEffect`) is for.\n\nYou give the effect a list of **dependencies**: it runs again when one of them changes\n(`[orderId]`), and only once when the list is empty.",
+      "intermediate": "- Return a **cleanup** function to stop what the effect started (close the socket, clear\n  the timer). React calls it before the next run and on unmount.\n- In development, React's Strict Mode runs effects twice on purpose to find missing\n  cleanups.\n- Many effects are not needed: derived values are computed during render; reactions to a\n  click belong in the click handler.\n- Fetching in an effect works, but you must handle loading, errors, races and caching\n  yourself; a server-state cache does this.",
+      "senior": "- Race conditions: if `orderId` changes quickly, an older response can arrive last. Use an\n  `ignore` flag or `AbortController` in the cleanup.\n- Effects that set state which triggers the same effect cause render loops; check the\n  dependency list and move logic to events where possible.\n- An effect that dispatches a thunk on mount is a common Redux pattern; with a\n  server-state cache, a query hook replaces both."
+    },
+    "mistakes": [
+      "Missing cleanup for subscriptions and timers (memory leaks, duplicate listeners).",
+      "Missing dependencies, so the effect uses stale values.",
+      "Using an effect to compute derived data.",
+      "Fetching without handling a response that arrives after the user moved on."
+    ],
+    "examples": [
+      {
+        "title": "Load an order when the page opens, and ignore stale responses",
+        "language": "tsx",
+        "code": "import { useEffect } from 'react';\nimport { useDispatch } from 'react-redux';\nimport { fetchOrder } from './ordersSlice';\n\nexport function OrderPage({ orderId }: { orderId: string }) {\n  const dispatch = useDispatch();\n  useEffect(() => {\n    const request = dispatch(fetchOrder(orderId));\n    return () => request.abort(); // a newer orderId cancels the old request\n  }, [dispatch, orderId]);\n  return null;\n}"
+      }
+    ],
+    "related": [
+      "react.action",
+      "react.hook",
+      "react.server-state",
+      "dispatches",
+      "fetches-via"
+    ],
+    "references": [
+      {
+        "title": "React docs — Synchronizing with effects",
+        "url": "https://react.dev/learn/synchronizing-with-effects"
+      },
+      {
+        "title": "React docs — You might not need an effect",
+        "url": "https://react.dev/learn/you-might-not-need-an-effect"
+      }
+    ],
+    "quiz": [
+      {
+        "question": "An effect opens a WebSocket for live prices. What must it also do?",
+        "options": [
+          "Nothing — React closes it",
+          "Return a cleanup function that closes the socket",
+          "Store the socket in localStorage",
+          "Run on every render"
+        ],
+        "answer": 1,
+        "explanation": "The cleanup runs when the component unmounts or the dependencies change, so the old connection is closed and no updates arrive for a page that is gone."
+      }
+    ],
+    "source": "content/docs/react.effect.md"
+  },
+  {
+    "id": "react.feature",
+    "kind": "concept",
+    "title": "Feature module (frontend)",
+    "summary": "A folder that holds everything for one feature — components, hooks, state and API calls — with a small public entry point.",
+    "level": "intermediate",
+    "tracks": [
+      "foundations",
+      "patterns"
+    ],
+    "tags": [
+      "feature-sliced-design",
+      "folders",
+      "modules"
+    ],
+    "explain": {
+      "beginner": "As an app grows, putting all components in one `components/` folder and all hooks in one\n`hooks/` folder makes it hard to see what belongs together. A **feature module** groups\ncode by **what it does for the user**: `features/cart`, `features/checkout`,\n`features/search`.\n\nInside a feature you find its components, hooks, state and API calls. Other code uses the\nfeature only through its `index.ts`.",
+      "intermediate": "- **Public API:** export only what pages need (`CartButton`, `useCart`); keep the rest\n  private. A lint rule can block deep imports like `features/cart/internal/x`.\n- **Features do not import each other.** If two features need the same thing, move it\n  down to a shared layer (an \"entity\" in Feature-Sliced Design) or let the page connect\n  them through props.\n- Pages (routes) compose features.",
+      "senior": "- The value is in the **dependency direction**, not in folder names: pages → features →\n  entities → shared. Enforce it with `eslint-plugin-boundaries` or Steiger; this tool's\n  FSD rules check the model.\n- A feature is a unit of ownership and deletion: removing a feature should mean deleting\n  one folder and one route entry.\n- Server data stays in the server-state cache, keyed by entity, not copied into feature\n  stores."
+    },
+    "whenToUse": [
+      "Apps with more than a handful of screens or more than one developer."
+    ],
+    "mistakes": [
+      "Feature A importing from feature B's internals.",
+      "A \"shared\" folder that slowly becomes the whole app.",
+      "Duplicating server data in each feature's store."
+    ],
+    "examples": [
+      {
+        "title": "A feature's public entry point",
+        "language": "ts",
+        "code": "// features/cart/index.ts — the only file other code imports\nexport { CartButton } from './ui/CartButton';\nexport { useCart } from './model/useCart';"
+      }
+    ],
+    "related": [
+      "pattern.feature-sliced",
+      "react.component",
+      "react.hook",
+      "react.client-store",
+      "depends-on"
+    ],
+    "references": [
+      {
+        "title": "Feature-Sliced Design — Overview",
+        "url": "https://feature-sliced.design/docs/get-started/overview"
+      },
+      {
+        "title": "Bulletproof React — Project structure",
+        "url": "https://github.com/alan2207/bulletproof-react/blob/master/docs/project-structure.md"
+      }
+    ],
+    "source": "content/docs/react.feature.md"
+  },
+  {
+    "id": "react.hook",
+    "kind": "concept",
+    "title": "Custom hook",
+    "summary": "A function whose name starts with \"use\" that packages reusable logic — loading data, reading a store, handling a form — so components stay small.",
+    "level": "beginner",
+    "tracks": [
+      "state-management"
+    ],
+    "tags": [
+      "react",
+      "hooks"
+    ],
+    "explain": {
+      "beginner": "A **custom hook** is a function named `useSomething` that other components call to get\nreusable behavior. `useCart()` can return the cart and functions to add or remove items;\n`useOrders()` can load the user's orders.\n\nThe component stays simple (\"show the cart\"), and the details (which store, which API\ncall) live in one place.",
+      "intermediate": "- Hooks can use other hooks: `useOrders` wraps `useQuery`, `useCart` wraps a Zustand or\n  Redux selector.\n- Name hooks after what they give, not how: `useCurrentUser`, not `useFetchMeEffect`.\n- Hooks must be called at the top level of a component, in the same order every render.\n- A hook is the natural boundary for tests: test the hook, keep components dumb.",
+      "senior": "- Hooks are the seam between UI and data. Keeping server access behind entity hooks\n  (`useProduct(id)`) makes it cheap to switch libraries or add caching.\n- Avoid hooks that return a new object every render if consumers memoize on it; return\n  stable callbacks (`useCallback`) where it matters.\n- A hook that only wraps `useEffect` + `useState` to fetch data usually wants to be a\n  query in a server-state cache instead."
+    },
+    "mistakes": [
+      "Calling hooks inside conditions or loops.",
+      "Hiding a full data-fetching and caching layer in a hand-written hook instead of using a server-state cache.",
+      "Hooks that do too many things; split them."
+    ],
+    "examples": [
+      {
+        "title": "A hook that hides where the cart lives",
+        "language": "ts",
+        "code": "import { useCartStore } from './cartStore';\n\nexport function useCart() {\n  const items = useCartStore((s) => s.items);\n  const add = useCartStore((s) => s.add);\n  const total = items.reduce((sum, i) => sum + i.price * i.quantity, 0);\n  return { items, add, total };\n}"
+      }
+    ],
+    "related": [
+      "react.component",
+      "react.server-state",
+      "react.client-store",
+      "react.effect",
+      "uses-state"
+    ],
+    "references": [
+      {
+        "title": "React docs — Reusing logic with custom hooks",
+        "url": "https://react.dev/learn/reusing-logic-with-custom-hooks"
+      },
+      {
+        "title": "React docs — Rules of Hooks",
+        "url": "https://react.dev/reference/rules/rules-of-hooks"
+      }
+    ],
+    "source": "content/docs/react.hook.md"
+  },
+  {
+    "id": "react.layout",
+    "kind": "concept",
+    "title": "Layout route",
+    "summary": "A route that draws shared UI — header, menu, footer — around its child routes, so every page in an area looks the same.",
+    "level": "beginner",
+    "tracks": [
+      "foundations"
+    ],
+    "tags": [
+      "react-router",
+      "outlet",
+      "shell"
+    ],
+    "explain": {
+      "beginner": "Most apps have parts that stay the same while the content changes: the header, the side\nmenu, the footer. A **layout route** draws these once and leaves a hole (an \"outlet\")\nwhere the current page appears.\n\n`/account/profile`, `/account/orders` and `/account/settings` can share an account\nlayout with tabs; only the content under the tabs changes.",
+      "intermediate": "- Layouts nest: an app shell layout, then an account layout inside it.\n- A layout is a good place for things every child needs: a \"signed in?\" redirect,\n  breadcrumbs, a shared error boundary.\n- The layout stays mounted while the user moves between its children, so its state\n  (an open menu) is kept.",
+      "senior": "- Put error boundaries and suspense boundaries at layout level so one failing page does\n  not blank the whole app.\n- Avoid loading data in a layout that only one child needs; it delays every child.\n- Layout auth redirects are UX, not security: the API decides."
+    },
+    "mistakes": [
+      "Repeating the header in every page component.",
+      "Loading heavy data in a layout and slowing down all pages below it."
+    ],
+    "examples": [
+      {
+        "title": "An account layout with an outlet (React Router)",
+        "language": "tsx",
+        "code": "import { NavLink, Outlet } from 'react-router';\n\nexport function AccountLayout() {\n  return (\n    <div>\n      <nav>\n        <NavLink to=\"profile\">Profile</NavLink> <NavLink to=\"orders\">Orders</NavLink>\n      </nav>\n      <Outlet />\n    </div>\n  );\n}"
+      }
+    ],
+    "related": [
+      "react.route",
+      "react.component",
+      "renders"
+    ],
+    "references": [
+      {
+        "title": "React Router — Layout routes",
+        "url": "https://reactrouter.com/start/framework/routing#layout-routes"
+      }
+    ],
+    "source": "content/docs/react.layout.md"
+  },
+  {
+    "id": "react.route",
+    "kind": "concept",
+    "title": "Route / page",
+    "summary": "A screen reachable by URL. The router picks the page for the current address, so links, the back button and bookmarks work.",
+    "level": "beginner",
+    "tracks": [
+      "foundations",
+      "state-management"
+    ],
+    "tags": [
+      "react-router",
+      "tanstack-router",
+      "navigation"
+    ],
+    "explain": {
+      "beginner": "A **route** connects a URL to a page: `/products` shows the product list,\n`/products/42` shows one product, `/checkout` shows the checkout form.\n\nBecause every page has its own address, users can bookmark it, share it, and use the\nbrowser's back button. The router changes the page **without** reloading the whole app.\n\nA route usually **renders** components, **uses state** (data from the server or a store),\nand **navigates** to other routes.",
+      "intermediate": "- **Parameters:** `/orders/:id` gives the page the order ID; search parameters\n  (`?page=2&sort=price`) keep list state in the URL, so it survives a reload.\n- **Lazy routes** load their code only when visited, which keeps the first download small.\n- **Protected routes** redirect to sign-in when there is no session. This is only a\n  convenience: the API must still check every request.\n- Load data per route (a loader, or a query hook at the top of the page) and show\n  loading and error states.",
+      "senior": "- Put state that the user should be able to share or restore (filters, tabs, pagination)\n  in the URL; it is the cheapest persistence you have.\n- Route-level code splitting is the biggest bundle win in most SPAs.\n- Start data fetching as early as possible (route loaders, prefetch on hover) to avoid\n  request waterfalls: page loads, then component loads, then its data.\n- Keep route components thin: they compose features and pass IDs; business logic lives in\n  hooks, stores and the API."
+    },
+    "whenToUse": [
+      "Every screen a user can open directly or should be able to bookmark."
+    ],
+    "mistakes": [
+      "Keeping filters and pagination only in component state, so a reload loses them.",
+      "Treating a hidden route as security.",
+      "Fetching in a chain (page → child → grandchild) instead of in parallel."
+    ],
+    "examples": [
+      {
+        "title": "Routes with a parameter and lazy loading (React Router)",
+        "language": "tsx",
+        "code": "import { createBrowserRouter } from 'react-router';\n\nexport const router = createBrowserRouter([\n  { path: '/', lazy: () => import('./pages/Home') },\n  { path: '/products/:id', lazy: () => import('./pages/Product') },\n  { path: '/checkout', lazy: () => import('./pages/Checkout') },\n]);"
+      }
+    ],
+    "related": [
+      "react.layout",
+      "react.component",
+      "navigates",
+      "react.server-state",
+      "react.app"
+    ],
+    "references": [
+      {
+        "title": "React Router — Routing",
+        "url": "https://reactrouter.com/start/framework/routing"
+      },
+      {
+        "title": "TanStack Router — Overview",
+        "url": "https://tanstack.com/router/latest/docs/framework/react/overview"
+      }
+    ],
+    "source": "content/docs/react.route.md"
+  },
+  {
     "id": "react.server-state",
     "kind": "concept",
     "title": "State management — server state vs client state",
@@ -924,6 +4261,174 @@ export const DOCS: LearningDoc[] = [
       }
     ],
     "source": "content/docs/react.server-state.md"
+  },
+  {
+    "id": "reads",
+    "kind": "relation",
+    "title": "reads",
+    "summary": "Code reads data from a store. Set via (the data-access library) and, where it matters, the isolation level.",
+    "level": "beginner",
+    "tracks": [
+      "data-and-models"
+    ],
+    "tags": [
+      "sql",
+      "select",
+      "queries"
+    ],
+    "explain": {
+      "beginner": "`A reads B` means A loads data from the store B: the API reads the `orders` schema. Draw\nreads and writes as separate arrows; it makes clear who changes what and who only looks.",
+      "intermediate": "- `via` names the library (prisma, drizzle, kysely, pg).\n- Reading another service's tables couples you to its schema; prefer its API or a\n  published view.\n- Reads can go to a replica when slightly old data is fine.",
+      "senior": "- Read-then-write in a transaction needs a concurrency strategy, or another request can\n  change the row in between (lost update).\n- Isolation level on the arrow (`read-committed`, `repeatable-read`, `serializable`)\n  documents what the code relies on."
+    },
+    "mistakes": [
+      "N+1 queries.",
+      "Reading another service's tables directly."
+    ],
+    "examples": [
+      {
+        "title": "Load an order with its lines in one query (Prisma)",
+        "language": "ts",
+        "code": "const order = await prisma.order.findUnique({ where: { id }, include: { lines: true } });"
+      }
+    ],
+    "related": [
+      "writes",
+      "node.repository",
+      "pg.schema",
+      "topic.transactions-and-isolation"
+    ],
+    "references": [
+      {
+        "title": "PostgreSQL docs — Queries",
+        "url": "https://www.postgresql.org/docs/current/queries.html"
+      }
+    ],
+    "source": "content/docs/reads.md"
+  },
+  {
+    "id": "renders",
+    "kind": "relation",
+    "title": "renders",
+    "summary": "UI composition — a page or component renders another component. Only React code renders UI.",
+    "level": "beginner",
+    "tracks": [
+      "foundations"
+    ],
+    "tags": [
+      "react",
+      "components"
+    ],
+    "explain": {
+      "beginner": "`Page renders Component` means the page shows the component as part of its screen: the\nproduct page renders a `ProductCard` and an `AddToCartButton`.",
+      "intermediate": "- Draw `renders` for the components that matter to the design (shared ones, heavy ones),\n  not every `<div>`.\n- Data flows down through props; events flow up through callbacks.",
+      "senior": "- Deep render trees that pass props through many levels suggest a hook or context; wide\n  trees that re-render on every keystroke suggest splitting state."
+    },
+    "mistakes": [
+      "Backend shapes that \"render\" (this tool refuses it)."
+    ],
+    "examples": [
+      {
+        "title": "A page rendering components",
+        "language": "tsx",
+        "code": "export function ProductPage({ product }: { product: Product }) {\n  return <ProductCard {...product} onAdd={() => addToCart(product.id)} />;\n}"
+      }
+    ],
+    "related": [
+      "react.component",
+      "react.route",
+      "react.layout",
+      "navigates"
+    ],
+    "references": [
+      {
+        "title": "React docs — Describing the UI",
+        "url": "https://react.dev/learn/describing-the-ui"
+      }
+    ],
+    "source": "content/docs/renders.md"
+  },
+  {
+    "id": "replicates-to",
+    "kind": "relation",
+    "title": "replicates to",
+    "summary": "A database sends its changes to a replica — physical streaming or logical replication.",
+    "level": "senior",
+    "tracks": [
+      "data-and-models"
+    ],
+    "tags": [
+      "replication",
+      "replicas"
+    ],
+    "explain": {
+      "beginner": "`Database replicates to Replica` means every change on the primary is copied to the\nreplica, usually within milliseconds.",
+      "intermediate": "- Physical replication copies the whole server; logical replication copies chosen tables.\n- Replicas lag; read-your-writes needs the primary.",
+      "senior": "- Logical replication can feed analytics or search without dual writes."
+    },
+    "mistakes": [
+      "Treating replication as a backup."
+    ],
+    "examples": [
+      {
+        "title": "Create a publication for logical replication",
+        "language": "sql",
+        "code": "CREATE PUBLICATION orders_pub FOR TABLE orders, order_items;"
+      }
+    ],
+    "related": [
+      "pg.replica",
+      "pg.database"
+    ],
+    "references": [
+      {
+        "title": "PostgreSQL docs — Logical replication",
+        "url": "https://www.postgresql.org/docs/current/logical-replication.html"
+      }
+    ],
+    "source": "content/docs/replicates-to.md"
+  },
+  {
+    "id": "serves",
+    "kind": "relation",
+    "title": "serves",
+    "summary": "Delivers the static build of the React app to browsers — from a CDN, a Node service or a BFF.",
+    "level": "beginner",
+    "tracks": [
+      "foundations"
+    ],
+    "tags": [
+      "hosting",
+      "static-files"
+    ],
+    "explain": {
+      "beginner": "`CDN serves React app` means the browser downloads the app's files from the CDN. The\nbuilt app is just files, so any static host can serve it.",
+      "intermediate": "- Serving from a CDN keeps static traffic off the API.\n- Serving from the Node service or BFF keeps one origin (simpler cookies and CORS).",
+      "senior": "- Version assets with hashes and cache them long; never cache `index.html` long."
+    },
+    "mistakes": [
+      "No SPA fallback to `index.html` for deep links."
+    ],
+    "examples": [
+      {
+        "title": "Serve the build from Fastify",
+        "language": "ts",
+        "code": "await app.register(fastifyStatic, { root: join(dirname, 'web'), wildcard: false });\napp.setNotFoundHandler((req, reply) => reply.sendFile('index.html'));"
+      }
+    ],
+    "related": [
+      "react.app",
+      "gen.cdn",
+      "node.service",
+      "node.bff"
+    ],
+    "references": [
+      {
+        "title": "Vite — Deploying a static site",
+        "url": "https://vite.dev/guide/static-deploy.html"
+      }
+    ],
+    "source": "content/docs/serves.md"
   },
   {
     "id": "topic.authentication",
@@ -1353,6 +4858,206 @@ export const DOCS: LearningDoc[] = [
       }
     ],
     "source": "content/docs/topic.transactions-and-isolation.md"
+  },
+  {
+    "id": "updates",
+    "kind": "relation",
+    "title": "updates",
+    "summary": "An action changes the state in a store — a reducer case, set() in Zustand — or updates or invalidates cached server data.",
+    "level": "beginner",
+    "tracks": [
+      "state-management"
+    ],
+    "tags": [
+      "reducers",
+      "state",
+      "cache-invalidation"
+    ],
+    "explain": {
+      "beginner": "`addToCart updates Cart store` means the action is what changes the cart state. Nothing\nelse writes the store directly.",
+      "intermediate": "- Reducers are pure: same state and action, same result.\n- An action can also update the server-state cache: set data optimistically or invalidate\n  a query after a mutation.",
+      "senior": "- An action that both fetches from the API and updates a client store duplicates the\n  server-state cache (RNP-012 tip)."
+    },
+    "mistakes": [
+      "Mutating state outside reducers."
+    ],
+    "examples": [
+      {
+        "title": "Invalidate cached orders after a change",
+        "language": "ts",
+        "code": "await api.post(`/orders/${id}/cancel`);\nqueryClient.invalidateQueries({ queryKey: ['orders'] });"
+      }
+    ],
+    "related": [
+      "react.action",
+      "react.client-store",
+      "react.server-state",
+      "dispatches"
+    ],
+    "references": [
+      {
+        "title": "Redux — Reducers",
+        "url": "https://redux.js.org/tutorials/fundamentals/part-3-state-actions-reducers#writing-reducers"
+      },
+      {
+        "title": "TanStack Query — Invalidations from mutations",
+        "url": "https://tanstack.com/query/latest/docs/framework/react/guides/invalidations-from-mutations"
+      }
+    ],
+    "source": "content/docs/updates.md"
+  },
+  {
+    "id": "uses-port",
+    "kind": "relation",
+    "title": "uses port",
+    "summary": "Code depends on an interface instead of a concrete implementation, so the implementation can be swapped or faked in tests.",
+    "level": "senior",
+    "tracks": [
+      "patterns"
+    ],
+    "tags": [
+      "hexagonal",
+      "dependency-inversion"
+    ],
+    "explain": {
+      "beginner": "`Use case uses port` means the use case asks for \"something that can save orders\" and\ndoes not care which database does it. That makes it easy to test with a fake.",
+      "intermediate": "- Pass the port in (constructor or function argument); do not import the adapter.\n- One port per real need; avoid one giant \"Database\" port.",
+      "senior": "- Ports are the seams for testing and for replacing infrastructure; place them at\n  volatile boundaries (databases, providers, time), not everywhere."
+    },
+    "mistakes": [
+      "Use cases importing a concrete repository while also declaring a port."
+    ],
+    "examples": [
+      {
+        "title": "Inject the port",
+        "language": "ts",
+        "code": "export const makePlaceOrder = (orders: OrderRepository) => async (input: PlaceOrderInput) => {\n  /* uses orders.save(...) */\n};"
+      }
+    ],
+    "related": [
+      "node.port",
+      "implements",
+      "node.use-case"
+    ],
+    "references": [
+      {
+        "title": "Martin Fowler — Inversion of control containers and the DI pattern",
+        "url": "https://martinfowler.com/articles/injection.html"
+      }
+    ],
+    "source": "content/docs/uses-port.md"
+  },
+  {
+    "id": "uses-state",
+    "kind": "relation",
+    "title": "uses state",
+    "summary": "React code reads or updates a client store or a server-state cache — a component reads the cart with a selector, a page reads orders from the query cache.",
+    "level": "beginner",
+    "tracks": [
+      "state-management"
+    ],
+    "tags": [
+      "react",
+      "state",
+      "selectors"
+    ],
+    "explain": {
+      "beginner": "`Header uses state of Cart store` means the header reads the cart from the store and shows\nthe item count. When the cart changes, the header updates.",
+      "intermediate": "- Read with selectors so only the parts you need trigger re-renders.\n- Changes go through actions (`dispatches` → action → `updates`), not direct writes.",
+      "senior": "- Many components using a broad slice cause re-render storms; select narrowly and\n  derive."
+    },
+    "mistakes": [
+      "Selecting the whole store in every component."
+    ],
+    "examples": [
+      {
+        "title": "A narrow selector",
+        "language": "tsx",
+        "code": "const count = useSelector((s: RootState) => s.cart.items.length);"
+      }
+    ],
+    "related": [
+      "react.client-store",
+      "react.server-state",
+      "react.hook",
+      "updates"
+    ],
+    "references": [
+      {
+        "title": "Redux — useSelector",
+        "url": "https://react-redux.js.org/api/hooks#useselector"
+      },
+      {
+        "title": "TanStack Query — Queries",
+        "url": "https://tanstack.com/query/latest/docs/framework/react/guides/queries"
+      }
+    ],
+    "source": "content/docs/uses-state.md"
+  },
+  {
+    "id": "writes",
+    "kind": "relation",
+    "title": "writes",
+    "summary": "Code changes data in a store. Set via, the transaction settings, and concurrencyControl when several writers can change the same rows.",
+    "level": "beginner",
+    "tracks": [
+      "data-and-models",
+      "concurrency-and-parallelism"
+    ],
+    "tags": [
+      "sql",
+      "insert",
+      "update",
+      "transactions"
+    ],
+    "explain": {
+      "beginner": "`A writes B` means A changes data in B: inserts, updates, deletes. Only the **owner** of a\nschema should write it; other services ask the owner.",
+      "intermediate": "- `concurrencyControl` documents how concurrent writers are kept apart: `none`,\n  `optimistic-version`, `row-lock`, `advisory-lock`, `serializable-retry`.\n- `isolation` documents the transaction isolation level.\n- Writes that belong together go in one transaction.",
+      "senior": "- Read-modify-write on contended rows without control loses updates (RNP-014). Try the\n  concurrency lab: select a writes arrow and open it there.\n- Two services writing the same schema (RNP-001) or a dual write to Postgres and a broker\n  (RNP-004) are the most expensive mistakes to undo.\n- SERIALIZABLE needs retries on SQLSTATE 40001 (RNP-018)."
+    },
+    "mistakes": [
+      "Read-modify-write without concurrency control.",
+      "Several services writing one schema.",
+      "Calling external services inside the write transaction."
+    ],
+    "examples": [
+      {
+        "title": "An atomic decrement that cannot oversell",
+        "language": "sql",
+        "code": "UPDATE products SET stock = stock - $2\nWHERE id = $1 AND stock >= $2\nRETURNING stock;"
+      }
+    ],
+    "related": [
+      "reads",
+      "topic.concurrency-control",
+      "topic.transactions-and-isolation",
+      "pg.schema",
+      "migrates"
+    ],
+    "references": [
+      {
+        "title": "PostgreSQL docs — Transactions",
+        "url": "https://www.postgresql.org/docs/current/tutorial-transactions.html"
+      },
+      {
+        "title": "PostgreSQL docs — Explicit locking",
+        "url": "https://www.postgresql.org/docs/current/explicit-locking.html"
+      }
+    ],
+    "quiz": [
+      {
+        "question": "Two API instances run \"read stock, subtract 1, write stock\" at the same time. Without concurrency control, what can happen?",
+        "options": [
+          "Nothing — Postgres serializes everything",
+          "One sale is lost and the shop can oversell",
+          "The second request fails with an error",
+          "The stock goes negative immediately"
+        ],
+        "answer": 1,
+        "explanation": "Both read the same value and both write value − 1. That is a lost update. Use a row lock, a version check, an atomic UPDATE, or SERIALIZABLE with retries."
+      }
+    ],
+    "source": "content/docs/writes.md"
   }
 ];
 

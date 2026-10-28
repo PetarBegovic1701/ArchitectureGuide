@@ -76,14 +76,65 @@ Code is split into presentation, application and data-access layers. Each layer 
 
 ## Concepts used in this project
 
-- **User / actor** (`gen.actor`): A person or role that uses the system (customer, admin, support agent).
-- **Middleware** (`node.middleware`): Runs before or after handlers: auth, validation, rate limiting, error handling.
-- **Repository / data access** (`node.repository`): Reads and writes the database through an ORM or query builder.
-- **Controller / route handler** (`node.route-handler`): Receives HTTP requests: an Express router, Fastify routes or a NestJS controller.
-- **Node service** (`node.service`): A Node.js process that serves requests (Express, Fastify or NestJS).
-- **Use case / application service** (`node.use-case`): One application action (`PlaceOrder`).
-- **Database** (`pg.database`): A PostgreSQL database.
-- **Schema** (`pg.schema`): A namespace of tables.
+- **User / actor** (`gen.actor`): A person or role that uses the system — customer, admin, support agent. Diagrams start with who uses the system and why.
+
+  - Name actors by role, not by person ("Support agent", not "Anna").
+  - Actors call **apps**, not databases. If an actor talks to an external tool (a payment
+    page), draw that too.
+  - Roles on actors map to roles in authorization (RBAC).
+- **Middleware** (`node.middleware`): Code that runs before (or after) every handler of a route group — authentication, rate limiting, request logging, error handling.
+
+  - **Auth middleware** answers "who is calling?": it reads the session cookie or the
+    bearer token, verifies it, and attaches the user to the request.
+  - **Authorization** ("may this user cancel _this_ order?") usually needs the data, so it
+    belongs in the use case, not only in middleware.
+  - Order matters: logging and request IDs first, then auth, then validation, then the
+    handler, then the error handler last.
+- **Repository / data access** (`node.repository`): The code that reads and writes the database through an ORM or query builder (Prisma, Drizzle, Kysely), so the rest of the app does not write SQL.
+
+  - One repository per aggregate or table group (orders, products).
+  - Pass the transaction in (`tx`) so a use case can make several calls atomic.
+  - Watch for **N+1 queries**: loading 50 orders, then each order's lines one by one.
+    Load them together (`include`, a join, or `WHERE id = ANY($1)`).
+  - Paginate list queries.
+- **Controller / route handler** (`node.route-handler`): Code that receives an HTTP request, validates it, calls the business logic, and turns the result into an HTTP response. Thin by design.
+
+  - Validate with a schema (zod, TypeBox, class-validator) and return 400 with details on
+    failure (RNP-015 flags handlers without validation).
+  - Map domain errors to HTTP: "out of stock" → 409, "not found" → 404.
+  - One handler groups the endpoints of one resource (`/orders`, `/orders/:id`).
+- **Node service** (`node.service`): A Node.js process that answers requests. It checks who is calling, validates input, applies business rules, and is the only part that talks to the database.
+
+  - Inside a service you usually find **route handlers** (HTTP in and out), **use cases**
+    (one business action each) and **repositories** (database access).
+  - Configure it with environment variables; keep secrets out of the code.
+  - Run several **instances** behind a load balancer for availability; each has its own
+    database **connection pool**.
+  - Return clear errors: 400 for bad input, 401/403 for auth, 404, 409 for conflicts.
+- **Use case / application service** (`node.use-case`): One business action — PlaceOrder, RefundOrder — as one function or class. It loads data, asks the domain to apply the rules, saves, and starts follow-up work.
+
+  - One use case = one **transaction** boundary in most designs: either everything is saved
+    or nothing.
+  - It depends on **ports** (interfaces like `OrderRepository`) or on repositories directly
+    in a layered design, never on HTTP objects.
+  - Return a result or a domain error; let the handler choose the status code.
+  - Enqueue follow-up jobs in the same transaction.
+- **Database** (`pg.database`): A PostgreSQL database — the place where data survives restarts. Only backend code connects to it; schemas inside it group tables by owner.
+
+  - Use transactions for changes that belong together.
+  - Run schema changes as **migrations** owned by one service.
+  - Back up regularly and test restores.
+  - One database can serve several services if each owns its own schema; or each service
+    gets its own database (database per service).
+- **Schema** (`pg.schema`): A namespace of tables inside a database. In this tool it is also the ownership boundary — one service owns a schema and runs its migrations.
+
+  - **Migrations** are versioned scripts (Prisma Migrate, Drizzle Kit, node-pg-migrate) that
+    create and change tables. Exactly one owner runs them.
+  - Other services that need the data call the owner's API, or read a published view or
+    replica.
+  - Database roles per service (`GRANT USAGE ON SCHEMA orders TO orders_app`) enforce the
+    boundary.
+  - **Row Level Security** (`rls`) restricts rows per user or tenant inside the database.
 - **Table** (`pg.table`): Tables store your data; keys, constraints and indexes keep it correct and fast.
 
   - **Normalize first:** store each fact once (the customer's email lives in `customers`,
@@ -96,7 +147,27 @@ Code is split into presentation, application and data-access layers. Each layer 
   - **Types:** `timestamptz` for points in time, `numeric` or integer cents for money,
     `text` with a `CHECK` (or an enum) for statuses, `jsonb` only for truly flexible data.
   - One service owns the migrations of a schema. Other services read through an API or a view.
-- **calls** (`calls`): Synchronous request/response.
-- **migrates** (`migrates`): This element owns the DDL (migrations) of the schema.
-- **reads** (`reads`): Reads data from a store.
-- **writes** (`writes`): Writes data to a store.
+- **calls** (`calls`): A synchronous request and response — the caller waits for the answer. Set the protocol, auth, timeout and whether it is safe to retry.
+
+  - Properties on the arrow document the decisions: `protocol` (http, graphql, trpc),
+    `auth` (session cookie, bearer token, API key), `timeoutMs`, `idempotent`,
+    `idempotencyKey`.
+  - Every call needs a timeout.
+  - Retry only idempotent calls, or send an idempotency key.
+- **migrates** (`migrates`): This element owns the schema's DDL — it runs the migrations that create and change tables. Exactly one owner per schema.
+
+  - Run migrations in the deploy pipeline before the new code starts.
+  - Make them backward compatible (expand and contract) so old and new code can run at the
+    same time.
+- **reads** (`reads`): Code reads data from a store. Set via (the data-access library) and, where it matters, the isolation level.
+
+  - `via` names the library (prisma, drizzle, kysely, pg).
+  - Reading another service's tables couples you to its schema; prefer its API or a
+    published view.
+  - Reads can go to a replica when slightly old data is fine.
+- **writes** (`writes`): Code changes data in a store. Set via, the transaction settings, and concurrencyControl when several writers can change the same rows.
+
+  - `concurrencyControl` documents how concurrent writers are kept apart: `none`,
+    `optimistic-version`, `row-lock`, `advisory-lock`, `serializable-retry`.
+  - `isolation` documents the transaction isolation level.
+  - Writes that belong together go in one transaction.

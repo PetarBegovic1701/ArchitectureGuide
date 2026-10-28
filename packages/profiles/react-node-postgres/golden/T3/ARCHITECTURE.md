@@ -70,21 +70,21 @@ The domain is in the middle and depends on nothing. Use cases call ports (interf
 
 ## Concepts
 
-- **User / actor** (`gen.actor`): A person or role that uses the system (customer, admin, support agent).
-- **Domain model / aggregate** (`node.domain`): Business rules and state, free of frameworks and I/O.
-- **Middleware** (`node.middleware`): Runs before or after handlers: auth, validation, rate limiting, error handling.
-- **Port (interface)** (`node.port`): An interface the application needs (`OrderRepository`, `PaymentGateway`).
-- **Repository / data access** (`node.repository`): Reads and writes the database through an ORM or query builder.
-- **Controller / route handler** (`node.route-handler`): Receives HTTP requests: an Express router, Fastify routes or a NestJS controller.
-- **Node service** (`node.service`): A Node.js process that serves requests (Express, Fastify or NestJS).
-- **Use case / application service** (`node.use-case`): One application action (`PlaceOrder`).
-- **Database** (`pg.database`): A PostgreSQL database.
-- **Schema** (`pg.schema`): A namespace of tables.
+- **User / actor** (`gen.actor`): A person or role that uses the system — customer, admin, support agent. Diagrams start with who uses the system and why.
+- **Domain model / aggregate** (`node.domain`): The business rules and state, written as plain code without database or HTTP — an Order that refuses to ship before it is paid.
+- **Middleware** (`node.middleware`): Code that runs before (or after) every handler of a route group — authentication, rate limiting, request logging, error handling.
+- **Port (interface)** (`node.port`): An interface the application needs — OrderRepository, PaymentGateway — written in its own terms. Adapters implement it with a real database or service.
+- **Repository / data access** (`node.repository`): The code that reads and writes the database through an ORM or query builder (Prisma, Drizzle, Kysely), so the rest of the app does not write SQL.
+- **Controller / route handler** (`node.route-handler`): Code that receives an HTTP request, validates it, calls the business logic, and turns the result into an HTTP response. Thin by design.
+- **Node service** (`node.service`): A Node.js process that answers requests. It checks who is calling, validates input, applies business rules, and is the only part that talks to the database.
+- **Use case / application service** (`node.use-case`): One business action — PlaceOrder, RefundOrder — as one function or class. It loads data, asks the domain to apply the rules, saves, and starts follow-up work.
+- **Database** (`pg.database`): A PostgreSQL database — the place where data survives restarts. Only backend code connects to it; schemas inside it group tables by owner.
+- **Schema** (`pg.schema`): A namespace of tables inside a database. In this tool it is also the ownership boundary — one service owns a schema and runs its migrations.
 - **Table** (`pg.table`): Tables store your data; keys, constraints and indexes keep it correct and fast.
-- **calls** (`calls`): Synchronous request/response.
-- **depends on** (`depends-on`): Compile-time import of another module or package.
-- **implements** (`implements`): An adapter realizes a port (interface).
-- **migrates** (`migrates`): This element owns the DDL (migrations) of the schema.
-- **reads** (`reads`): Reads data from a store.
-- **uses port** (`uses-port`): Depends on an interface instead of a concrete implementation.
-- **writes** (`writes`): Writes data to a store.
+- **calls** (`calls`): A synchronous request and response — the caller waits for the answer. Set the protocol, auth, timeout and whether it is safe to retry.
+- **depends on** (`depends-on`): A compile-time import — one module uses another's code. The direction of these arrows is the architecture.
+- **implements** (`implements`): An adapter realizes a port — PrismaOrderRepository implements OrderRepository. Only adapters implement ports.
+- **migrates** (`migrates`): This element owns the schema's DDL — it runs the migrations that create and change tables. Exactly one owner per schema.
+- **reads** (`reads`): Code reads data from a store. Set via (the data-access library) and, where it matters, the isolation level.
+- **uses port** (`uses-port`): Code depends on an interface instead of a concrete implementation, so the implementation can be swapped or faked in tests.
+- **writes** (`writes`): Code changes data in a store. Set via, the transaction settings, and concurrencyControl when several writers can change the same rows.
