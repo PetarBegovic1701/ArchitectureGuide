@@ -126,6 +126,61 @@ describe('commands on a workspace', () => {
     expect((await cli('--project', 'nope', 'export', 'json')).code).toBe(2);
   });
 
+  it('validates and exports a change set with --change-set', async () => {
+    const catalog = defaultCatalog();
+    const base = await ws().readProject('shop');
+    await applyToWorkspace(
+      ws(),
+      catalog,
+      'shop',
+      [
+        {
+          op: 'upsertChangeSet',
+          changeSet: {
+            id: 'cs.reports',
+            name: 'Reports',
+            description: 'Monthly reports.',
+            status: 'draft',
+            baseRevision: base.revision + 1,
+            createdAt: '2026-10-28T00:00:00.000Z',
+            ops: [
+              {
+                op: 'addElement',
+                element: {
+                  id: 'svc.reports',
+                  kind: 'node.service',
+                  name: 'Reports',
+                  status: 'planned',
+                },
+              },
+            ],
+          },
+        },
+      ],
+      { origin: 'cli' },
+    );
+    const v = await cli('--json', 'validate', '--change-set', 'cs.reports');
+    const out = JSON.parse(v.out) as {
+      changeSet: string;
+      conflicts: unknown[];
+      findings: { introduced: boolean }[];
+    };
+    expect(out.changeSet).toBe('cs.reports');
+    expect(out.conflicts).toEqual([]);
+    expect(out.findings.every((f) => typeof f.introduced === 'boolean')).toBe(true);
+    expect((await cli('validate', '--change-set', 'cs.nope')).code).toBe(2);
+    const md = await cli('export', 'agent-md', '--change-set', 'cs.reports');
+    expect(md.out).toContain('svc.reports');
+    expect((await cli('export', 'plan-md')).code).toBe(2);
+    expect((await cli('export', 'plan-md', '--change-set', 'cs.reports', '--write')).code).toBe(0);
+    const plan = await readFile(join(cwd, 'architecture', 'plans', 'cs.reports.md'), 'utf8');
+    expect(plan).toContain('status: ready');
+    expect(plan).toContain('**Create svc.reports**');
+    expect((await ws().readProject('shop')).changeSets[0]!.status).toBe('ready');
+    expect((await cli('export', 'speckit', '--change-set', 'cs.reports', '--write')).code).toBe(0);
+    expect(await readFile(join(cwd, 'specs', '001-reports', 'tasks.md'), 'utf8')).toContain('T001');
+  });
+
   it('explains, lists templates, writes onboarding, and migrates', async () => {
     expect((await cli('explain', 'react.client-store', '--level', 'beginner')).out).toContain(
       'Typical connections',

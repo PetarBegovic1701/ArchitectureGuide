@@ -1,0 +1,18 @@
+@startuml
+!include <C4/C4_Container>
+
+title Multi-tenant SaaS – containers
+
+Person(actor_tenant_user, "Tenant user", "")
+System_Boundary(multi_tenant, "Multi-tenant SaaS") {
+  Container(svc_saas_api, "SaaS API", "", "")
+  ContainerDb(db_saas_db, "SaaS DB", "", "")
+}
+
+Rel(actor_tenant_user, svc_saas_api, "calls", "https")
+Rel(svc_saas_api, db_saas_db, "reads")
+Rel(svc_saas_api, db_saas_db, "writes")
+Rel(svc_saas_api, db_saas_db, "migrates")
+
+SHOW_LEGEND()
+@enduml

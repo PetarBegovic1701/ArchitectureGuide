@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
-import type { Finding, Id, Level, RelationType } from '@archguide/core';
+import type { ExportFormat, Finding, Id, Level, RelationType } from '@archguide/core';
 import type { ClipboardData } from '../lib/clipboard';
 
 export type Theme = 'system' | 'light' | 'dark';
@@ -103,7 +103,21 @@ interface UiState {
     | 'tour-editor'
     | 'lab'
     | 'analysis'
+    | 'changesets'
+    | 'api'
     | null;
+  /** Format the export dialog opens with. */
+  exportFormat: ExportFormat | null;
+  /** Change-set mode: the Problems panel shows all findings, not only the new ones. */
+  showAllFindings: boolean;
+  /** Focus mode (F): everything not connected to the selection is dimmed (§13.5). */
+  focusDepth: 1 | 2 | 3 | null;
+  /** Canvas filters: shapes that do not match are dimmed (§13.5). */
+  filters: CanvasFilters;
+  /** Scenario view: clicking arrows adds steps. */
+  recording: boolean;
+  /** Scenario playback: the step shown, or null. */
+  playStep: number | null;
   /** Database view: color data by its owning deployable (§19.5). Always on in database views. */
   ownership: boolean;
   /** Elements the current lesson step points at (§17.5). */
@@ -121,6 +135,16 @@ interface UiState {
   dismiss(id: number): void;
   set(partial: Partial<UiState>): void;
 }
+
+export interface CanvasFilters {
+  tags: string[];
+  layers: string[];
+  statuses: string[];
+  /** Owning team or deployable (owner field). */
+  owners: string[];
+}
+
+export const NO_FILTERS: CanvasFilters = { tags: [], layers: [], statuses: [], owners: [] };
 
 let nextToast = 1;
 
@@ -166,6 +190,12 @@ export const useUi = create<UiState>()(
       suppressing: null,
       showSuppressed: false,
       dialog: null,
+      exportFormat: null,
+      showAllFindings: false,
+      focusDepth: null,
+      filters: NO_FILTERS,
+      recording: false,
+      playStep: null,
       ownership: false,
       labRelation: null,
       lessonFocus: [],

@@ -8,6 +8,7 @@ import { registerPrompts } from './prompts';
 import { registerResources } from './resources';
 import { registerTools } from './tools';
 import { registerAnalysisTools } from './analysis-tools';
+import { registerChangeSetTools } from './change-set-tools';
 
 export const SERVER_NAME = 'archguide';
 export const SERVER_VERSION = '0.0.0';
@@ -26,6 +27,7 @@ export function createMcpServer(ctx: McpContext): McpServer {
     { instructions: INSTRUCTIONS },
   );
   registerTools(server, ctx);
+  registerChangeSetTools(server, ctx);
   registerAnalysisTools(server, ctx);
   registerResources(server, ctx);
   registerPrompts(server, ctx);

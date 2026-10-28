@@ -15,12 +15,14 @@ import {
   explainText,
   exportProject,
   findingKey,
+  newFindings,
   newProject,
   removeItemsOps,
   runRules,
   searchDocs,
   serializeProject,
   slugify,
+  storedChangeSet,
   templateOps,
   uniqueId,
   upsertElementsOps,
@@ -28,9 +30,16 @@ import {
   viewNodeSize,
 } from '@archguide/core';
 import type { Catalog, Project, Tour } from '@archguide/core';
-import { createInWorkspace, exportFiles, writeExport } from '@archguide/workspace';
+import {
+  applyToWorkspace,
+  createInWorkspace,
+  exportFiles,
+  writeExport,
+} from '@archguide/workspace';
 import type { Envelope, McpContext } from './context';
-import { brief, change, fail, findingsSummary, ok, readProject } from './context';
+import { brief, change, fail, findingsSummary, ok, readModel, readProject } from './context';
+
+const PLAN_FORMATS: readonly string[] = ['plan-md', 'speckit', 'kiro'];
 
 /** Tool results: the envelope as JSON, and long texts as their own block for reading. */
 export function toResult(env: Envelope): CallToolResult {
@@ -55,6 +64,13 @@ export async function run(body: () => Promise<Envelope>): Promise<CallToolResult
     return toResult(fail([{ code: e.code ?? 'ERROR', message: e.message }]));
   }
 }
+
+const changeSetIdArg = z
+  .string()
+  .optional()
+  .describe(
+    'Change set ID (create_change_set): read or edit baseline + change set; edits are recorded into it, the baseline stays.',
+  );
 
 const projectIdArg = z
   .string()
@@ -181,12 +197,13 @@ export function registerTools(server: McpServer, ctx: McpContext): void {
         format: z.enum(['agent-md', 'agent-yaml', 'json']).default('agent-md'),
         focus: z.string().optional().describe('Element ID: only its neighborhood.'),
         depth: z.number().int().min(1).max(5).default(1),
+        changeSetId: changeSetIdArg,
       },
       annotations: { readOnlyHint: true },
     },
-    ({ projectId, format, focus, depth }) =>
+    ({ projectId, format, focus, depth, changeSetId }) =>
       run(async () => {
-        const p = await readProject(ctx, projectId);
+        const { project: p } = await readModel(ctx, projectId, changeSetId);
         if (format === 'json') return ok(serializeProject(p), { revision: p.revision });
         const file = exportProject(format, p, catalog, focus ? { focus, depth } : {}).files[0]!;
         return ok(file.content, { revision: p.revision });
@@ -270,18 +287,26 @@ export function registerTools(server: McpServer, ctx: McpContext): void {
         projectId: projectIdArg,
         templateId: z.string().describe('Template ID or code (T1 …).'),
         params: z.record(z.string(), z.unknown()).optional(),
+        parentId: z.string().optional().describe('Element to put the template inside.'),
+        changeSetId: changeSetIdArg,
       },
     },
-    ({ projectId, templateId, params }) =>
+    ({ projectId, templateId, params, parentId, changeSetId }) =>
       run(() =>
-        change(ctx, projectId, (p) => {
-          const r = templateOps(catalog, p, templateId, {
-            params,
-            origin: stampOrigin(p, catalog),
-          });
-          if ('errors' in r) return { ops: [], errors: r.errors };
-          return { ops: r.ops, ids: [...r.ids.values()], data: Object.fromEntries(r.ids) };
-        }),
+        change(
+          ctx,
+          projectId,
+          (p) => {
+            const r = templateOps(catalog, p, templateId, {
+              params,
+              origin: stampOrigin(p, catalog),
+              ...(parentId ? { parentId } : {}),
+            });
+            if ('errors' in r) return { ops: [], errors: r.errors };
+            return { ops: r.ops, ids: [...r.ids.values()], data: Object.fromEntries(r.ids) };
+          },
+          { changeSetId },
+        ),
       ),
   );
 
@@ -291,10 +316,18 @@ export function registerTools(server: McpServer, ctx: McpContext): void {
       title: 'Add or update elements',
       description:
         'Creates elements (no id, or a new one) or updates them (a known id). Later items can use IDs created earlier in the same call as parentId. Returns the IDs and only the findings this change introduced.',
-      inputSchema: { projectId: projectIdArg, elements: z.array(elementInput).min(1).max(200) },
+      inputSchema: {
+        projectId: projectIdArg,
+        elements: z.array(elementInput).min(1).max(200),
+        changeSetId: changeSetIdArg,
+      },
     },
-    ({ projectId, elements }) =>
-      run(() => change(ctx, projectId, (p) => upsertElementsOps(p, catalog, elements as never))),
+    ({ projectId, elements, changeSetId }) =>
+      run(() =>
+        change(ctx, projectId, (p) => upsertElementsOps(p, catalog, elements as never), {
+          changeSetId,
+        }),
+      ),
   );
 
   server.registerTool(
@@ -303,10 +336,18 @@ export function registerTools(server: McpServer, ctx: McpContext): void {
       title: 'Add or update relations',
       description:
         'Connects elements. Without "type", the only valid type is used; when several fit, the error lists them. A refused pair explains why and, where possible, offers the reversed relation as a fix.',
-      inputSchema: { projectId: projectIdArg, relations: z.array(relationInput).min(1).max(400) },
+      inputSchema: {
+        projectId: projectIdArg,
+        relations: z.array(relationInput).min(1).max(400),
+        changeSetId: changeSetIdArg,
+      },
     },
-    ({ projectId, relations }) =>
-      run(() => change(ctx, projectId, (p) => upsertRelationsOps(p, catalog, relations as never))),
+    ({ projectId, relations, changeSetId }) =>
+      run(() =>
+        change(ctx, projectId, (p) => upsertRelationsOps(p, catalog, relations as never), {
+          changeSetId,
+        }),
+      ),
   );
 
   server.registerTool(
@@ -319,11 +360,12 @@ export function registerTools(server: McpServer, ctx: McpContext): void {
         projectId: projectIdArg,
         ids: z.array(z.string()).min(1),
         cascade: z.boolean().default(true),
+        changeSetId: changeSetIdArg,
       },
       annotations: { destructiveHint: true },
     },
-    ({ projectId, ids, cascade }) =>
-      run(() => change(ctx, projectId, (p) => removeItemsOps(p, ids, cascade))),
+    ({ projectId, ids, cascade, changeSetId }) =>
+      run(() => change(ctx, projectId, (p) => removeItemsOps(p, ids, cascade), { changeSetId })),
   );
 
   server.registerTool(
@@ -445,20 +487,40 @@ export function registerTools(server: McpServer, ctx: McpContext): void {
     'validate_project',
     {
       title: 'Check the rules',
-      description: 'Runs the architecture rules and lists the findings with their quick fixes.',
-      inputSchema: { projectId: projectIdArg, includeSuppressed: z.boolean().default(false) },
+      description:
+        'Runs the architecture rules and lists the findings with their quick fixes. With changeSetId: on baseline + change set, and each finding says whether the change introduced it.',
+      inputSchema: {
+        projectId: projectIdArg,
+        changeSetId: changeSetIdArg,
+        includeSuppressed: z.boolean().default(false),
+      },
       annotations: { readOnlyHint: true },
     },
-    ({ projectId, includeSuppressed }) =>
+    ({ projectId, changeSetId, includeSuppressed }) =>
       run(async () => {
-        const p = await readProject(ctx, projectId);
+        const { baseline, project: p, changeSet } = await readModel(ctx, projectId, changeSetId);
         const findings = runRules(p, catalog).filter((f) => includeSuppressed || !f.suppressed);
+        const introduced = changeSet
+          ? new Set(newFindings(runRules(baseline, catalog), findings).map(findingKey))
+          : undefined;
+        const fresh = introduced ? findings.filter((f) => introduced.has(findingKey(f))) : [];
         return ok(
           findings.map((f) => ({
             ...brief(f),
             ...(f.suppressed ? { suppressed: f.suppressed.reason } : {}),
+            ...(introduced ? { introduced: introduced.has(findingKey(f)) } : {}),
           })),
-          { revision: p.revision, hints: [findingsSummary(findings)] },
+          {
+            revision: baseline.revision,
+            hints: [
+              findingsSummary(findings),
+              ...(introduced
+                ? [
+                    `${fresh.length} finding(s) are introduced by change set "${changeSetId}" (${fresh.filter((f) => f.severity === 'error').length} error(s)).`,
+                  ]
+                : []),
+            ],
+          },
         );
       }),
   );
@@ -541,7 +603,7 @@ export function registerTools(server: McpServer, ctx: McpContext): void {
     {
       title: 'Export',
       description:
-        'Exports the project: agent-md (ARCHITECTURE.md), agent-yaml, agents-snippet, onboarding-md, concept-pack, mermaid, dbml, json. With write: true, writes into the workspace folder: to "out" (relative to it), to the path in archguide.config.json exports, or under the default name.',
+        'Exports the project: agent-md (ARCHITECTURE.md), agent-yaml, agents-snippet, onboarding-md, concept-pack, mermaid, dbml, json, likec4, structurizr, plantuml, openapi (focus: a route handler or contract), sequence (viewId: a scenario view). Change-set plans: plan-md, speckit, kiro (need changeSetId); other formats with changeSetId show baseline + change. With write: true, writes into the workspace folder: to "out" (relative to it), to the path in archguide.config.json exports, or under the default name (Spec Kit and Kiro files go to the repository root). Writing a plan marks a draft change set ready.',
       inputSchema: {
         projectId: projectIdArg,
         format: z.enum(EXPORT_FORMATS),
@@ -549,19 +611,41 @@ export function registerTools(server: McpServer, ctx: McpContext): void {
         depth: z.number().int().min(1).max(5).optional(),
         level: LevelSchema.optional(),
         conceptId: z.string().optional(),
+        changeSetId: changeSetIdArg,
+        viewId: z.string().optional().describe('sequence: the scenario view.'),
         write: z.boolean().default(false),
         out: z.string().optional(),
       },
     },
     ({ projectId, format, write, out, ...options }) =>
       run(async () => {
-        const p = await readProject(ctx, projectId);
-        const files = exportFiles(ws, p, catalog, format, options);
-        if (!write)
+        let p = await readProject(ctx, projectId);
+        if (!write) {
+          const files = exportFiles(ws, p, catalog, format, options);
           return ok(files.length === 1 ? files[0]!.content : files, { revision: p.revision });
+        }
         if (ctx.readOnly)
           return fail([{ code: 'READ_ONLY', message: 'Writing files is off (--read-only).' }]);
-        const written = await writeExport(ws, p, format, files, out);
+        // A written plan is ready for implementation (draft → ready, §16.2).
+        const cs = p.changeSets.find((c) => c.id === options.changeSetId);
+        if (cs?.status === 'draft' && PLAN_FORMATS.includes(format)) {
+          const r = await applyToWorkspace(
+            ws,
+            catalog,
+            p.id,
+            [{ op: 'upsertChangeSet', changeSet: storedChangeSet({ ...cs, status: 'ready' }, p) }],
+            { origin: 'mcp', baseRevision: p.revision },
+          );
+          if (!r.ok) return fail(r.errors);
+          p = r.project;
+        }
+        const written = await writeExport(
+          ws,
+          p,
+          format,
+          exportFiles(ws, p, catalog, format, options),
+          out,
+        );
         return ok({ written }, { revision: p.revision });
       }),
   );

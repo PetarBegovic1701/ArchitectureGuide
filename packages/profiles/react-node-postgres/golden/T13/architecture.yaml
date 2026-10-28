@@ -1,0 +1,41 @@
+archguide: 1
+project: multi-tenant
+profile: react-node-postgres
+patterns:
+  - multi-tenant
+revision: 0
+elements:
+  - { id: actor.tenant-user, kind: gen.actor, name: Tenant user }
+  - { id: ctl.project-routes, kind: node.route-handler, name: Project routes, parent: svc.saas-api, layer: application }
+  - { id: mw.auth-middleware, kind: node.middleware, name: Auth middleware, parent: svc.saas-api, layer: application, does: [ Read the session cookie, Reject calls without a valid session ] }
+  - { id: mw.tenant-resolver, kind: node.middleware, name: Tenant resolver, parent: svc.saas-api, layer: application, does: [ Find the tenant of the session, SET app.tenant_id for the transaction ] }
+  - { id: svc.saas-api, kind: node.service, name: SaaS API, layer: application }
+  - { id: db.saas-db, kind: pg.database, name: SaaS DB, layer: data }
+  - { id: schema.app, kind: pg.schema, name: app, parent: db.saas-db, layer: data, does: [ Every table has tenant_id and a row-level security policy ], ownedBy: svc.saas-api }
+  - { id: schema.control, kind: pg.schema, name: control, parent: db.saas-db, layer: data, does: [ "Tenants, plans, users" ], ownedBy: svc.saas-api }
+relations:
+  - [ actor.tenant-user, calls, svc.saas-api, { protocol: https } ]
+  - [ ctl.project-routes, reads, schema.app, { via: prisma } ]
+  - [ ctl.project-routes, writes, schema.app, { via: prisma } ]
+  - [ mw.tenant-resolver, reads, schema.control, { via: prisma } ]
+  - [ svc.saas-api, migrates, schema.app ]
+  - [ svc.saas-api, migrates, schema.control ]
+invariants:
+  - Every request MUST be tied to exactly one tenant before it touches data. (T13)
+  - Tenant data MUST be isolated by the database (row-level security or one schema per tenant), not only by WHERE clauses in code. (T13)
+  - Background jobs MUST carry the tenant ID and set it before they touch data. (T13)
+  - Only `svc.saas-api` MAY write `schema.app`. Only `svc.saas-api` MAY run migrations on it. (ownership)
+  - Modules MUST NOT depend on each other in a cycle. (AP-003)
+  - Services MUST NOT call each other synchronously in a cycle. (AP-006)
+  - Synchronous call chains between services MUST stay at most 4 services long. (AP-007)
+  - Sensitive data (PII, secrets) MUST NOT be reachable from browser code. (AP-015)
+  - Each PostgreSQL schema MUST have one writing service; other services use its API or events. (RNP-001)
+  - Each schema MUST have exactly one migration owner. (RNP-002)
+  - Horizontally scaled or serverless services MUST connect to PostgreSQL through a connection pooler. (RNP-009)
+  - Route handlers MUST validate every request with a schema (zod or similar). (RNP-015)
+  - Services reachable from the browser MUST authenticate callers (auth middleware, gateway or auth provider). (RNP-016)
+  - Writes to rows that several writers change MUST use a row lock or an optimistic version check. (RNP-019)
+  - The connection pools of all services together MUST stay below 80% of max_connections, or go through a pooler. (RNP-020)
+  - CPU-heavy work MUST NOT run on the event loop of a request-serving process; use worker threads or a worker. (RNP-021)
+  - Serializable transactions MUST be retried on SQLSTATE 40001. (RNP-022)
+known_issues: []

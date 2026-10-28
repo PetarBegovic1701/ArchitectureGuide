@@ -2,14 +2,14 @@ import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { McpContext } from './context';
 
-/** Prompts (Implementation.md §20.4). Change sets come in Phase 9; until then edits apply directly. */
+/** Prompts (Implementation.md §20.4). */
 export function registerPrompts(server: McpServer, _ctx: McpContext): void {
   server.registerPrompt(
     'plan-feature',
     {
       title: 'Plan a feature in the architecture',
       description:
-        'Read the architecture, add what a feature needs, check the rules, and explain the plan.',
+        'Model a feature as a change set on top of the architecture, check it, and write the plan (tasks in build order) for implementation.',
       argsSchema: {
         feature: z.string().describe('What the feature does, in a sentence or two.'),
         projectId: z.string().optional(),
@@ -27,11 +27,12 @@ export function registerPrompts(server: McpServer, _ctx: McpContext): void {
                 `Plan this feature in the architecture model${project}: ${feature}`,
                 '',
                 '1. Read the model with get_architecture (agent-md). Use focus on the area the feature touches.',
-                '2. Find the concepts you need with get_catalog (filter by prefix, e.g. "node." or "react."). If you are unsure what a concept is for, use explain_concept.',
-                '3. Add the elements with upsert_elements and connect them with upsert_relations. Reuse existing elements; mark new ones status "planned".',
-                '4. Read the findings each change returns. Fix errors with apply_quick_fix or a better design; suppress a finding only with a real reason.',
-                '5. Record important choices with add_decision.',
-                '6. Finish with validate_project and summarize: the new elements and relations, the data each service owns, and the findings left open and why.',
+                '2. Start a change set: create_change_set with a short name and the feature as the description. Use its ID as changeSetId in every step below; the baseline stays as it is.',
+                '3. Find the concepts you need with get_catalog (filter by prefix, e.g. "node." or "react."); explain_concept when unsure. Add elements with upsert_elements, connect them with upsert_relations, or apply_template (with parentId to put it inside an element). Reuse existing elements; new ones get status "planned".',
+                '4. validate_project with changeSetId until the change introduces no errors (findings say "introduced": true). Fix with a better design or apply_quick_fix; suppress only with a real reason. Record important choices with add_decision.',
+                '5. generate_tasks, then read get_change_set: the ops, conflicts and tasks.',
+                '6. export with format "plan-md", changeSetId and write: true (also "speckit" or "kiro" when the repository uses them).',
+                '7. Summarize: the plan file, the new elements and relations, the data each service owns, and the findings left open and why. Implement the tasks in order; after the code is done, run archguide check and set the change set to implemented (update_change_set status "implemented").',
               ].join('\n'),
             },
           },

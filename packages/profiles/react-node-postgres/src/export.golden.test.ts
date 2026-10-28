@@ -23,6 +23,9 @@ const FORMATS: ExportFormat[] = [
   'mermaid',
   'dbml',
   'onboarding-md',
+  'likec4',
+  'structurizr',
+  'plantuml',
 ];
 
 function fromTemplate(t: Template): Project {

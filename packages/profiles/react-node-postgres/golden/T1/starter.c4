@@ -1,0 +1,71 @@
+specification {
+  element gen_actor {
+    notation 'User / actor'
+    style {
+      shape person
+    }
+  }
+  element node_middleware {
+    notation 'Middleware'
+  }
+  element node_service {
+    notation 'Node service'
+  }
+  element pg_database {
+    notation 'Database'
+    style {
+      shape cylinder
+    }
+  }
+  element pg_schema {
+    notation 'Schema'
+    style {
+      shape cylinder
+    }
+  }
+  element react_app {
+    notation 'React app'
+  }
+  element react_route {
+    notation 'Route / page'
+    style {
+      shape browser
+    }
+  }
+  relationship calls
+  relationship migrates
+  relationship reads
+  relationship writes
+}
+
+model {
+  actor_customer = gen_actor 'Customer'
+  app_shop = react_app 'Shop' {
+    route_home = react_route 'Home'
+  }
+  db_shop_db = pg_database 'Shop DB' {
+    schema_public = pg_schema 'public'
+  }
+  svc_shop_api = node_service 'Shop API' {
+    mw_auth_middleware = node_middleware 'Auth middleware' {
+      description 'Read the session cookie; Reject calls without a valid session'
+    }
+  }
+
+  actor_customer -[calls]-> app_shop 'uses'
+  app_shop -[calls]-> svc_shop_api 'REST /api'
+  svc_shop_api -[migrates]-> db_shop_db.schema_public 'migrates'
+  svc_shop_api -[reads]-> db_shop_db.schema_public 'reads'
+  svc_shop_api -[writes]-> db_shop_db.schema_public 'writes'
+}
+
+views {
+  view index {
+    title 'Starter: React + Express + PostgreSQL'
+    include *
+  }
+  view main {
+    title 'Main'
+    include actor_customer, app_shop, app_shop.route_home, svc_shop_api, svc_shop_api.mw_auth_middleware, db_shop_db, db_shop_db.schema_public
+  }
+}

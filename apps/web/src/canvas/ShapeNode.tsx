@@ -3,7 +3,7 @@ import { Handle, Position } from '@xyflow/react';
 import type { NodeProps } from '@xyflow/react';
 import type { ShapeFlowNode } from '../lib/flow';
 import { CONTAINER_HEADER } from '../lib/model';
-import { renameElement } from '../actions';
+import { drillInto, renameElement } from '../actions';
 import { isPhone } from '../hooks';
 import { useUi } from '../store/ui';
 import { SEVERITY_COLOR } from '../lib/findings';
@@ -20,7 +20,11 @@ const ICON_CORNER: ReadonlySet<string> = new Set([
   'document',
 ]);
 
-export const DIFF_COLOR = { added: 'var(--ag-valid)', changed: 'var(--ag-warning)' } as const;
+export const DIFF_COLOR = {
+  added: 'var(--ag-valid)',
+  changed: 'var(--ag-warning)',
+  removed: 'var(--ag-error)',
+} as const;
 
 const SIDES = [
   { id: 't', position: Position.Top },
@@ -43,6 +47,10 @@ function ShapeNodeImpl({ data, selected }: NodeProps<ShapeFlowNode>) {
       title={`${data.name} — ${data.conceptName}`}
       onDoubleClick={(e) => {
         e.stopPropagation();
+        // On the name: rename. Elsewhere on a deployable or a database: drill down (§13.3).
+        const onLabel = (e.target as HTMLElement).closest('[data-role="label"]');
+        if (data.ghost) return;
+        if (!onLabel && drillInto(data.elementId)) return;
         useUi.getState().set({ editingId: data.elementId });
       }}
     >
@@ -127,7 +135,7 @@ function ShapeNodeImpl({ data, selected }: NodeProps<ShapeFlowNode>) {
       {data.diff && (
         <>
           <div
-            className="pointer-events-none absolute -inset-1.5 rounded-xl border-2"
+            className={`pointer-events-none absolute -inset-1.5 rounded-xl border-2 ${data.diff === 'removed' ? 'border-dashed' : ''}`}
             style={{ borderColor: DIFF_COLOR[data.diff] }}
             aria-hidden
           />
@@ -136,7 +144,7 @@ function ShapeNodeImpl({ data, selected }: NodeProps<ShapeFlowNode>) {
             style={{ background: DIFF_COLOR[data.diff] }}
             data-testid={`diff-${data.elementId}`}
           >
-            {data.diff === 'added' ? 'new' : 'changed'}
+            {data.diff === 'added' ? 'new' : data.diff === 'removed' ? 'removed' : 'changed'}
           </span>
         </>
       )}
@@ -176,7 +184,11 @@ function IssueBadge({
 
 function Label({ data, className }: { data: ShapeFlowNode['data']; className: string }) {
   if (data.editing) return <NameInput id={data.elementId} initial={data.name} />;
-  return <span className={className}>{data.name}</span>;
+  return (
+    <span className={className} data-role="label">
+      {data.name}
+    </span>
+  );
 }
 
 /** Inline rename. Enter or blur saves, Escape cancels. */

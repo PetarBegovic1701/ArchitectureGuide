@@ -1,0 +1,25 @@
+flowchart LR
+  actor__customer(["Customer<br/><small>User / actor</small>"])
+  subgraph db__orders_db["Orders DB"]
+    jobs__events>"events<br/><small>Postgres job queue</small>"]
+    subgraph schema__orders["orders"]
+      tbl__orders["orders<br/><small>Table</small>"]
+      tbl__outbox["outbox<br/><small>Table</small>"]
+    end
+  end
+  subgraph svc__orders["Orders"]
+    ctl__orders_routes("Orders routes<br/><small>Controller / route handler</small>")
+    mw__auth_middleware("Auth middleware<br/><small>Middleware</small>")
+    uc__change_and_record_event("Change and record event<br/><small>Use case / application service</small>")
+  end
+  wrk__notifications["Notifications<br/><small>Background worker</small>"]
+  wrk__outbox_relay["Outbox relay<br/><small>Background worker</small>"]
+  actor__customer -->|"calls"| svc__orders
+  ctl__orders_routes -->|"calls"| uc__change_and_record_event
+  svc__orders -->|"migrates"| schema__orders
+  uc__change_and_record_event ==>|"writes"| tbl__orders
+  uc__change_and_record_event ==>|"writes"| tbl__outbox
+  wrk__notifications -.->|"processes"| jobs__events
+  wrk__outbox_relay -.->|"enqueues: order.placed, order.paid"| jobs__events
+  wrk__outbox_relay -->|"reads"| tbl__outbox
+  wrk__outbox_relay ==>|"writes: mark sent"| tbl__outbox

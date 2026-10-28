@@ -1,0 +1,26 @@
+@startuml
+!include <C4/C4_Container>
+
+title Realtime updates – containers
+
+Person(actor_customer, "Customer", "")
+System_Boundary(realtime, "Realtime updates") {
+  Container(app_web, "Web", "", "")
+  Container(svc_orders_api, "Orders API", "", "")
+  Container(wrk_worker, "Worker", "", "")
+  Container(ws_realtime_gateway, "Realtime gateway", "", "Authenticate socket connections; Push change signals to rooms")
+  ContainerDb(db_shop_db, "Shop DB", "", "")
+}
+
+Rel(actor_customer, app_web, "calls", "https")
+Rel(app_web, svc_orders_api, "calls", "https")
+Rel(app_web, ws_realtime_gateway, "calls: subscribe", "websocket")
+Rel(svc_orders_api, db_shop_db, "enqueues")
+Rel(svc_orders_api, db_shop_db, "notifies")
+Rel(svc_orders_api, db_shop_db, "writes")
+Rel(svc_orders_api, db_shop_db, "migrates")
+Rel(wrk_worker, db_shop_db, "processes")
+Rel(ws_realtime_gateway, db_shop_db, "listens")
+
+SHOW_LEGEND()
+@enduml

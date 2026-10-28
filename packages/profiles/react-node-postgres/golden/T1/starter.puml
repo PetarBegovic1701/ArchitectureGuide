@@ -1,0 +1,20 @@
+@startuml
+!include <C4/C4_Container>
+
+title Starter: React + Express + PostgreSQL – containers
+
+Person(actor_customer, "Customer", "")
+System_Boundary(starter, "Starter: React + Express + PostgreSQL") {
+  Container(app_shop, "Shop", "", "")
+  Container(svc_shop_api, "Shop API", "", "")
+  ContainerDb(db_shop_db, "Shop DB", "", "")
+}
+
+Rel(actor_customer, app_shop, "calls: uses")
+Rel(app_shop, svc_shop_api, "calls: REST /api", "http")
+Rel(svc_shop_api, db_shop_db, "migrates")
+Rel(svc_shop_api, db_shop_db, "reads")
+Rel(svc_shop_api, db_shop_db, "writes")
+
+SHOW_LEGEND()
+@enduml

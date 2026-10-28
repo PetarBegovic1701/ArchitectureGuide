@@ -32,7 +32,11 @@ export function templateOps(
   catalog: Catalog,
   project: Project,
   idOrCode: string,
-  options: { params?: Record<string, unknown>; origin?: { x: number; y: number } } = {},
+  options: {
+    params?: Record<string, unknown>;
+    origin?: { x: number; y: number };
+    parentId?: Id;
+  } = {},
 ): { ops: ModelOp[]; ids: Map<string, Id> } | { errors: ToolProblem[] } {
   const template = findTemplate(catalog, idOrCode);
   if (!template) return { errors: [unknownTemplate(catalog, idOrCode)] };
@@ -40,6 +44,7 @@ export function templateOps(
     const r = instantiateTemplate(template, project, catalog, {
       params: options.params,
       origin: options.origin ?? { x: 40, y: 40 },
+      ...(options.parentId ? { parentId: options.parentId } : {}),
     });
     return { ops: r.ops, ids: r.ids };
   } catch (error) {

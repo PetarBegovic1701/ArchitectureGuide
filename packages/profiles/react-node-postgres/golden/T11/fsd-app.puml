@@ -1,0 +1,12 @@
+@startuml
+!include <C4/C4_Container>
+
+title Feature-Sliced React app – containers
+
+System_Boundary(fsd_app, "Feature-Sliced React app") {
+  Container(app_web, "Web", "", "")
+}
+
+
+SHOW_LEGEND()
+@enduml

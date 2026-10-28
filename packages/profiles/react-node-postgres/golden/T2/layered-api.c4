@@ -1,0 +1,88 @@
+specification {
+  element gen_actor {
+    notation 'User / actor'
+    style {
+      shape person
+    }
+  }
+  element node_middleware {
+    notation 'Middleware'
+  }
+  element node_repository {
+    notation 'Repository / data access'
+  }
+  element node_route_handler {
+    notation 'Controller / route handler'
+  }
+  element node_service {
+    notation 'Node service'
+  }
+  element node_use_case {
+    notation 'Use case / application service'
+  }
+  element pg_database {
+    notation 'Database'
+    style {
+      shape cylinder
+    }
+  }
+  element pg_schema {
+    notation 'Schema'
+    style {
+      shape cylinder
+    }
+  }
+  element pg_table {
+    notation 'Table'
+    style {
+      shape cylinder
+    }
+  }
+  relationship calls
+  relationship migrates
+  relationship reads
+  relationship writes
+}
+
+model {
+  actor_api_client = gen_actor 'API client'
+  db_database = pg_database 'Database' {
+    schema_app = pg_schema 'app' {
+      tbl_customers = pg_table 'customers'
+      tbl_orders = pg_table 'orders'
+    }
+  }
+  svc_orders_api = node_service 'Orders API' {
+    ctl_customer_routes = node_route_handler 'Customer routes'
+    ctl_order_routes = node_route_handler 'Order routes'
+    mw_auth_middleware = node_middleware 'Auth middleware' {
+      description 'Read the session cookie; Reject calls without a valid session'
+    }
+    repo_customer_repository = node_repository 'Customer repository'
+    repo_order_repository = node_repository 'Order repository'
+    uc_customer_service = node_use_case 'Customer service'
+    uc_order_service = node_use_case 'Order service'
+  }
+
+  actor_api_client -[calls]-> svc_orders_api 'calls'
+  svc_orders_api.ctl_customer_routes -[calls]-> svc_orders_api.uc_customer_service 'calls'
+  svc_orders_api.ctl_order_routes -[calls]-> svc_orders_api.uc_order_service 'calls'
+  svc_orders_api.repo_customer_repository -[reads]-> db_database.schema_app.tbl_customers 'reads'
+  svc_orders_api.repo_customer_repository -[writes]-> db_database.schema_app.tbl_customers 'writes'
+  svc_orders_api.repo_order_repository -[reads]-> db_database.schema_app.tbl_orders 'reads'
+  svc_orders_api.repo_order_repository -[writes]-> db_database.schema_app.tbl_orders 'writes'
+  svc_orders_api -[migrates]-> db_database.schema_app 'migrates'
+  svc_orders_api.uc_customer_service -[calls]-> svc_orders_api.repo_customer_repository 'calls'
+  svc_orders_api.uc_order_service -[calls]-> svc_orders_api.repo_order_repository 'calls'
+}
+
+views {
+  view index {
+    title 'Layered Node API'
+    include *
+  }
+  view main {
+    title 'Main'
+    include actor_api_client, svc_orders_api, svc_orders_api.mw_auth_middleware, db_database, db_database.schema_app, svc_orders_api.ctl_order_routes, svc_orders_api.uc_order_service, svc_orders_api.repo_order_repository, db_database.schema_app.tbl_orders, svc_orders_api.ctl_customer_routes, svc_orders_api.uc_customer_service, svc_orders_api.repo_customer_repository, db_database.schema_app.tbl_customers
+  }
+}

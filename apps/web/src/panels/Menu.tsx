@@ -36,7 +36,7 @@ export function Menu({
     <div className="relative" ref={ref} onKeyDown={(e) => e.key === 'Escape' && setOpen(false)}>
       <button
         type="button"
-        className="ag-touch flex items-center gap-1 rounded px-2 py-1 text-xs hover:bg-[var(--ag-panel-2)]"
+        className="ag-touch flex shrink-0 items-center gap-1 whitespace-nowrap rounded px-2 py-1 text-xs hover:bg-[var(--ag-panel-2)]"
         aria-haspopup="menu"
         aria-label={label}
         title={label}

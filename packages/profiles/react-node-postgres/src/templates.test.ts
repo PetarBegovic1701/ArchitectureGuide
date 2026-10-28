@@ -40,7 +40,21 @@ describe('templates', () => {
   it('have unique IDs and codes', () => {
     expect(new Set(TEMPLATES.map((t) => t.id)).size).toBe(TEMPLATES.length);
     expect(new Set(TEMPLATES.map((t) => t.code)).size).toBe(TEMPLATES.length);
-    expect(TEMPLATES.map((t) => t.code)).toEqual(['T1', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'T11']);
+    expect(TEMPLATES.map((t) => t.code)).toEqual([
+      'T1',
+      'T2',
+      'T3',
+      'T4',
+      'T5',
+      'T6',
+      'T7',
+      'T8',
+      'T9',
+      'T10',
+      'T11',
+      'T12',
+      'T13',
+    ]);
   });
 
   it.each(TEMPLATES.map((t) => [t.code, t] as const))(

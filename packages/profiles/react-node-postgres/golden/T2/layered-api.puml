@@ -1,0 +1,18 @@
+@startuml
+!include <C4/C4_Container>
+
+title Layered Node API – containers
+
+Person(actor_api_client, "API client", "")
+System_Boundary(layered_api, "Layered Node API") {
+  Container(svc_orders_api, "Orders API", "", "")
+  ContainerDb(db_database, "Database", "", "")
+}
+
+Rel(actor_api_client, svc_orders_api, "calls", "http")
+Rel(svc_orders_api, db_database, "reads")
+Rel(svc_orders_api, db_database, "writes")
+Rel(svc_orders_api, db_database, "migrates")
+
+SHOW_LEGEND()
+@enduml

@@ -1,0 +1,126 @@
+specification {
+  element gen_actor {
+    notation 'User / actor'
+    style {
+      shape person
+    }
+  }
+  element node_middleware {
+    notation 'Middleware'
+  }
+  element node_route_handler {
+    notation 'Controller / route handler'
+  }
+  element node_service {
+    notation 'Node service'
+  }
+  element node_worker {
+    notation 'Background worker'
+  }
+  element node_ws_gateway {
+    notation 'Realtime gateway'
+  }
+  element pg_channel {
+    notation 'LISTEN/NOTIFY channel'
+    style {
+      shape queue
+    }
+  }
+  element pg_database {
+    notation 'Database'
+    style {
+      shape cylinder
+    }
+  }
+  element pg_job_queue {
+    notation 'Postgres job queue'
+    style {
+      shape queue
+    }
+  }
+  element pg_schema {
+    notation 'Schema'
+    style {
+      shape cylinder
+    }
+  }
+  element react_api_client {
+    notation 'API client'
+  }
+  element react_app {
+    notation 'React app'
+  }
+  element react_route {
+    notation 'Route / page'
+    style {
+      shape browser
+    }
+  }
+  element react_server_state {
+    notation 'Server-state cache'
+  }
+  relationship calls
+  relationship enqueues {
+    line dashed
+  }
+  relationship fetches_via
+  relationship listens {
+    line dashed
+  }
+  relationship migrates
+  relationship notifies {
+    line dashed
+  }
+  relationship processes {
+    line dashed
+  }
+  relationship uses_state
+  relationship writes
+}
+
+model {
+  actor_customer = gen_actor 'Customer'
+  app_web = react_app 'Web' {
+    apic_api_client = react_api_client 'API client'
+    qcache_server_state_cache = react_server_state 'Server-state cache'
+    route_order_status = react_route 'Order status'
+  }
+  db_shop_db = pg_database 'Shop DB' {
+    chan_order_changed = pg_channel 'order_changed'
+    jobs_jobs = pg_job_queue 'jobs'
+    schema_public = pg_schema 'public'
+  }
+  svc_orders_api = node_service 'Orders API' {
+    ctl_order_routes = node_route_handler 'Order routes'
+    mw_auth_middleware = node_middleware 'Auth middleware' {
+      description 'Read the session cookie; Reject calls without a valid session'
+    }
+  }
+  wrk_worker = node_worker 'Worker'
+  ws_realtime_gateway = node_ws_gateway 'Realtime gateway' {
+    description 'Authenticate socket connections; Push change signals to rooms'
+  }
+
+  actor_customer -[calls]-> app_web 'calls'
+  app_web.apic_api_client -[calls]-> svc_orders_api 'calls'
+  app_web -[calls]-> ws_realtime_gateway 'subscribe'
+  svc_orders_api.ctl_order_routes -[enqueues]-> db_shop_db.jobs_jobs 'enqueues'
+  svc_orders_api.ctl_order_routes -[notifies]-> db_shop_db.chan_order_changed 'notifies'
+  svc_orders_api.ctl_order_routes -[writes]-> db_shop_db.schema_public 'writes'
+  app_web.qcache_server_state_cache -[fetches_via]-> app_web.apic_api_client 'fetches via'
+  app_web.route_order_status -[uses_state]-> app_web.qcache_server_state_cache 'uses state'
+  svc_orders_api -[migrates]-> db_shop_db.schema_public 'migrates'
+  wrk_worker -[processes]-> db_shop_db.jobs_jobs 'processes'
+  ws_realtime_gateway -[listens]-> db_shop_db.chan_order_changed 'listens'
+}
+
+views {
+  view index {
+    title 'Realtime updates'
+    include *
+  }
+  view main {
+    title 'Main'
+    include actor_customer, app_web, app_web.route_order_status, app_web.qcache_server_state_cache, app_web.apic_api_client, svc_orders_api, svc_orders_api.mw_auth_middleware, svc_orders_api.ctl_order_routes, ws_realtime_gateway, db_shop_db, db_shop_db.schema_public, db_shop_db.chan_order_changed, db_shop_db.jobs_jobs, wrk_worker
+  }
+}

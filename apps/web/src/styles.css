@@ -132,6 +132,18 @@ body {
 }
 
 /* Containers: only the header strip and the handles catch the pointer. */
+/* Change-set mode: what the change removes, from the baseline (§16.1). */
+.react-flow__node.ag-ghost {
+  opacity: 0.6;
+  text-decoration: line-through;
+  pointer-events: none;
+}
+
+/* Focus mode and filters: everything else steps back (§13.5). */
+.react-flow__node.ag-dimmed {
+  opacity: 0.18;
+}
+
 .react-flow__node.ag-container {
   pointer-events: none !important;
 }

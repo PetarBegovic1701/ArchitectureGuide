@@ -1,0 +1,72 @@
+specification {
+  element gen_actor {
+    notation 'User / actor'
+    style {
+      shape person
+    }
+  }
+  element node_middleware {
+    notation 'Middleware'
+  }
+  element node_route_handler {
+    notation 'Controller / route handler'
+  }
+  element node_service {
+    notation 'Node service'
+  }
+  element pg_database {
+    notation 'Database'
+    style {
+      shape cylinder
+    }
+  }
+  element pg_schema {
+    notation 'Schema'
+    style {
+      shape cylinder
+    }
+  }
+  relationship calls
+  relationship migrates
+  relationship reads
+  relationship writes
+}
+
+model {
+  actor_tenant_user = gen_actor 'Tenant user'
+  db_saas_db = pg_database 'SaaS DB' {
+    schema_app = pg_schema 'app' {
+      description 'Every table has tenant_id and a row-level security policy'
+    }
+    schema_control = pg_schema 'control' {
+      description 'Tenants, plans, users'
+    }
+  }
+  svc_saas_api = node_service 'SaaS API' {
+    ctl_project_routes = node_route_handler 'Project routes'
+    mw_auth_middleware = node_middleware 'Auth middleware' {
+      description 'Read the session cookie; Reject calls without a valid session'
+    }
+    mw_tenant_resolver = node_middleware 'Tenant resolver' {
+      description 'Find the tenant of the session; SET app.tenant_id for the transaction'
+    }
+  }
+
+  actor_tenant_user -[calls]-> svc_saas_api 'calls'
+  svc_saas_api.ctl_project_routes -[reads]-> db_saas_db.schema_app 'reads'
+  svc_saas_api.ctl_project_routes -[writes]-> db_saas_db.schema_app 'writes'
+  svc_saas_api.mw_tenant_resolver -[reads]-> db_saas_db.schema_control 'reads'
+  svc_saas_api -[migrates]-> db_saas_db.schema_app 'migrates'
+  svc_saas_api -[migrates]-> db_saas_db.schema_control 'migrates'
+}
+
+views {
+  view index {
+    title 'Multi-tenant SaaS'
+    include *
+  }
+  view main {
+    title 'Main'
+    include actor_tenant_user, svc_saas_api, svc_saas_api.mw_auth_middleware, svc_saas_api.mw_tenant_resolver, svc_saas_api.ctl_project_routes, db_saas_db, db_saas_db.schema_control, db_saas_db.schema_app
+  }
+}

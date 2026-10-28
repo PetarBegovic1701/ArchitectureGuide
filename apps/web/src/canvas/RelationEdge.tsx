@@ -58,7 +58,8 @@ function RelationEdgeImpl({ id, source, target, data, selected }: EdgeProps<Rela
         style={{
           stroke,
           strokeWidth: width,
-          strokeDasharray: line.dash,
+          strokeDasharray: data.diff === 'removed' ? '6 4' : line.dash,
+          ...(data.dimmed ? { opacity: 0.15 } : {}),
         }}
         {...(line.marker === 'diamond-tail'
           ? { markerStart: 'url(#ag-m-diamond)', markerEnd: 'url(#ag-m-arrow)' }
@@ -75,6 +76,8 @@ function RelationEdgeImpl({ id, source, target, data, selected }: EdgeProps<Rela
             borderWidth: data.highlighted ? 2 : 1,
             color: 'var(--ag-muted)',
             zIndex: 1100,
+            ...(data.dimmed ? { opacity: 0.2 } : {}),
+            ...(data.diff === 'removed' ? { textDecoration: 'line-through' } : {}),
           }}
           data-testid={`edge-label-${id}`}
           {...(data.issue ? { 'data-severity': data.issue.severity } : {})}

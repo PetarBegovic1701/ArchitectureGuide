@@ -1,0 +1,69 @@
+specification {
+  element group_layer {
+    notation 'Layer'
+  }
+  element react_api_client {
+    notation 'API client'
+  }
+  element react_app {
+    notation 'React app'
+  }
+  element react_feature {
+    notation 'Feature module'
+  }
+  element react_server_state {
+    notation 'Server-state cache'
+  }
+  relationship depends_on
+  relationship fetches_via
+  relationship uses_state
+}
+
+model {
+  app_web = react_app 'Web' {
+    apic_api_client = react_api_client 'API client'
+    layer_entities = group_layer 'entities' {
+      feat_product = react_feature 'Product'
+      feat_user = react_feature 'User'
+    }
+    layer_features = group_layer 'features' {
+      feat_cart = react_feature 'Cart'
+      feat_checkout = react_feature 'Checkout'
+      feat_search = react_feature 'Search'
+    }
+    layer_pages = group_layer 'pages' {
+      feat_home_page = react_feature 'Home page'
+    }
+    layer_shared = group_layer 'shared' {
+      feat_ui_kit = react_feature 'UI kit'
+    }
+    layer_widgets = group_layer 'widgets' {
+      feat_storefront = react_feature 'Storefront'
+    }
+    qcache_server_state_cache = react_server_state 'Server-state cache'
+  }
+
+  app_web.layer_features.feat_cart -[depends_on]-> app_web.layer_entities.feat_user 'depends on'
+  app_web.layer_features.feat_checkout -[depends_on]-> app_web.layer_entities.feat_product 'depends on'
+  app_web.layer_pages.feat_home_page -[depends_on]-> app_web.layer_widgets.feat_storefront 'depends on'
+  app_web.layer_entities.feat_product -[depends_on]-> app_web.layer_shared.feat_ui_kit 'depends on'
+  app_web.layer_entities.feat_product -[fetches_via]-> app_web.apic_api_client 'fetches via'
+  app_web.layer_entities.feat_product -[uses_state]-> app_web.qcache_server_state_cache 'uses state'
+  app_web.layer_features.feat_search -[depends_on]-> app_web.layer_entities.feat_user 'depends on'
+  app_web.layer_widgets.feat_storefront -[depends_on]-> app_web.layer_features.feat_cart 'depends on'
+  app_web.layer_widgets.feat_storefront -[depends_on]-> app_web.layer_features.feat_checkout 'depends on'
+  app_web.layer_widgets.feat_storefront -[depends_on]-> app_web.layer_features.feat_search 'depends on'
+  app_web.layer_entities.feat_user -[depends_on]-> app_web.layer_shared.feat_ui_kit 'depends on'
+  app_web.layer_entities.feat_user -[fetches_via]-> app_web.apic_api_client 'fetches via'
+}
+
+views {
+  view index {
+    title 'Feature-Sliced React app'
+    include *
+  }
+  view main {
+    title 'Main'
+    include app_web, app_web.layer_pages, app_web.layer_pages.feat_home_page, app_web.layer_widgets, app_web.layer_widgets.feat_storefront, app_web.layer_features, app_web.layer_features.feat_cart, app_web.layer_features.feat_checkout, app_web.layer_features.feat_search, app_web.layer_entities, app_web.layer_entities.feat_user, app_web.layer_entities.feat_product, app_web.layer_shared, app_web.layer_shared.feat_ui_kit, app_web.apic_api_client, app_web.qcache_server_state_cache
+  }
+}

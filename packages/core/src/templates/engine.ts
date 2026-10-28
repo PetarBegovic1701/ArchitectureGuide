@@ -96,6 +96,8 @@ export interface InstantiateOptions {
   origin?: { x: number; y: number };
   /** Status of the new elements and relations. Defaults to "planned". */
   status?: Element['status'];
+  /** Element the template's top-level elements go inside. */
+  parentId?: Id;
 }
 
 export interface Instantiated {
@@ -167,7 +169,11 @@ export function instantiateTemplate(
         kind,
         name,
         status,
-        ...(parent ? { parentId: id(parent, 'parent') } : {}),
+        ...(parent
+          ? { parentId: id(parent, 'parent') }
+          : options.parentId
+            ? { parentId: options.parentId }
+            : {}),
         ...(codePath && !extra.codePaths
           ? { codePaths: [fillPlaceholders(codePath, values)] }
           : {}),
@@ -197,13 +203,15 @@ export function instantiateTemplate(
   if (view) {
     for (const { el, spec } of elements) {
       const nested = spec.parent !== undefined;
+      // Inside a given parent: relative to it, below its header.
+      const inGiven = !nested && Boolean(options.parentId);
       ops.push({
         op: 'setViewNode',
         viewId: view.id,
         node: {
           elementId: el.id,
-          x: nested ? spec.x : origin.x + spec.x,
-          y: nested ? spec.y : origin.y + spec.y,
+          x: nested ? spec.x : inGiven ? 24 + spec.x : origin.x + spec.x,
+          y: nested ? spec.y : inGiven ? 56 + spec.y : origin.y + spec.y,
         },
       });
     }
@@ -230,7 +238,9 @@ export function instantiateTemplate(
     ops.push({ op: 'upsertTour', tour });
   }
 
-  const rootIds = elements.filter(({ el }) => !el.parentId).map(({ el }) => el.id);
+  const rootIds = elements
+    .filter(({ el }) => !el.parentId || el.parentId === options.parentId)
+    .map(({ el }) => el.id);
   ops.push({
     op: 'updateProject',
     patch: {

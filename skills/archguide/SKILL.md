@@ -14,14 +14,19 @@ editing the JSON by hand. When `npx archguide serve` runs, every change shows up
 1. Read the architecture: MCP `get_architecture` (use `focus` on the area you will change), or read
    `architecture/ARCHITECTURE.md`.
 2. Follow every line under "Invariants". Do not "fix" items listed under "Known issues".
-3. Model the change: `get_catalog` for the concepts, then `upsert_elements` and `upsert_relations`
-   (new items get `status: "planned"`), or `apply_template` for a whole pattern. The MCP prompt
-   `plan-feature` walks through it.
-4. Each write returns only the findings it introduced. Fix them (`apply_quick_fix`, or a better design)
+3. For a non-trivial feature, start a change set: `create_change_set` with a name and the feature as
+   the description. Pass its ID as `changeSetId` to every step below; the baseline stays as it is.
+   The MCP prompt `plan-feature` walks through it.
+4. Model the change: `get_catalog` for the concepts, then `upsert_elements` and `upsert_relations`
+   (new items get `status: "planned"`), or `apply_template` for a whole pattern.
+5. Each write returns only the findings it introduced. Fix them (`apply_quick_fix`, or a better design)
    or accept them on purpose with `suppress_finding` and a real reason. Record important choices with
-   `add_decision`.
-5. Run `validate_project`, then `export` with `format: "agent-md"` and `write: true` so
-   `ARCHITECTURE.md` stays current.
+   `add_decision`. `validate_project` with `changeSetId` until the change introduces no errors.
+6. `generate_tasks`, then `export` with `format: "plan-md"`, `changeSetId` and `write: true` (also
+   `speckit` or `kiro` if the repository uses them). Implement the tasks in order.
+7. When the code is done and `npx archguide check` passes, `update_change_set` with
+   `status: "implemented"` merges the change into the model. Then `export` agent-md with `write: true`
+   so `ARCHITECTURE.md` stays current.
 
 ## After a structural change
 

@@ -1,0 +1,23 @@
+@startuml
+!include <C4/C4_Container>
+
+title Transactional outbox on PostgreSQL – containers
+
+Person(actor_customer, "Customer", "")
+System_Boundary(outbox, "Transactional outbox on PostgreSQL") {
+  Container(svc_orders, "Orders", "", "")
+  Container(wrk_notifications, "Notifications", "", "")
+  Container(wrk_outbox_relay, "Outbox relay", "", "Read unsent outbox rows in order; Publish them; Mark them sent")
+  ContainerDb(db_orders_db, "Orders DB", "", "")
+}
+
+Rel(actor_customer, svc_orders, "calls", "http")
+Rel(svc_orders, db_orders_db, "migrates")
+Rel(svc_orders, db_orders_db, "writes")
+Rel(wrk_notifications, db_orders_db, "processes")
+Rel(wrk_outbox_relay, db_orders_db, "enqueues: order.placed, order.paid")
+Rel(wrk_outbox_relay, db_orders_db, "reads")
+Rel(wrk_outbox_relay, db_orders_db, "writes: mark sent")
+
+SHOW_LEGEND()
+@enduml

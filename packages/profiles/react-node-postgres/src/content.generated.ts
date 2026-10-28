@@ -2400,6 +2400,80 @@ export const DOCS: LearningDoc[] = [
     "source": "content/docs/pattern.bff.md"
   },
   {
+    "id": "pattern.cqrs",
+    "kind": "pattern",
+    "title": "CQRS-lite on PostgreSQL",
+    "summary": "Commands change the write tables; a projector keeps read models (projection tables and materialized views) up to date; queries read only the read models.",
+    "level": "senior",
+    "tracks": [
+      "patterns",
+      "data-and-models"
+    ],
+    "tags": [
+      "cqrs",
+      "read-model",
+      "projection",
+      "materialized-view",
+      "eventual-consistency"
+    ],
+    "explain": {
+      "beginner": "Some screens need data in a very different shape from how it is saved: a dashboard with\ntotals per day, a list that joins five tables. Computing that on every request is slow.\n\nCQRS (\"command query responsibility segregation\") splits the two sides:\n\n- **Commands** (place order, cancel order) change the normal tables: the **write model**.\n- A **projector** builds **read models** from those tables: tables or materialized views\n  shaped exactly for a screen.\n- **Queries** read only the read models.\n\nThe read models are a little behind the writes, usually by milliseconds to seconds.",
+      "intermediate": "- Trigger the projector with a job enqueued in the command's transaction (or from an\n  outbox), so no change is missed.\n- A materialized view is the simplest read model: `REFRESH MATERIALIZED VIEW\nCONCURRENTLY` rebuilds it without blocking readers (it needs a unique index).\n- Projection tables updated row by row scale better than refreshing a whole view.\n- Make projections idempotent and rebuildable: you will need to rebuild them when their\n  shape changes.\n- Screens must handle the lag: after a command, show the command's result, not a fresh\n  query of the read model.",
+      "senior": "\"CQRS-lite\" keeps one database and one service; it does not require event sourcing. Add\nit per screen where reads hurt, not for the whole system. Watch projector lag as a\nmetric. For heavy analytics, a replica or a separate analytical store may be the better\nread side. Keep read models in the service's own schema so ownership stays clear."
+    },
+    "analogy": "A shop's sales ledger is the write model; the weekly sales poster in the back office is\na read model. Someone updates the poster from the ledger; nobody writes sales directly\nonto the poster.",
+    "mistakes": [
+      "Route handlers writing read models directly.",
+      "Read models that cannot be rebuilt from the write tables.",
+      "Applying CQRS to simple CRUD screens.",
+      "Screens that query the read model right after a command and show stale data."
+    ],
+    "examples": [
+      {
+        "title": "A read model as a materialized view, refreshed without blocking readers",
+        "language": "sql",
+        "code": "CREATE MATERIALIZED VIEW sales_by_day AS\n  SELECT date_trunc('day', created_at) AS day, sum(total_cents) AS total_cents\n  FROM orders GROUP BY 1;\nCREATE UNIQUE INDEX ON sales_by_day (day);\nREFRESH MATERIALIZED VIEW CONCURRENTLY sales_by_day;"
+      }
+    ],
+    "related": [
+      "pg.view",
+      "pg.table",
+      "pg.job-queue",
+      "node.worker",
+      "node.use-case",
+      "topic.models",
+      "pattern.outbox"
+    ],
+    "references": [
+      {
+        "title": "Martin Fowler — CQRS",
+        "url": "https://martinfowler.com/bliki/CQRS.html"
+      },
+      {
+        "title": "Microsoft — CQRS pattern",
+        "url": "https://learn.microsoft.com/en-us/azure/architecture/patterns/cqrs"
+      },
+      {
+        "title": "PostgreSQL docs — Materialized views",
+        "url": "https://www.postgresql.org/docs/current/rules-materializedviews.html"
+      }
+    ],
+    "quiz": [
+      {
+        "question": "Who should write a read model?",
+        "options": [
+          "Any route handler that needs it",
+          "Only the projector that derives it from the write tables",
+          "The browser",
+          "Nobody; read models are views only"
+        ],
+        "answer": 1,
+        "explanation": "Read models are derived data. If request code writes them directly they drift from the write tables, and they can no longer be rebuilt from scratch."
+      }
+    ],
+    "source": "content/docs/pattern.cqrs.md"
+  },
+  {
     "id": "pattern.database-per-service",
     "kind": "pattern",
     "title": "Database per service",
@@ -2750,6 +2824,252 @@ export const DOCS: LearningDoc[] = [
     "source": "content/docs/pattern.modular-monolith.md"
   },
   {
+    "id": "pattern.multi-tenant",
+    "kind": "pattern",
+    "title": "Multi-tenant SaaS on PostgreSQL",
+    "summary": "Many customer organizations share one deployment; each request is tied to a tenant, and PostgreSQL keeps tenants apart with row-level security or one schema per tenant.",
+    "level": "senior",
+    "tracks": [
+      "patterns",
+      "auth",
+      "data-and-models"
+    ],
+    "tags": [
+      "multi-tenancy",
+      "row-level-security",
+      "rls",
+      "search-path",
+      "saas"
+    ],
+    "explain": {
+      "beginner": "A SaaS product serves many customer organizations — **tenants** — from one\ndeployment. The most important rule: a tenant must never see another tenant's data.\n\nEvery request is first tied to a tenant (from the logged-in user). Then the database\nkeeps tenants apart, in one of two ways:\n\n- **Row-level security (rls):** all tenants share the tables; every row has a\n  `tenant_id`, and a policy lets each transaction see only its tenant's rows.\n- **Schema per tenant:** each tenant gets its own copy of the schema; the request\n  switches to it.",
+      "intermediate": "- Set the tenant per transaction: `SET LOCAL app.tenant_id = '…'` (rls) or\n  `SET LOCAL search_path = tenant_acme` (schema per tenant). With a connection pool,\n  never set it per session.\n- The application's database role must not own the tables and must not have\n  `BYPASSRLS`, or the policies do not apply.\n- Index `tenant_id` first in composite indexes.\n- Background jobs carry the tenant ID in their payload and set it before touching data.\n- Keep shared data (plans, tenants, users) in a separate control schema.",
+      "senior": "rls scales to many small tenants with simple migrations; schema-per-tenant gives\nstronger separation, per-tenant restore and per-tenant customization, but migrations\nrun N times and the catalog grows with tenants (thousands of schemas strain tools).\nLarge or regulated tenants may need their own database — a hybrid is common. Test\nisolation explicitly: a test that runs as tenant A must never read tenant B's rows."
+    },
+    "analogy": "An apartment building: everyone shares the structure, but each key opens only one\napartment. Row-level security is the lock on each door, not a sign asking people to\nstay out.",
+    "mistakes": [
+      "Relying only on WHERE clauses in application code.",
+      "Setting the tenant on a pooled connection for the session instead of the transaction.",
+      "Running the app as the table owner (policies are skipped).",
+      "Jobs without a tenant ID."
+    ],
+    "examples": [
+      {
+        "title": "A row-level security policy for one table",
+        "language": "sql",
+        "code": "ALTER TABLE projects ENABLE ROW LEVEL SECURITY;\nCREATE POLICY tenant_isolation ON projects\n  USING (tenant_id = current_setting('app.tenant_id')::uuid)\n  WITH CHECK (tenant_id = current_setting('app.tenant_id')::uuid);"
+      },
+      {
+        "title": "Set the tenant for one transaction",
+        "language": "ts",
+        "code": "await prisma.$transaction(async (tx) => {\n  await tx.$executeRaw`SELECT set_config('app.tenant_id', ${tenantId}, true)`;\n  return tx.project.findMany();\n});"
+      }
+    ],
+    "related": [
+      "pg.schema",
+      "node.middleware",
+      "topic.authentication",
+      "pg.table",
+      "pattern.database-per-service"
+    ],
+    "references": [
+      {
+        "title": "PostgreSQL docs — Row security policies",
+        "url": "https://www.postgresql.org/docs/current/ddl-rowsecurity.html"
+      },
+      {
+        "title": "AWS — Multi-tenant data isolation with PostgreSQL row level security",
+        "url": "https://aws.amazon.com/blogs/database/multi-tenant-data-isolation-with-postgresql-row-level-security/"
+      },
+      {
+        "title": "PostgreSQL docs — Schemas and the search path",
+        "url": "https://www.postgresql.org/docs/current/ddl-schemas.html"
+      }
+    ],
+    "quiz": [
+      {
+        "question": "Why let the database enforce tenant isolation instead of adding WHERE tenant_id = ... in every query?",
+        "options": [
+          "It is faster",
+          "One forgotten WHERE clause would leak another tenant's data; a policy cannot be forgotten",
+          "ORMs cannot write WHERE clauses",
+          "It is required by law"
+        ],
+        "answer": 1,
+        "explanation": "With row-level security the database filters every query by the tenant set for the transaction, so a missing filter in code does not leak data."
+      }
+    ],
+    "source": "content/docs/pattern.multi-tenant.md"
+  },
+  {
+    "id": "pattern.outbox",
+    "kind": "pattern",
+    "title": "Transactional outbox",
+    "summary": "The service writes its data and the event about it to an outbox table in one transaction; a relay publishes the outbox rows afterwards, so no event is lost or invented.",
+    "level": "intermediate",
+    "tracks": [
+      "patterns",
+      "concurrency-and-parallelism"
+    ],
+    "tags": [
+      "outbox",
+      "events",
+      "dual-write",
+      "at-least-once",
+      "idempotency"
+    ],
+    "explain": {
+      "beginner": "A service often has to do two things when something happens: save the change, and tell\nothers about it (\"order placed\"). If it saves and then sends, a crash in between loses\nthe message. If it sends and then saves, a failed save leaves a message about an order\nthat does not exist. This is the **dual-write problem**.\n\nThe outbox fixes it with one rule: write the message into a table, the **outbox**, in the\n**same transaction** as the data. Either both are saved or neither is. A separate\n**relay** reads the outbox and publishes the messages, then marks them as sent.",
+      "intermediate": "- The outbox row holds the event type (topic), a payload with IDs and the facts the\n  consumer needs, and a `sent_at` column.\n- The relay reads unsent rows in order (`ORDER BY id`) and in small batches; with several\n  relay instances use `FOR UPDATE SKIP LOCKED`.\n- Delivery is **at least once**: a relay that crashes after publishing sends the event\n  again. Give each event an ID and make consumers idempotent.\n- If the target is a PostgreSQL job queue in the same database, the relay can enqueue\n  and mark the row sent in one transaction. For an external broker (Kafka, RabbitMQ) it\n  publishes first and marks after.\n- Delete or archive sent rows on a schedule so the table stays small.",
+      "senior": "Change data capture (Debezium reading the write-ahead log) can replace the polling relay:\nlower latency, no polling load, and the order of the log is the order of commits. Polling\nis simpler to run and good up to thousands of events per second. Keep event schemas\nversioned, and do not leak the service's table shapes into events: an event is a\npublic contract. Ordering per aggregate (all events of order 42 in order) usually\nmatters; global ordering rarely does — partition by aggregate ID."
+    },
+    "analogy": "A shop writes every parcel into its outgoing-mail book in the same moment it packs the\nparcel. The courier works from the book. A parcel can be sent twice if the courier\nforgets to tick it off, but never lost.",
+    "mistakes": [
+      "Publishing to the broker inside the database transaction (the broker does not roll back).",
+      "A relay that marks rows sent before publishing (lost events on a crash).",
+      "Consumers that are not idempotent.",
+      "Putting whole database rows into the event instead of a designed payload."
+    ],
+    "examples": [
+      {
+        "title": "Write the data and the event in one transaction (Prisma)",
+        "language": "ts",
+        "code": "await prisma.$transaction(async (tx) => {\n  const order = await tx.order.create({ data: { customerId, totalCents } });\n  await tx.outbox.create({\n    data: { topic: 'order.placed', payload: { orderId: order.id, totalCents } },\n  });\n});"
+      },
+      {
+        "title": "The relay takes a batch safely",
+        "language": "sql",
+        "code": "SELECT id, topic, payload FROM outbox\nWHERE sent_at IS NULL\nORDER BY id\nFOR UPDATE SKIP LOCKED\nLIMIT 100;"
+      }
+    ],
+    "related": [
+      "pattern.background-jobs",
+      "pg.table",
+      "pg.job-queue",
+      "node.worker",
+      "gen.other-broker",
+      "publishes",
+      "topic.transactions-and-isolation"
+    ],
+    "references": [
+      {
+        "title": "microservices.io — Transactional outbox",
+        "url": "https://microservices.io/patterns/data/transactional-outbox.html"
+      },
+      {
+        "title": "Debezium — Outbox event router",
+        "url": "https://debezium.io/documentation/reference/stable/transformations/outbox-event-router.html"
+      },
+      {
+        "title": "PostgreSQL docs — SELECT ... FOR UPDATE SKIP LOCKED",
+        "url": "https://www.postgresql.org/docs/current/sql-select.html#SQL-FOR-UPDATE-SHARE"
+      }
+    ],
+    "quiz": [
+      {
+        "question": "The order is saved, then the service crashes before it publishes \"order.placed\" to the broker. What does the outbox change?",
+        "options": [
+          "Nothing; the event is lost",
+          "The event row was committed with the order, so the relay publishes it later",
+          "The broker rolls back the order",
+          "The order is deleted on restart"
+        ],
+        "answer": 1,
+        "explanation": "The outbox row is part of the same transaction as the order. If the order exists, its event exists too, and the relay sends it when it runs again."
+      },
+      {
+        "question": "The relay publishes an event, then crashes before it marks the row as sent. What happens?",
+        "options": [
+          "The event is lost",
+          "The event is published again, so consumers must handle duplicates",
+          "The broker removes the duplicate",
+          "The database rolls back the publish"
+        ],
+        "answer": 1,
+        "explanation": "An outbox gives at-least-once delivery. Consumers must be idempotent, for example by remembering the event IDs they handled."
+      }
+    ],
+    "source": "content/docs/pattern.outbox.md"
+  },
+  {
+    "id": "pattern.realtime",
+    "kind": "pattern",
+    "title": "Realtime updates with LISTEN/NOTIFY",
+    "summary": "The browser keeps a WebSocket open to a realtime gateway; services signal changes with PostgreSQL NOTIFY, the gateway pushes them, and the browser reloads the data through the API.",
+    "level": "intermediate",
+    "tracks": [
+      "patterns",
+      "api-design"
+    ],
+    "tags": [
+      "websocket",
+      "socket.io",
+      "listen-notify",
+      "realtime",
+      "push"
+    ],
+    "explain": {
+      "beginner": "Normally the browser asks the server for data. For live screens (order status, chat,\ndashboards) the server should tell the browser when something changes. A **WebSocket**\nkeeps a connection open so the server can push.\n\nWith PostgreSQL you get the \"something changed\" signal for free: a service runs\n`NOTIFY order_changed, '42'` in the transaction that changes order 42. A **realtime\ngateway** runs `LISTEN order_changed` and pushes the signal to the browsers that watch\norder 42. The browser then reloads the order through the normal API.",
+      "intermediate": "- NOTIFY is delivered only after the transaction commits, and only to sessions that\n  are listening right now. Messages are not stored.\n- Keep payloads small (IDs). The limit is about 8000 bytes.\n- The gateway needs one dedicated connection for LISTEN; transaction-mode poolers\n  (PgBouncer) do not support LISTEN.\n- Authenticate every socket connection and check that a user may join a room.\n- In the browser, invalidate the server-state cache entry on a signal instead of\n  patching data by hand.\n- Work that must happen (sending a receipt) goes through a job queue, not NOTIFY.",
+      "senior": "Scale the gateway horizontally with a shared adapter (the socket.io Postgres or Redis\nadapter) so a signal reaches clients on every instance. Clients reconnect after\nnetwork drops and must refetch, because signals sent while they were away are gone.\nAt high message rates move to a dedicated pub/sub or a managed realtime service; keep\nthe \"signal, then reload\" contract so the client code does not change."
+    },
+    "analogy": "A doorbell: it tells you someone is at the door, not what they brought. You open the\ndoor (the API) to see.",
+    "mistakes": [
+      "Sending whole rows in NOTIFY.",
+      "Using NOTIFY for work that must not be lost.",
+      "A gateway that does not authenticate sockets.",
+      "LISTEN through a transaction-pooling connection."
+    ],
+    "examples": [
+      {
+        "title": "Signal in the same transaction as the change",
+        "language": "sql",
+        "code": "BEGIN;\nUPDATE orders SET status = 'paid' WHERE id = 42;\nSELECT pg_notify('order_changed', '42');\nCOMMIT;"
+      },
+      {
+        "title": "Gateway: listen and push to the room of that order (socket.io)",
+        "language": "ts",
+        "code": "const client = await pool.connect();\nawait client.query('LISTEN order_changed');\nclient.on('notification', (msg) => {\n  io.to(`order:${msg.payload}`).emit('order_changed', { id: msg.payload });\n});"
+      }
+    ],
+    "related": [
+      "node.ws-gateway",
+      "pg.channel",
+      "notifies",
+      "listens",
+      "react.server-state",
+      "pattern.background-jobs"
+    ],
+    "references": [
+      {
+        "title": "PostgreSQL docs — NOTIFY",
+        "url": "https://www.postgresql.org/docs/current/sql-notify.html"
+      },
+      {
+        "title": "Socket.IO documentation",
+        "url": "https://socket.io/docs/v4/"
+      },
+      {
+        "title": "TanStack Query — Query invalidation",
+        "url": "https://tanstack.com/query/latest/docs/framework/react/guides/query-invalidation"
+      }
+    ],
+    "quiz": [
+      {
+        "question": "Why should a NOTIFY message only say \"order 42 changed\" and not carry the whole order?",
+        "options": [
+          "NOTIFY payloads are limited and messages are lost when nobody listens, so the client reloads the real data",
+          "It is faster to send big messages",
+          "The browser cannot parse JSON",
+          "PostgreSQL forbids JSON in NOTIFY"
+        ],
+        "answer": 0,
+        "explanation": "NOTIFY is fire-and-forget with a payload limit of about 8 KB. Use it as a signal; the source of truth stays in the tables and the API."
+      }
+    ],
+    "source": "content/docs/pattern.realtime.md"
+  },
+  {
     "id": "pattern.starter",
     "kind": "pattern",
     "title": "Starter: React app, Node API, PostgreSQL",
@@ -2823,6 +3143,83 @@ export const DOCS: LearningDoc[] = [
       }
     ],
     "source": "content/docs/pattern.starter.md"
+  },
+  {
+    "id": "pattern.type-safe-monorepo",
+    "kind": "pattern",
+    "title": "Type-safe monorepo",
+    "summary": "The React app and the Node API live in one repository and share one API contract (tRPC router types or an OpenAPI document with zod schemas), so a breaking change fails the build.",
+    "level": "intermediate",
+    "tracks": [
+      "patterns",
+      "api-design"
+    ],
+    "tags": [
+      "monorepo",
+      "trpc",
+      "openapi",
+      "zod",
+      "drizzle",
+      "end-to-end-types"
+    ],
+    "explain": {
+      "beginner": "When the React app and the API are written by the same team in TypeScript, they can\nshare one definition of the API: the **contract**. The server implements it; the\nclient is typed from it. If someone renames a field on the server, the app does not\ncompile until it is fixed — the mistake never reaches users.\n\nTwo common styles:\n\n- **tRPC:** the client imports the router's _types_ and calls procedures like functions.\n- **OpenAPI:** the contract is an OpenAPI document (often generated from zod schemas),\n  and a typed client is generated from it.",
+      "intermediate": "- Put the contract in its own package (`packages/contract`) with only zod schemas and\n  types — no server code, no database client.\n- Validate every request on the server with the same schemas.\n- The app calls the API only through the typed client; no hand-written `fetch` calls.\n- Drizzle gives typed queries and migrations (drizzle-kit) on the server side.\n- Build and type-check the workspace in CI, so a contract change is checked against\n  every consumer.",
+      "senior": "Shared types couple deploys: an app built against the new contract may talk to an old\nAPI. Deploy API first with additive changes, or version the contract. For public or\nthird-party clients prefer OpenAPI with explicit versioning over tRPC. Keep the\ncontract small and stable; internal server types do not belong in it."
+    },
+    "analogy": "Two teams building a bridge from both banks from one set of drawings: if the drawing\nchanges, both sides see it before the pieces are made.",
+    "mistakes": [
+      "Importing server modules into the app \"just for a type\".",
+      "Validating on the client but not on the server.",
+      "Hand-written fetch calls next to the typed client."
+    ],
+    "examples": [
+      {
+        "title": "A shared schema, used by the server and typed on the client (tRPC)",
+        "language": "ts",
+        "code": "// packages/contract/src/order.ts\nexport const CreateOrder = z.object({\n  productId: z.string().uuid(),\n  quantity: z.number().int().min(1),\n});\n\n// apps/api/src/router.ts\nexport const appRouter = router({\n  createOrder: protectedProcedure\n    .input(CreateOrder)\n    .mutation(({ input, ctx }) => createOrder(ctx, input)),\n});\nexport type AppRouter = typeof appRouter;\n\n// apps/web/src/api.ts\nexport const api = createTRPCReact<AppRouter>();"
+      }
+    ],
+    "related": [
+      "node.contract",
+      "react.api-client",
+      "node.dto",
+      "node.service",
+      "react.app",
+      "pattern.starter"
+    ],
+    "references": [
+      {
+        "title": "tRPC documentation",
+        "url": "https://trpc.io/docs"
+      },
+      {
+        "title": "OpenAPI Specification",
+        "url": "https://spec.openapis.org/oas/latest.html"
+      },
+      {
+        "title": "Zod documentation",
+        "url": "https://zod.dev/"
+      },
+      {
+        "title": "Drizzle ORM documentation",
+        "url": "https://orm.drizzle.team/docs/overview"
+      }
+    ],
+    "quiz": [
+      {
+        "question": "What may the React app import from the server side of the monorepo?",
+        "options": [
+          "The route handlers",
+          "The database client",
+          "Only the contract package (types and schemas)",
+          "Anything, it is one repository"
+        ],
+        "answer": 2,
+        "explanation": "Browser code must not import server code. The contract package holds only shapes and types, so it is safe to share."
+      }
+    ],
+    "source": "content/docs/pattern.type-safe-monorepo.md"
   },
   {
     "id": "pg.channel",

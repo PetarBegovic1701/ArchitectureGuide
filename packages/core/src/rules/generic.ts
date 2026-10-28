@@ -40,6 +40,11 @@ export const RULE_PACKS: RulePack[] = [
   { id: 'layered', name: 'Layered', description: 'Layers are not skipped.' },
   { id: 'hexagonal', name: 'Hexagonal', description: 'The domain depends on nothing outside it.' },
   { id: 'fsd', name: 'Feature-Sliced Design', description: 'Features do not import each other.' },
+  {
+    id: 'cqrs',
+    name: 'CQRS',
+    description: 'Only projectors write read models; queries read them.',
+  },
 ];
 
 /** Packs a new project starts with; architecture-style packs come with templates. */

@@ -1,0 +1,59 @@
+archguide: 1
+project: realtime
+profile: react-node-postgres
+patterns:
+  - realtime
+revision: 0
+elements:
+  - { id: actor.customer, kind: gen.actor, name: Customer }
+  - { id: apic.api-client, kind: react.api-client, name: API client, parent: app.web, layer: presentation }
+  - { id: app.web, kind: react.app, name: Web, layer: presentation }
+  - { id: qcache.server-state-cache, kind: react.server-state, name: Server-state cache, parent: app.web, layer: presentation }
+  - { id: route.order-status, kind: react.route, name: Order status, parent: app.web, layer: presentation }
+  - { id: ctl.order-routes, kind: node.route-handler, name: Order routes, parent: svc.orders-api, layer: application }
+  - { id: mw.auth-middleware, kind: node.middleware, name: Auth middleware, parent: svc.orders-api, layer: application, does: [ Read the session cookie, Reject calls without a valid session ] }
+  - { id: svc.orders-api, kind: node.service, name: Orders API, layer: application }
+  - { id: wrk.worker, kind: node.worker, name: Worker, layer: application }
+  - { id: ws.realtime-gateway, kind: node.ws-gateway, name: Realtime gateway, layer: application, does: [ Authenticate socket connections, Push change signals to rooms ] }
+  - { id: chan.order-changed, kind: pg.channel, name: order_changed, parent: db.shop-db, layer: data }
+  - { id: db.shop-db, kind: pg.database, name: Shop DB, layer: data }
+  - { id: jobs.jobs, kind: pg.job-queue, name: jobs, parent: db.shop-db, layer: data }
+  - { id: schema.public, kind: pg.schema, name: public, parent: db.shop-db, layer: data, ownedBy: svc.orders-api }
+relations:
+  - [ actor.customer, calls, app.web, { protocol: https } ]
+  - [ apic.api-client, calls, svc.orders-api, { protocol: https } ]
+  - [ app.web, calls, ws.realtime-gateway, { protocol: websocket, label: subscribe, auth: session-cookie } ]
+  - [ ctl.order-routes, enqueues, jobs.jobs, { inTransaction: true } ]
+  - [ ctl.order-routes, notifies, chan.order-changed, { inTransaction: true } ]
+  - [ ctl.order-routes, writes, schema.public, { via: prisma, inTransaction: true } ]
+  - [ qcache.server-state-cache, fetches-via, apic.api-client ]
+  - [ route.order-status, uses-state, qcache.server-state-cache ]
+  - [ svc.orders-api, migrates, schema.public ]
+  - [ wrk.worker, processes, jobs.jobs ]
+  - [ ws.realtime-gateway, listens, chan.order-changed ]
+invariants:
+  - NOTIFY messages MUST only signal that something changed; clients MUST reload the data through the API. (T10)
+  - Work that must not be lost MUST go through the job queue, not NOTIFY. (T10)
+  - The realtime gateway MUST authenticate every connection. (T10)
+  - Only `svc.orders-api` MAY write `schema.public`. Only `svc.orders-api` MAY run migrations on it. (ownership)
+  - Browser code MUST NOT read or write a database directly. (AP-002)
+  - Modules MUST NOT depend on each other in a cycle. (AP-003)
+  - Services MUST NOT call each other synchronously in a cycle. (AP-006)
+  - Synchronous call chains between services MUST stay at most 4 services long. (AP-007)
+  - Consumers MUST move messages that keep failing to a dead-letter queue. (AP-012)
+  - Sensitive data (PII, secrets) MUST NOT be reachable from browser code. (AP-015)
+  - Consumers MUST NOT call the publisher of a message back synchronously. (AP-017)
+  - Each PostgreSQL schema MUST have one writing service; other services use its API or events. (RNP-001)
+  - Each schema MUST have exactly one migration owner. (RNP-002)
+  - Jobs MUST be enqueued in the same transaction as their data; messages to other brokers go through an outbox. (RNP-007)
+  - Horizontally scaled or serverless services MUST connect to PostgreSQL through a connection pooler. (RNP-009)
+  - Work that must happen MUST go through a job queue, not LISTEN/NOTIFY. (RNP-010)
+  - The React app MUST call at most 2 Node services directly; use a BFF beyond that. (RNP-011)
+  - Route handlers MUST validate every request with a schema (zod or similar). (RNP-015)
+  - Services reachable from the browser MUST authenticate callers (auth middleware, gateway or auth provider). (RNP-016)
+  - Writes to rows that several writers change MUST use a row lock or an optimistic version check. (RNP-019)
+  - The connection pools of all services together MUST stay below 80% of max_connections, or go through a pooler. (RNP-020)
+  - CPU-heavy work MUST NOT run on the event loop of a request-serving process; use worker threads or a worker. (RNP-021)
+  - Serializable transactions MUST be retried on SQLSTATE 40001. (RNP-022)
+  - Auth tokens MUST NOT be stored in localStorage or sessionStorage. (RNP-026)
+known_issues: []

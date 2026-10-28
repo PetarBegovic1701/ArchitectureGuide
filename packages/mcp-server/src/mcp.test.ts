@@ -57,6 +57,11 @@ describe('MCP tools', () => {
       [
         'add_annotation',
         'analyze_repository',
+        'create_change_set',
+        'generate_tasks',
+        'get_change_set',
+        'list_change_sets',
+        'update_change_set',
         'apply_analysis',
         'diff_with_repository',
         'generate_enforcement',
@@ -382,6 +387,166 @@ describe('MCP resources and prompts', () => {
     expect(prompts.map((p) => p.name)).toEqual(['plan-feature', 'map-repository', 'review-change']);
     const p = await client.getPrompt({ name: 'plan-feature', arguments: { feature: 'Refunds' } });
     expect((p.messages[0]!.content as { text: string }).text).toContain('Refunds');
+  });
+});
+
+describe('MCP change sets (plan-feature end to end)', () => {
+  beforeEach(async () => {
+    await call('create_project', { id: 'shop', name: 'Shop' });
+    await call('upsert_elements', {
+      elements: [
+        {
+          id: 'svc.orders',
+          kind: 'node.service',
+          name: 'Orders',
+          status: 'existing',
+          codePaths: ['services/orders'],
+        },
+        { id: 'db.shop', kind: 'pg.database', name: 'Shop DB', status: 'existing' },
+        {
+          id: 'schema.orders',
+          kind: 'pg.schema',
+          name: 'orders',
+          parentId: 'db.shop',
+          status: 'existing',
+        },
+      ],
+    });
+    await call('upsert_relations', {
+      relations: [
+        { sourceId: 'svc.orders', targetId: 'schema.orders', type: 'migrates' },
+        { sourceId: 'svc.orders', targetId: 'schema.orders', type: 'writes' },
+      ],
+    });
+  });
+
+  it('records edits into a change set, checks them, orders the tasks and writes the plan', async () => {
+    const baseline = await onDisk();
+    const created = await call('create_change_set', {
+      name: 'Send receipts',
+      description: 'Email a receipt after an order is paid.',
+    });
+    expect(created).toMatchObject({ ok: true, data: { id: 'cs.send-receipts' } });
+    const changeSetId = 'cs.send-receipts';
+
+    const els = await call('upsert_elements', {
+      changeSetId,
+      elements: [
+        { id: 'wrk.mailer', kind: 'node.worker', name: 'Mailer', codePaths: ['services/mailer'] },
+        { id: 'jobs.mail', kind: 'pg.job-queue', name: 'mail', parentId: 'db.shop' },
+        { id: 'svc.billing', kind: 'node.service', name: 'Billing' },
+      ],
+    });
+    expect(els.ok).toBe(true);
+    expect(els.hints?.join(' ')).toMatch(/Recorded into change set "cs.send-receipts"/);
+    const rels = await call('upsert_relations', {
+      changeSetId,
+      relations: [
+        {
+          sourceId: 'svc.orders',
+          targetId: 'jobs.mail',
+          type: 'enqueues',
+          label: 'receipt.send',
+          inTransaction: true,
+        },
+        { sourceId: 'wrk.mailer', targetId: 'jobs.mail', type: 'processes', label: 'receipt.send' },
+      ],
+    });
+    expect(rels.ok).toBe(true);
+    // A change introduces a finding: a second service writes the orders schema.
+    const bad = await call('upsert_relations', {
+      changeSetId,
+      relations: [{ sourceId: 'svc.billing', targetId: 'schema.orders', type: 'writes' }],
+    });
+    expect(bad.findings?.some((f) => f.targetIds.includes('schema.orders'))).toBe(true);
+    const checked = await call('validate_project', { changeSetId });
+    expect(checked.data.some((f: { introduced: boolean }) => f.introduced)).toBe(true);
+    expect(checked.hints?.join(' ')).toMatch(/introduced by change set/);
+    await call('remove_items', { changeSetId, ids: ['svc.billing'] });
+
+    // The baseline did not change; baseline + change set has the new parts.
+    const disk = await onDisk();
+    expect(disk.model).toEqual(baseline.model);
+    expect(disk.changeSets[0]!.ops.length).toBeGreaterThan(4);
+    const md = await call('get_architecture', { changeSetId });
+    expect(md.data).toContain('wrk.mailer');
+    expect((await call('get_architecture')).data).not.toContain('wrk.mailer');
+
+    const tasks = await call('generate_tasks', { changeSetId });
+    const titles = tasks.data.map((t: { title: string }) => t.title);
+    expect(titles.indexOf('Create jobs.mail')).toBeLessThan(titles.indexOf('Create wrk.mailer'));
+    expect(titles).toContain('Change svc.orders');
+    const got = await call('get_change_set', { changeSetId });
+    expect(got.data.ops[0]).toBe('Add wrk.mailer (node.worker)');
+    expect(got.data.tasks).toHaveLength(titles.length);
+    expect(got.data.conflicts).toEqual([]);
+    expect(
+      got.data.newFindings.some((f: { targetIds: string[] }) =>
+        f.targetIds.includes('schema.orders'),
+      ),
+    ).toBe(false);
+
+    const plan = await call('export', { format: 'plan-md', changeSetId, write: true });
+    expect(plan.ok).toBe(true);
+    const file = await readFile(join(ws.dir, 'plans', 'cs.send-receipts.md'), 'utf8');
+    expect(file).toContain('# Plan: Send receipts');
+    expect(file).toContain(
+      '| ADD | svc.orders enqueues jobs.mail | receipt.send; inTransaction: true |',
+    );
+    expect((await onDisk()).changeSets[0]!.status).toBe('ready');
+    const kiro = await call('export', { format: 'kiro', changeSetId, write: true });
+    expect(kiro.data.written[0]).toBe(
+      join(ws.dir, '..', '.kiro/specs/send-receipts/requirements.md'),
+    );
+    const resource = await client.readResource({
+      uri: 'archguide://projects/shop/change-sets/cs.send-receipts',
+    });
+    expect((resource.contents[0] as { text: string }).text).toBe(file);
+
+    // The agent built it: merge into the baseline.
+    const done = await call('update_change_set', { changeSetId, status: 'implemented' });
+    expect(done).toMatchObject({ ok: true, data: { status: 'implemented' } });
+    const merged = await onDisk();
+    expect(merged.model.elements.some((e) => e.id === 'wrk.mailer')).toBe(true);
+    expect(merged.changeSets[0]!.status).toBe('implemented');
+    expect(
+      await call('upsert_elements', {
+        changeSetId,
+        elements: [{ kind: 'node.worker', name: 'X' }],
+      }),
+    ).toMatchObject({ ok: false, errors: [{ code: 'CHANGE_SET_CLOSED' }] });
+  });
+
+  it('lists conflicts when the baseline moves, and drops them', async () => {
+    await call('create_change_set', { name: 'Audit', description: 'Audit log.' });
+    await call('upsert_relations', {
+      changeSetId: 'cs.audit',
+      relations: [{ sourceId: 'svc.orders', targetId: 'schema.orders', type: 'reads' }],
+    });
+    await call('remove_items', { ids: ['schema.orders'] });
+    const got = await call('get_change_set', { changeSetId: 'cs.audit' });
+    expect(got.data.stale).toBe(true);
+    // The relation, and its route in the view.
+    expect(got.data.conflicts.map((c: { op: string }) => c.op)).toEqual([
+      'Add svc.orders reads schema.orders',
+      expect.stringMatching(/^Route rel\.svc-orders-reads-schema-orders/),
+    ]);
+    expect(got.hints?.[0]).toMatch(/no longer apply/);
+    const refused = await call('update_change_set', {
+      changeSetId: 'cs.audit',
+      status: 'implemented',
+    });
+    expect(refused.ok).toBe(false);
+    const fixed = await call('update_change_set', {
+      changeSetId: 'cs.audit',
+      dropOps: got.data.conflicts.map((c: { index: number }) => c.index),
+      rebase: true,
+    });
+    expect(fixed.ok).toBe(true);
+    expect((await call('get_change_set', { changeSetId: 'cs.audit' })).data).toMatchObject({
+      stale: false,
+      conflicts: [],
+    });
   });
 });
 

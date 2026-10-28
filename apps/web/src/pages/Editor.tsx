@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { ReactFlowProvider } from '@xyflow/react';
 import {
   ArrowLeft,
+  GitBranch,
   History,
   Command,
   MoreHorizontal,
@@ -28,6 +29,8 @@ import { Canvas } from '../canvas/Canvas';
 import { Inspector } from '../panels/Inspector';
 import { CommandPalette, Legend, OwnershipLegend, RelationPicker } from '../panels/Overlays';
 import { AnalysisDialog } from '../panels/Analysis';
+import { ChangeSetBanner, ChangeSetsDialog } from '../panels/ChangeSets';
+import { ApiDialog, CanvasChips, FiltersButton, ScenarioBar } from '../panels/Views';
 import { Palette } from '../panels/Palette';
 import { ProblemsButton, ProblemsPanel, SuppressDialog } from '../panels/Problems';
 import { SaveTemplateDialog, TemplatePicker } from '../panels/Templates';
@@ -37,6 +40,8 @@ import { TourEditor, TourPlayer, draftAndEditTour, playTour } from '../panels/To
 import {
   addAnchored,
   createDatabaseView,
+  createView,
+  drillInto,
   addRegion,
   addSticky,
   dispatch,
@@ -172,6 +177,9 @@ function EditorLoaded() {
               <Canvas />
               {screen !== 'phone' && <Legend />}
               <CompareBanner />
+              <ChangeSetBanner />
+              <CanvasChips />
+              <ScenarioBar />
               <OwnershipLegend />
               {sync?.conflict && <ConflictBanner sync={sync} />}
               <ConnectBanner />
@@ -205,7 +213,7 @@ const SHEET_LABEL = { palette: 'Shapes', inspector: 'Inspector', problems: 'Prob
 
 function EditorDialogs() {
   const dialog = useUi((s) => s.dialog);
-  const close = () => useUi.getState().set({ dialog: null });
+  const close = () => useUi.getState().set({ dialog: null, exportFormat: null });
   if (dialog === 'templates')
     return (
       <TemplatePicker
@@ -221,6 +229,8 @@ function EditorDialogs() {
   if (dialog === 'snapshots') return <SnapshotsDialog onClose={close} />;
   if (dialog === 'export') return <ExportDialog onClose={close} />;
   if (dialog === 'analysis') return <AnalysisDialog onClose={close} />;
+  if (dialog === 'changesets') return <ChangeSetsDialog onClose={close} />;
+  if (dialog === 'api') return <ApiDialog onClose={close} />;
   if (dialog === 'lab') return <LabDialog onClose={close} />;
   return null;
 }
@@ -439,6 +449,7 @@ function overflowItems(): MenuItem[] {
       : [{ label: 'Snapshots…', run: () => openDialog('snapshots') }]),
     { label: 'Export…', run: () => openDialog('export') },
     { label: 'Analysis…', run: () => ui.set({ dialog: 'analysis', panel: null }) },
+    { label: 'Change sets…', run: () => ui.set({ dialog: 'changesets', panel: null }) },
     ...viewItems(),
     ...tours.map((t) => ({ label: `Play tour: ${t.title}`, run: () => playTour(t.id) })),
     ...tours.map((t) => ({
@@ -537,7 +548,7 @@ function TopBar({ status, screen }: { status: SaveStatus; screen: Screen }) {
       </div>
       <button
         type="button"
-        className="ml-2 flex items-center gap-1 rounded px-2 py-1 text-xs hover:bg-[var(--ag-panel-2)]"
+        className="ml-2 flex shrink-0 items-center gap-1 whitespace-nowrap rounded px-2 py-1 text-xs hover:bg-[var(--ag-panel-2)]"
         onClick={() => useUi.getState().set({ dialog: 'templates' })}
         title="Insert a template"
       >
@@ -546,21 +557,30 @@ function TopBar({ status, screen }: { status: SaveStatus; screen: Screen }) {
       {!isServed(project.id) && (
         <button
           type="button"
-          className="flex items-center gap-1 rounded px-2 py-1 text-xs hover:bg-[var(--ag-panel-2)]"
+          className="flex shrink-0 items-center gap-1 whitespace-nowrap rounded px-2 py-1 text-xs hover:bg-[var(--ag-panel-2)]"
           onClick={() => useUi.getState().set({ dialog: 'snapshots' })}
           title="Snapshots: save, compare and restore versions"
         >
-          <History size={14} aria-hidden /> Snapshots
+          <History size={14} aria-hidden /> <span className="max-2xl:sr-only">Snapshots</span>
         </button>
       )}
       <ViewsMenu />
+      <FiltersButton />
       <button
         type="button"
-        className="flex items-center gap-1 rounded px-2 py-1 text-xs hover:bg-[var(--ag-panel-2)]"
+        className="flex shrink-0 items-center gap-1 whitespace-nowrap rounded px-2 py-1 text-xs hover:bg-[var(--ag-panel-2)]"
         onClick={() => useUi.getState().set({ dialog: 'analysis' })}
         title="Analysis: review what the analyzer found in the code"
       >
-        <ScanSearch size={14} aria-hidden /> Analysis
+        <ScanSearch size={14} aria-hidden /> <span className="max-2xl:sr-only">Analysis</span>
+      </button>
+      <button
+        type="button"
+        className="flex shrink-0 items-center gap-1 whitespace-nowrap rounded px-2 py-1 text-xs hover:bg-[var(--ag-panel-2)]"
+        onClick={() => useUi.getState().set({ dialog: 'changesets' })}
+        title="Change sets: plan a feature on top of the model"
+      >
+        <GitBranch size={14} aria-hidden /> Change sets
       </button>
       <Menu
         label="Tours"
@@ -586,11 +606,11 @@ function TopBar({ status, screen }: { status: SaveStatus; screen: Screen }) {
       />
       <button
         type="button"
-        className="flex items-center gap-1 rounded px-2 py-1 text-xs hover:bg-[var(--ag-panel-2)]"
+        className="flex shrink-0 items-center gap-1 whitespace-nowrap rounded px-2 py-1 text-xs hover:bg-[var(--ag-panel-2)]"
         onClick={() => void tidyUp()}
         title="Tidy up: lay out the diagram automatically"
       >
-        <Wand2 size={14} aria-hidden /> Tidy up
+        <Wand2 size={14} aria-hidden /> <span className="max-2xl:sr-only">Tidy up</span>
       </button>
       <div className="ml-auto flex items-center gap-2">
         <ProblemsButton />
@@ -643,16 +663,37 @@ function TopBar({ status, screen }: { status: SaveStatus; screen: Screen }) {
   );
 }
 
-/** Views of the project, the database view, and the ownership colors. */
+/** Views of the project, new generated views, and the ownership colors. */
 function viewItems(): MenuItem[] {
-  const { project, viewId } = useProject.getState();
+  const { project, viewId, selection } = useProject.getState();
   const ui = useUi.getState();
+  const selected =
+    selection.elements.length === 1
+      ? project?.model.elements.find((e) => e.id === selection.elements[0])
+      : undefined;
   return [
     ...(project?.views ?? []).map((v) => ({
       label: `View: ${v.name}${v.id === viewId ? ' ✓' : ''}`,
       run: () => useProject.getState().setView(v.id),
     })),
+    { label: 'Create context view', run: () => void createView('context') },
+    { label: 'Create container view', run: () => void createView('container') },
+    ...(selected
+      ? [
+          {
+            label: `Open the inside of ${selected.name}`,
+            run: () =>
+              drillInto(selected.id) ||
+              useUi.getState().toast({
+                tone: 'info',
+                message: 'Only deployables and databases have an inside view.',
+              }),
+          },
+        ]
+      : []),
     { label: 'Create database view', run: createDatabaseView },
+    { label: 'New scenario from this view', run: () => void createView('scenario') },
+    { label: 'API view (endpoints)…', run: () => ui.set({ dialog: 'api', panel: null }) },
     {
       label: ui.ownership ? 'Hide ownership colors' : 'Show ownership colors',
       run: () => ui.set({ ownership: !ui.ownership }),
@@ -662,7 +703,9 @@ function viewItems(): MenuItem[] {
 
 function ViewsMenu() {
   // Re-read the items when the views, the active view or the toggle change.
-  useProject((s) => `${s.viewId}|${s.project?.views.map((v) => v.id).join()}`);
+  useProject(
+    (s) => `${s.viewId}|${s.project?.views.map((v) => v.id).join()}|${s.selection.elements.join()}`,
+  );
   useUi((s) => s.ownership);
   return <Menu label="Views" icon={<Layers size={14} aria-hidden />} items={viewItems()} />;
 }

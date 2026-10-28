@@ -1,7 +1,7 @@
 import { Document } from 'yaml';
 import { shapeOf } from '../catalog';
 import type { ShapeId } from '../catalog';
-import type { Element, Relation } from '../schema';
+import type { Element, Id, Relation } from '../schema';
 import { invariants, knownIssues, ownership, patterns } from './facts';
 import type { Facts } from './facts';
 
@@ -88,7 +88,11 @@ const MERMAID_SHAPES: Record<ShapeId, [string, string]> = {
 };
 
 /** A Mermaid flowchart: containers become subgraphs, async relations dotted (§18.7). */
-export function mermaid(f: Facts): string {
+export function mermaid(
+  f: Facts,
+  /** Change-set overlay: classes for added, changed and removed items. */
+  marks?: { added: readonly Id[]; changed: readonly Id[]; removed?: readonly Id[] },
+): string {
   const lines = ['flowchart LR'];
   const included = new Set(f.elements.map((e) => e.id));
   const children = (id: string) =>
@@ -116,6 +120,18 @@ export function mermaid(f: Facts): string {
     const arrow = mode === 'async' ? '-.->' : r.type === 'writes' ? '==>' : '-->';
     const text = [type?.name ?? r.type, r.label].filter(Boolean).join(': ');
     lines.push(`  ${mid(r.sourceId)} ${arrow}|"${mlabel(text)}"| ${mid(r.targetId)}`);
+  }
+  if (marks) {
+    const shown = (ids: readonly Id[] = []) => ids.filter((id) => included.has(id)).map(mid);
+    const classes: [string, string, readonly Id[] | undefined][] = [
+      ['added', 'stroke:#16a34a,stroke-width:3px', marks.added],
+      ['changed', 'stroke:#d97706,stroke-width:3px', marks.changed],
+      ['removed', 'stroke:#dc2626,stroke-dasharray:4 3', marks.removed],
+    ];
+    for (const [name, style, ids] of classes) {
+      if (!shown(ids).length) continue;
+      lines.push(`  classDef ${name} ${style}`, `  class ${shown(ids).join(',')} ${name}`);
+    }
   }
   return `${lines.join('\n')}\n`;
 }

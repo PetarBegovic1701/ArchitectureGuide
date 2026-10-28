@@ -914,6 +914,34 @@ const crossModuleWrite: Rule = {
       }),
 };
 
+const readModelWriter: Rule = {
+  id: 'RNP-029',
+  title: 'Read model written outside its projector',
+  severity: 'warning',
+  packs: ['cqrs'],
+  learnId: 'pattern.cqrs',
+  rationale:
+    'In CQRS the read models (tables tagged "read-model", materialized views) are derived data. When request code writes them directly, they drift from the write tables and nobody can rebuild them. Let the command change the write tables and the projector update the read models.',
+  invariant: 'Only the projector MAY write a read model; commands write the write tables.',
+  appliesTo: ['pg.table'],
+  check: ({ graph: g }) =>
+    g.relations
+      .filter((r) => g.typeIs(r, 'writes'))
+      .flatMap((r) => {
+        const target = g.element(r.targetId);
+        if (!target?.tags?.includes('read-model')) return [];
+        const runner = g.deployableOf(r.sourceId);
+        if (runner && g.is(runner, 'node.worker')) return [];
+        return [
+          {
+            targetIds: [r.id],
+            relatedIds: [target.id, ...(runner ? [runner.id] : [])],
+            message: `${name(g, r.sourceId)} writes the read model ${target.name}. Change the write tables and let the projector update ${target.name}.`,
+          },
+        ];
+      }),
+};
+
 export const RULES: Rule[] = [
   sharedTables,
   migrationOwners,
@@ -939,4 +967,5 @@ export const RULES: Rule[] = [
   tokensInWebStorage,
   logicSplit,
   crossModuleWrite,
+  readModelWriter,
 ];

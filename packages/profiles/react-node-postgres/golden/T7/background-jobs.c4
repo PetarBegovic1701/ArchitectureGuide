@@ -1,0 +1,93 @@
+specification {
+  element gen_actor {
+    notation 'User / actor'
+    style {
+      shape person
+    }
+  }
+  element gen_external {
+    notation 'External system'
+  }
+  element node_middleware {
+    notation 'Middleware'
+  }
+  element node_route_handler {
+    notation 'Controller / route handler'
+  }
+  element node_service {
+    notation 'Node service'
+  }
+  element node_use_case {
+    notation 'Use case / application service'
+  }
+  element node_worker {
+    notation 'Background worker'
+  }
+  element pg_database {
+    notation 'Database'
+    style {
+      shape cylinder
+    }
+  }
+  element pg_job_queue {
+    notation 'Postgres job queue'
+    style {
+      shape queue
+    }
+  }
+  element pg_schema {
+    notation 'Schema'
+    style {
+      shape cylinder
+    }
+  }
+  relationship calls
+  relationship enqueues {
+    line dashed
+  }
+  relationship migrates
+  relationship processes {
+    line dashed
+  }
+  relationship reads
+  relationship writes
+}
+
+model {
+  actor_customer = gen_actor 'Customer'
+  db_shop_db = pg_database 'Shop DB' {
+    jobs_jobs = pg_job_queue 'jobs'
+    schema_public = pg_schema 'public'
+  }
+  ext_e_mail_provider = gen_external 'E-mail provider'
+  svc_shop_api = node_service 'Shop API' {
+    ctl_order_routes = node_route_handler 'Order routes'
+    mw_auth_middleware = node_middleware 'Auth middleware' {
+      description 'Read the session cookie; Reject calls without a valid session'
+    }
+    uc_place_order = node_use_case 'Place order'
+  }
+  wrk_worker = node_worker 'Worker' {
+    description 'Send confirmation email; Generate invoice PDF'
+  }
+
+  actor_customer -[calls]-> svc_shop_api 'calls'
+  svc_shop_api.ctl_order_routes -[calls]-> svc_shop_api.uc_place_order 'calls'
+  svc_shop_api -[migrates]-> db_shop_db.schema_public 'migrates'
+  svc_shop_api.uc_place_order -[enqueues]-> db_shop_db.jobs_jobs 'enqueues'
+  svc_shop_api.uc_place_order -[writes]-> db_shop_db.schema_public 'writes'
+  wrk_worker -[calls]-> ext_e_mail_provider 'calls'
+  wrk_worker -[processes]-> db_shop_db.jobs_jobs 'processes'
+  wrk_worker -[reads]-> db_shop_db.schema_public 'reads'
+}
+
+views {
+  view index {
+    title 'Background jobs on PostgreSQL'
+    include *
+  }
+  view main {
+    title 'Main'
+    include actor_customer, svc_shop_api, svc_shop_api.mw_auth_middleware, svc_shop_api.ctl_order_routes, svc_shop_api.uc_place_order, db_shop_db, db_shop_db.schema_public, db_shop_db.jobs_jobs, wrk_worker, ext_e_mail_provider
+  }
+}

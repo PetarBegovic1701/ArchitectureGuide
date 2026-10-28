@@ -1345,14 +1345,16 @@ finds other paths, the scan suggests updating them.
 - **Templates built:** T1, T2, T3, T4, T5, T6, T7, T11, each with a tour and a pattern
   text (`pattern.starter`, `pattern.layered`, `pattern.hexagonal`,
   `pattern.modular-monolith`, `pattern.bff`, `pattern.database-per-service`,
-  `pattern.background-jobs`, `pattern.feature-sliced`). Tests build each template with
+  `pattern.background-jobs`, `pattern.feature-sliced`); Phase 9 added T8, T9, T10, T12 and T13
+  (`pattern.outbox`, `pattern.cqrs`, `pattern.realtime`, `pattern.type-safe-monorepo`,
+  `pattern.multi-tenant`). Tests build each template with
   its defaults, its smallest lists and its largest lists: no findings of any severity
   under its own packs, unique IDs when stamped twice, no overlapping top-level shapes,
   and an ELK layout without overlaps.
 - **Deviations from §12.2:**
   - T4 uses each schema's `ownedBy` property for module ownership (only services and
     workers may `migrates`); the new pack `modular-monolith` has RNP-028 "module writes
-    another module's schema". `cqrs` (T9) is still to come.
+    another module's schema". Phase 9 added `cqrs` (T9) with RNP-029.
   - T6's `gateway` parameter is the gateway product (nginx, kong, traefik, cloud).
   - T7 has one queue with one queue name per job, and one worker.
   - T11's slices are `react.feature` elements with `fsdLayer` inside `group.layer`
@@ -2603,6 +2605,8 @@ type ToolResult =
 | `create_change_set` | `projectId`, `name`, `description` | change set ID |
 | `get_change_set` | `projectId`, `changeSetId` | ops (human readable), tasks, new findings |
 | `generate_tasks` | `projectId`, `changeSetId` | tasks |
+| `list_change_sets` | `projectId` | change sets with status, size and whether the baseline moved |
+| `update_change_set` | `projectId`, `changeSetId`, `name?`, `description?`, `status?`, `dropOps?: number[]`, `rebase?` | status `implemented` merges the ops into the baseline (refused while ops conflict) |
 | `export` | `projectId`, `format`, `changeSetId?`, `write?: boolean` (write to the configured path) | content or written paths |
 | `generate_enforcement` | `projectId`, `target: 'dependency-cruiser' \| 'nx' \| 'archunit'`, `write?` | content or path |
 | `explain_concept` | `id` (concept, relation type, rule or topic), `level?` (default `intermediate`) | the learning text at that level, examples, related IDs |
@@ -3067,19 +3071,88 @@ Implementation notes (Phase 8):
 - **CLI bundle.** typescript, dependency-cruiser, libpg-query and pg stay external packages of
   `@archguide/cli` (they load files next to their code).
 
-### Phase 9: Change sets and advanced views (~3 weeks)
+### Phase 9: Change sets and advanced views (~3 weeks) — done
 
-- [ ] Change-set mode (record ops into a change set), overlay, new-findings filter
-- [ ] Rebase on baseline changes; conflict list
-- [ ] Task generation (§16.4) + tasks panel
-- [ ] Exporters: `plan-md`, `speckit`, `kiro`, `likec4`, `structurizr`, `plantuml`
-- [ ] MCP: change-set tools; `plan-feature` end to end
-- [ ] Views: context/container/component/database/scenario; drill-down; breadcrumbs
-- [ ] API view (§17.7): endpoints table, DTO links, OpenAPI skeleton export
-- [ ] Scenario recording, playback, Mermaid sequence export
-- [ ] Focus mode and filters
-- [ ] Templates T8, T9, T10, T12, T13
-- **Done when:** end-to-end flow works: baseline from repo scan → change set in the UI → plan export → agent implements → `archguide check` passes.
+- [x] Change-set mode (record ops into a change set), overlay, new-findings filter
+- [x] Rebase on baseline changes; conflict list
+- [x] Task generation (§16.4) + tasks panel
+- [x] Exporters: `plan-md`, `speckit`, `kiro`, `likec4`, `structurizr`, `plantuml`
+- [x] MCP: change-set tools; `plan-feature` end to end
+- [x] Views: context/container/component/database/scenario; drill-down; breadcrumbs
+- [x] API view (§17.7): endpoints table, DTO links, OpenAPI skeleton export
+- [x] Scenario recording, playback, Mermaid sequence export
+- [x] Focus mode and filters
+- [x] Templates T8, T9, T10, T12, T13
+- **Done when:** end-to-end flow works: baseline from repo scan → change set in the UI → plan export → agent implements → `archguide check` passes. **Done:** `apps/web/e2e/serve.spec.ts` ("Phase 9") scans the `vite-express-prisma` fixture through MCP, plans "Send receipts" in the browser (a worker with its code path, tasks, plan preview), lets the agent read the plan resource, write the worker and set the change set to implemented, and runs `archguide check` (exit 0, no drift).
+
+Implementation notes (Phase 9):
+
+- **Where things live.** `core/changesets`: `createChangeSet`, `effectiveProject` (baseline +
+  ops; ops that fail are skipped and listed as conflicts), `changeSetDiff`, `changeSetFindings`
+  (all, and the ones the change introduces), `recordOps`, `appendOps`, `rebaseChangeSet`,
+  `dropOps`, `applyChangeSetOps` ("Apply to baseline": the ops plus the change set marked
+  implemented, refused while ops conflict), `describeOp`, `describeChanges` and `generateTasks`.
+  Exporters: `export/plan.ts` (plan-md, Spec Kit, Kiro), `export/interop.ts` (LikeC4,
+  Structurizr, C4-PlantUML), `export/api.ts` (endpoints, OpenAPI skeleton, Mermaid sequence).
+  Views: `tools/views.ts` (`viewElementIds`, `generateViewOps`, `drillDown`, `viewBreadcrumbs`).
+- **Revisions.** Every write bumps the project revision, the write that saves a change set too.
+  `storedChangeSet` moves an up-to-date change set to the revision its own save creates, so a
+  change set is "stale" only when the baseline changed under it. Conflicts are computed on every
+  read, not only on rebase.
+- **Recording.** Model edits in change-set mode become one `upsertChangeSet` op on the baseline
+  (one undo step, one message to the server). `appendOps` keeps change sets small: a placement
+  replaces an earlier placement of the same shape in the trailing run of view ops, and typing a
+  name replaces the previous rename. Ops that touch change sets (status, tasks, apply) go to the
+  baseline directly.
+- **Web.** The project store keeps `baseline` (saved, synced, snapshotted) and `project` (what
+  the canvas shows: baseline + active change set). Overlay: added green, changed amber; removed
+  shapes and arrows are drawn from the baseline view as red dashed, struck-through "ghosts" that
+  cannot be selected. The banner counts elements and relations. The Problems panel shows only
+  findings the change introduces, with a toggle. The Change sets dialog has the changes table,
+  the recorded edits, tasks (generate, tick, rename, reorder — a task cannot move above one it
+  needs —, merge with the task above, delete), conflicts (drop, rebase) and new findings.
+- **Tasks (§16.4).** Leaf elements added inside another element of the change (ports,
+  endpoints, DTOs) become steps of that element's task, so a service with its port is one task.
+  Rule invariants are listed per task by rule ID; their text is in the plan's invariant list.
+  Actors and groups get no task. Regenerating keeps the `done` flag of tasks with the same title.
+- **Plans.** `plan-md`, `speckit` and `kiro` need `changeSetId`; every other format with a
+  `changeSetId` exports baseline + change. Spec Kit numbers features by the change set's
+  position (`specs/001-<name>`); Kiro writes EARS sentences from added relations and endpoints,
+  one requirement per task. Writing a plan (MCP `export` / CLI `export --write`) moves a draft
+  change set to ready. Spec Kit and Kiro files go to the code root, plans to `architecture/plans/`.
+- **MCP.** New tools: `create_change_set`, `list_change_sets`, `get_change_set`,
+  `generate_tasks`, `update_change_set` (rename, status, drop ops, rebase; status
+  `implemented` merges). `changeSetId` on `get_architecture`, `apply_template` (which also
+  takes `parentId`), `upsert_elements`, `upsert_relations`, `remove_items`, `validate_project`
+  (each finding says whether the change introduced it) and `export`. Resource
+  `archguide://projects/{id}/change-sets/{csId}` is the plan. CLI: `validate --change-set`
+  (exit 1 also on conflicts) and `export --change-set`, `--view`.
+- **Views.** Context: deployables, actors and external systems at the top level. Container: those
+  and the outermost data stores. Component: a deployable's subtree plus what it talks to, lifted
+  to the other side's deployable or store. Database views can be scoped to one database.
+  Generated views are laid out with ELK after creation. Drill-down: double-clicking a deployable
+  or a database (outside its name; the name still renames) opens its view, creating it the first
+  time. Breadcrumbs: the first view, the views scoped to the scope's ancestors, the view.
+- **Scenarios.** "New scenario from this view" copies the shapes and arrows; while recording,
+  clicking an arrow adds a step (selection is off while recording). Steps have notes, can be
+  removed and played back (the step's arrow and its two ends are highlighted). Export:
+  `sequence` (Mermaid `sequenceDiagram`, async relations as open arrows, notes as notes).
+- **API view.** Endpoints are elements with `method` and `path` properties; the dialog lists
+  them per route handler or contract with request/response DTO links, status codes, auth,
+  pagination and idempotency. The OpenAPI skeleton (3.1) builds schemas from the linked DTOs'
+  `fields` (and DTOs they reference by name), path parameters from `:id`, pagination
+  parameters, bearer auth and an `Idempotency-Key` header for idempotent POSTs.
+- **Focus and filters.** `F` toggles focus on the selection (depth 1; Shift+F or the chip sets
+  1–3), using the export neighborhood. Filters by tag, layer, status and owner dim shapes that do
+  not match; the containers of a match stay. Arrows are dimmed when one end is.
+- **Templates.** T8 outbox (`delivery`: Postgres job queue or a broker), T9 CQRS-lite with the
+  new `cqrs` pack and RNP-029 "Read model written outside its projector" (read models are tables
+  tagged `read-model`, or materialized views), T10 realtime (NOTIFY → socket.io gateway; durable
+  work through a job queue), T12 type-safe monorepo (`api`: trpc or openapi; Drizzle), T13
+  multi-tenant (`strategy`: rls or schema-per-tenant; a tenant resolver middleware), each with a
+  tour and a pattern text. Interop exports (LikeC4, Structurizr, PlantUML) are in the golden
+  files of every template. They follow the published grammars but are not run through the
+  LikeC4, Structurizr or PlantUML tools in CI.
 
 ### Later (after v1)
 

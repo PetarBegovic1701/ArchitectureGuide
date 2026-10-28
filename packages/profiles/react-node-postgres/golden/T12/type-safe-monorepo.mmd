@@ -1,0 +1,24 @@
+flowchart LR
+  actor__customer(["Customer<br/><small>User / actor</small>"])
+  api__app_router_types(("App router (types)<br/><small>API contract package</small>"))
+  subgraph app__web["Web"]
+    apic__trpc_client[["tRPC client<br/><small>API client</small>"]]
+    qcache__server_state_cache[("Server-state cache<br/><small>Server-state cache</small>")]
+    route__orders["Orders<br/><small>Route / page</small>"]
+  end
+  subgraph db__app_db["App DB"]
+    schema__public[("public<br/><small>Schema</small>")]
+  end
+  subgraph svc__api["API"]
+    ctl__order_procedures("Order procedures<br/><small>Controller / route handler</small>")
+    mw__auth_middleware("Auth middleware<br/><small>Middleware</small>")
+  end
+  actor__customer -->|"calls"| app__web
+  apic__trpc_client -->|"calls"| svc__api
+  apic__trpc_client -->|"depends on"| api__app_router_types
+  ctl__order_procedures -->|"depends on"| api__app_router_types
+  ctl__order_procedures -->|"reads"| schema__public
+  ctl__order_procedures ==>|"writes"| schema__public
+  qcache__server_state_cache -->|"fetches via"| apic__trpc_client
+  route__orders -->|"uses state"| qcache__server_state_cache
+  svc__api -->|"migrates"| schema__public

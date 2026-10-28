@@ -8,19 +8,24 @@ import {
   SCHEMA_VERSION,
   allTemplates,
   catalogDocs,
+  effectiveProject,
   explainText,
+  findingKey,
+  newFindings,
   parseProject,
   runRules,
   searchDocs,
   serializeProject,
+  storedChangeSet,
 } from '@archguide/core';
-import type { ExportFormat, Finding, Level, Severity } from '@archguide/core';
+import type { ChangeSet, ExportFormat, Finding, Level, Project, Severity } from '@archguide/core';
 import { defaultCatalog, runStdio } from '@archguide/mcp-server';
 import { startServer } from '@archguide/server';
 import {
   PROJECT_SUFFIX,
   Workspace,
   WorkspaceError,
+  applyToWorkspace,
   exportFiles,
   readFromWorkspace,
   withFileLock,
@@ -43,6 +48,16 @@ interface GlobalOptions {
 
 const LEVELS = ['beginner', 'intermediate', 'senior'] as const;
 const SEVERITY_RANK: Record<Severity, number> = { error: 0, warning: 1, info: 2 };
+const PLAN_FORMATS: readonly string[] = ['plan-md', 'speckit', 'kiro'];
+
+function changeSetOf(p: Project, id: string): ChangeSet {
+  const cs = p.changeSets.find((c) => c.id === id);
+  if (!cs)
+    throw new CliError(
+      `No change set "${id}" in ${p.id}. Change sets: ${p.changeSets.map((c) => c.id).join(', ') || 'none'}.`,
+    );
+  return cs;
+}
 
 /** Runs the CLI with `argv` (without node and the script) and returns the exit code. */
 export async function main(argv: readonly string[], io: Io): Promise<number> {
@@ -142,22 +157,52 @@ export async function main(argv: readonly string[], io: Io): Promise<number> {
         .default('error'),
     )
     .option('--include-suppressed', 'list suppressed findings too')
-    .action(async (o: { failOn: Severity; includeSuppressed?: boolean }) => {
-      const p = await project(workspace());
+    .option('--change-set <id>', 'check baseline + this change set; marks what it introduces')
+    .action(async (o: { failOn: Severity; includeSuppressed?: boolean; changeSet?: string }) => {
+      const baseline = await project(workspace());
+      const cs = o.changeSet ? changeSetOf(baseline, o.changeSet) : undefined;
+      const state = cs ? effectiveProject(baseline, cs, catalog) : undefined;
+      const p = state?.effective ?? baseline;
       const all = runRules(p, catalog);
+      const introduced = state
+        ? new Set(newFindings(runRules(baseline, catalog), all).map(findingKey))
+        : undefined;
       const shown = all.filter((f) => o.includeSuppressed || !f.suppressed);
       const failing = all.filter(
         (f) => !f.suppressed && SEVERITY_RANK[f.severity] <= SEVERITY_RANK[o.failOn],
       );
-      if (g().json) json({ project: p.id, revision: p.revision, findings: shown });
+      if (g().json)
+        json({
+          project: p.id,
+          revision: baseline.revision,
+          ...(cs
+            ? {
+                changeSet: cs.id,
+                conflicts: state!.conflicts.map(({ index, code, message }) => ({
+                  index,
+                  code,
+                  message,
+                })),
+              }
+            : {}),
+          findings: shown.map((f) =>
+            introduced ? { ...f, introduced: introduced.has(findingKey(f)) } : f,
+          ),
+        });
       else {
-        for (const f of shown) io.out(`${formatFinding(f, paint)}\n`);
+        for (const c of state?.conflicts ?? [])
+          io.out(`${paint.red('conflict')} op ${c.index}: ${c.message}\n`);
+        for (const f of shown)
+          io.out(
+            `${formatFinding(f, paint)}${introduced?.has(findingKey(f)) ? ` ${paint.yellow('(new in this change)')}` : ''}\n`,
+          );
         const count = (s: Severity) => all.filter((f) => !f.suppressed && f.severity === s).length;
+        const fresh = introduced ? ` (${introduced.size} new in ${cs!.id})` : '';
         info(
-          `${shown.length ? '\n' : ''}${p.name}: ${count('error')} error(s), ${count('warning')} warning(s), ${count('info')} tip(s)`,
+          `${shown.length ? '\n' : ''}${p.name}${cs ? ` + ${cs.name}` : ''}: ${count('error')} error(s), ${count('warning')} warning(s), ${count('info')} tip(s)${fresh}`,
         );
       }
-      if (failing.length) exitCode = EXIT.findings;
+      if (failing.length || state?.conflicts.length) exitCode = EXIT.findings;
     });
 
   program
@@ -168,6 +213,8 @@ export async function main(argv: readonly string[], io: Io): Promise<number> {
     .option('--depth <n>', 'neighborhood size', (v) => Number(v))
     .addOption(new Option('--level <level>', 'reader level').choices(LEVELS))
     .option('--concept <id>', 'concept-pack: the concept, pattern or template')
+    .option('--change-set <id>', 'plan-md, speckit, kiro: the change set; others: baseline + it')
+    .option('--view <id>', 'sequence: the scenario view')
     .option('--out <path>', 'write here (relative to the workspace folder)')
     .option('--write', 'write to the path in archguide.config.json, or the default name')
     .action(
@@ -178,6 +225,8 @@ export async function main(argv: readonly string[], io: Io): Promise<number> {
           depth?: number;
           level?: Level;
           concept?: string;
+          changeSet?: string;
+          view?: string;
           out?: string;
           write?: boolean;
         },
@@ -185,13 +234,38 @@ export async function main(argv: readonly string[], io: Io): Promise<number> {
         if (!(EXPORT_FORMATS as readonly string[]).includes(format))
           throw new CliError(`Unknown format "${format}". Formats: ${EXPORT_FORMATS.join(', ')}.`);
         const ws = workspace();
-        const p = await project(ws);
-        const files = exportFiles(ws, p, catalog, format as ExportFormat, {
+        let p = await project(ws);
+        if (o.changeSet) changeSetOf(p, o.changeSet);
+        const options = {
           ...(o.focus ? { focus: o.focus } : {}),
           ...(o.depth ? { depth: o.depth } : {}),
           ...(o.level ? { level: o.level } : {}),
           ...(o.concept ? { conceptId: o.concept } : {}),
-        });
+          ...(o.changeSet ? { changeSetId: o.changeSet } : {}),
+          ...(o.view ? { viewId: o.view } : {}),
+        };
+        const cs = p.changeSets.find((c) => c.id === o.changeSet);
+        // A written plan is ready for implementation (draft → ready, §16.2).
+        if ((o.write || o.out) && cs?.status === 'draft' && PLAN_FORMATS.includes(format)) {
+          const r = await applyToWorkspace(
+            ws,
+            catalog,
+            p.id,
+            [{ op: 'upsertChangeSet', changeSet: storedChangeSet({ ...cs, status: 'ready' }, p) }],
+            { origin: 'cli', baseRevision: p.revision },
+          );
+          if (!r.ok) throw new CliError(r.errors[0]?.message ?? 'Could not save the change set.');
+          p = r.project;
+        }
+        if (PLAN_FORMATS.includes(format) && !o.changeSet)
+          throw new CliError(`${format} exports a change set: pass --change-set <id>.`);
+        let files: ReturnType<typeof exportFiles>;
+        try {
+          files = exportFiles(ws, p, catalog, format as ExportFormat, options);
+        } catch (error) {
+          // Missing or unknown inputs (a concept, a scenario view) are usage errors.
+          throw new CliError((error as Error).message);
+        }
         if (o.write || o.out) {
           const written = await writeExport(ws, p, format as ExportFormat, files, o.out);
           if (g().json) return json({ written });

@@ -1,0 +1,18 @@
+@startuml
+!include <C4/C4_Container>
+
+title Hexagonal Node service – containers
+
+Person(actor_api_client, "API client", "")
+System_Boundary(hexagonal_service, "Hexagonal Node service") {
+  Container(svc_orders, "Orders", "", "")
+  ContainerDb(db_database, "Database", "", "")
+}
+
+Rel(actor_api_client, svc_orders, "calls", "http")
+Rel(svc_orders, db_database, "reads")
+Rel(svc_orders, db_database, "writes")
+Rel(svc_orders, db_database, "migrates")
+
+SHOW_LEGEND()
+@enduml

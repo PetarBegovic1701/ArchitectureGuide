@@ -178,6 +178,30 @@ export function CommandPalette() {
         run: () => ui.set({ dialog: 'analysis' }),
       },
       {
+        id: 'changesets',
+        label: 'Change sets: plan a feature on top of the model…',
+        run: () => ui.set({ dialog: 'changesets' }),
+      },
+      ...(useProject.getState().changeSetId
+        ? [
+            {
+              id: 'leave-changeset',
+              label: 'Back to the baseline (leave the change set)',
+              run: () => useProject.getState().leaveChangeSet(),
+            },
+          ]
+        : []),
+      {
+        id: 'api',
+        label: 'API view: endpoints, data shapes and OpenAPI',
+        run: () => ui.set({ dialog: 'api' }),
+      },
+      {
+        id: 'focus',
+        label: 'Focus mode: dim what is not connected to the selection (F)',
+        run: () => ui.set({ focusDepth: useUi.getState().focusDepth ? null : 1 }),
+      },
+      {
         id: 'database-view',
         label: 'Create database view (data ownership)',
         run: createDatabaseView,

@@ -22,7 +22,16 @@ import { toPng, toSvg } from 'html-to-image';
 import { checkNesting, validRelationTypes } from '@archguide/core';
 import type { Id, Op } from '@archguide/core';
 import { catalog } from '../lib/catalog';
-import { decisionsByElement, toAnnotationNodes, toFlowEdges, toFlowNodes } from '../lib/flow';
+import {
+  decisionsByElement,
+  toAnnotationNodes,
+  toFlowEdges,
+  toFlowNodes,
+  toGhosts,
+} from '../lib/flow';
+import { useOverlay } from '../lib/changesets';
+import { dimmedIds } from '../lib/focus';
+import { recordStep } from '../panels/Views';
 import { ownershipColors } from '../lib/ownership';
 import { annIdOf } from '../lib/annotations';
 import { annotationNodeTypes } from './AnnotationNodes';
@@ -86,7 +95,35 @@ export function Canvas() {
   );
   const level = useUi((s) => s.level);
   const activeFinding = useUi((s) => s.activeFinding);
-  const compare = useUi((s) => s.compare);
+  const snapshotCompare = useUi((s) => s.compare);
+  // Change-set mode: the overlay (added, changed, removed) wins over a snapshot compare.
+  const overlay = useOverlay();
+  const compare = useMemo(
+    () =>
+      overlay ??
+      (snapshotCompare ? { added: snapshotCompare.added, changed: snapshotCompare.changed } : null),
+    [overlay, snapshotCompare],
+  );
+  const baseline = useProject((s) => s.baseline);
+  const focusDepth = useUi((s) => s.focusDepth);
+  const filters = useUi((s) => s.filters);
+  const dimmed = useMemo(
+    () =>
+      project
+        ? dimmedIds(project, {
+            focus: focusDepth ? { ids: selection.elements, depth: focusDepth } : null,
+            filters,
+          })
+        : null,
+    [project, focusDepth, selection.elements, filters],
+  );
+  const ghosts = useMemo(
+    () =>
+      overlay && baseline && project
+        ? toGhosts(baseline, project, viewId, overlay.removed)
+        : { nodes: [], edges: [] },
+    [overlay, baseline, project, viewId],
+  );
   const selectedAnnotation = useUi((s) => s.selectedAnnotation);
   const editingAnnotation = useUi((s) => s.editingAnnotation);
   const showResolved = useUi((s) => s.showResolvedComments);
@@ -94,16 +131,25 @@ export function Canvas() {
   const issues = useMemo(() => issuesByItem(findings, level), [findings, level]);
   const tourState = useUi((s) => s.tour);
   const lessonFocus = useUi((s) => s.lessonFocus);
+  const playStep = useUi((s) => s.playStep);
+  const recording = useUi((s) => s.recording);
   const highlightIds = useMemo(() => {
     const f = activeFinding ? findings.find((x) => findingKey(x) === activeFinding) : undefined;
     const step =
       tourState && project?.tours.find((t) => t.id === tourState.id)?.steps[tourState.step];
+    // Scenario playback: the arrow of the current step and its two ends.
+    const scenarioStep =
+      view?.kind === 'scenario' && playStep !== null ? view.scenario?.steps[playStep] : undefined;
+    const stepRelation = scenarioStep
+      ? project?.model.relations.find((r) => r.id === scenarioStep.relationId)
+      : undefined;
     return new Set<Id>([
       ...(f ? [...f.targetIds, ...f.relatedIds] : []),
       ...(step ? [...step.elementIds, ...step.relationIds] : []),
+      ...(stepRelation ? [stepRelation.id, stepRelation.sourceId, stepRelation.targetId] : []),
       ...lessonFocus,
     ]);
-  }, [findings, activeFinding, tourState, project, lessonFocus]);
+  }, [findings, activeFinding, tourState, project, lessonFocus, view, playStep]);
   const derivedNodes = useMemo((): CanvasNode[] => {
     if (!project || !view) return [];
     const shapes = toFlowNodes(project, view, {
@@ -113,6 +159,7 @@ export function Canvas() {
       issues,
       highlightIds,
       compare,
+      dimmed,
       decisions: decisionsByElement(project),
       ownership,
     });
@@ -124,7 +171,9 @@ export function Canvas() {
     // Regions behind the shapes, notes and comments in front.
     return [
       ...notes.filter((n) => n.type === 'region'),
+      ...ghosts.nodes.filter((n) => !n.parentId),
       ...shapes,
+      ...ghosts.nodes.filter((n) => n.parentId),
       ...notes.filter((n) => n.type !== 'region'),
     ];
   }, [
@@ -136,6 +185,8 @@ export function Canvas() {
     issues,
     highlightIds,
     compare,
+    dimmed,
+    ghosts,
     ownership,
     selectedAnnotation,
     editingAnnotation,
@@ -144,9 +195,12 @@ export function Canvas() {
   const derivedEdges = useMemo(
     () =>
       project && view
-        ? toFlowEdges(project, view, { selectedIds, issues, highlightIds, compare })
+        ? [
+            ...toFlowEdges(project, view, { selectedIds, issues, highlightIds, compare, dimmed }),
+            ...ghosts.edges,
+          ]
         : [],
-    [project, view, selectedIds, issues, highlightIds, compare],
+    [project, view, selectedIds, issues, highlightIds, compare, dimmed, ghosts],
   );
 
   // Local copies, so dragging and selecting are smooth. The model changes once, on drag
@@ -408,6 +462,11 @@ export function Canvas() {
             panel: null,
           })
         }
+        onEdgeClick={(_, edge) => {
+          // After React Flow has handled the click; nothing is selected while recording.
+          if (recording && view?.kind === 'scenario' && !edge.id.startsWith('ghost:'))
+            setTimeout(() => recordStep(edge.id), 0);
+        }}
         onNodeClick={(e, node) => {
           if (connectMode && node.type === 'shape')
             connectModeTap(node.id, { x: e.clientX, y: e.clientY });
@@ -422,7 +481,7 @@ export function Canvas() {
           openMenu('relation', edge.id, e.clientX, e.clientY);
         }}
         nodesDraggable={!connectMode}
-        elementsSelectable={!connectMode}
+        elementsSelectable={!connectMode && !(recording && view?.kind === 'scenario')}
         connectionMode={ConnectionMode.Loose}
         connectionRadius={40}
         snapToGrid

@@ -1,0 +1,17 @@
+flowchart LR
+  actor__tenant_user(["Tenant user<br/><small>User / actor</small>"])
+  subgraph db__saas_db["SaaS DB"]
+    schema__app[("app<br/><small>Schema</small>")]
+    schema__control[("control<br/><small>Schema</small>")]
+  end
+  subgraph svc__saas_api["SaaS API"]
+    ctl__project_routes("Project routes<br/><small>Controller / route handler</small>")
+    mw__auth_middleware("Auth middleware<br/><small>Middleware</small>")
+    mw__tenant_resolver("Tenant resolver<br/><small>Middleware</small>")
+  end
+  actor__tenant_user -->|"calls"| svc__saas_api
+  ctl__project_routes -->|"reads"| schema__app
+  ctl__project_routes ==>|"writes"| schema__app
+  mw__tenant_resolver -->|"reads"| schema__control
+  svc__saas_api -->|"migrates"| schema__app
+  svc__saas_api -->|"migrates"| schema__control

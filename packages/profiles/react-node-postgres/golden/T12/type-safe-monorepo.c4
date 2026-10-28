@@ -1,0 +1,96 @@
+specification {
+  element gen_actor {
+    notation 'User / actor'
+    style {
+      shape person
+    }
+  }
+  element node_contract {
+    notation 'API contract package'
+  }
+  element node_middleware {
+    notation 'Middleware'
+  }
+  element node_route_handler {
+    notation 'Controller / route handler'
+  }
+  element node_service {
+    notation 'Node service'
+  }
+  element pg_database {
+    notation 'Database'
+    style {
+      shape cylinder
+    }
+  }
+  element pg_schema {
+    notation 'Schema'
+    style {
+      shape cylinder
+    }
+  }
+  element react_api_client {
+    notation 'API client'
+  }
+  element react_app {
+    notation 'React app'
+  }
+  element react_route {
+    notation 'Route / page'
+    style {
+      shape browser
+    }
+  }
+  element react_server_state {
+    notation 'Server-state cache'
+  }
+  relationship calls
+  relationship depends_on
+  relationship fetches_via
+  relationship migrates
+  relationship reads
+  relationship uses_state
+  relationship writes
+}
+
+model {
+  actor_customer = gen_actor 'Customer'
+  api_app_router_types = node_contract 'App router (types)' {
+    description 'Request and response shapes (zod)'
+  }
+  app_web = react_app 'Web' {
+    apic_trpc_client = react_api_client 'tRPC client'
+    qcache_server_state_cache = react_server_state 'Server-state cache'
+    route_orders = react_route 'Orders'
+  }
+  db_app_db = pg_database 'App DB' {
+    schema_public = pg_schema 'public'
+  }
+  svc_api = node_service 'API' {
+    ctl_order_procedures = node_route_handler 'Order procedures'
+    mw_auth_middleware = node_middleware 'Auth middleware' {
+      description 'Read the session cookie; Reject calls without a valid session'
+    }
+  }
+
+  actor_customer -[calls]-> app_web 'calls'
+  app_web.apic_trpc_client -[calls]-> svc_api 'calls'
+  app_web.apic_trpc_client -[depends_on]-> api_app_router_types 'depends on'
+  svc_api.ctl_order_procedures -[depends_on]-> api_app_router_types 'depends on'
+  svc_api.ctl_order_procedures -[reads]-> db_app_db.schema_public 'reads'
+  svc_api.ctl_order_procedures -[writes]-> db_app_db.schema_public 'writes'
+  app_web.qcache_server_state_cache -[fetches_via]-> app_web.apic_trpc_client 'fetches via'
+  app_web.route_orders -[uses_state]-> app_web.qcache_server_state_cache 'uses state'
+  svc_api -[migrates]-> db_app_db.schema_public 'migrates'
+}
+
+views {
+  view index {
+    title 'Type-safe monorepo'
+    include *
+  }
+  view main {
+    title 'Main'
+    include actor_customer, app_web, app_web.route_orders, app_web.qcache_server_state_cache, app_web.apic_trpc_client, api_app_router_types, svc_api, svc_api.mw_auth_middleware, svc_api.ctl_order_procedures, db_app_db, db_app_db.schema_public
+  }
+}

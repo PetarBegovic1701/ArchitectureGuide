@@ -1,0 +1,36 @@
+@startuml
+!include <C4/C4_Container>
+
+title Node services, database per service – containers
+
+Person(actor_client, "Client", "")
+System_Boundary(db_per_service, "Node services, database per service") {
+  Container(svc_orders_service, "Orders service", "", "")
+  Container(svc_payments_service, "Payments service", "", "")
+  Container(svc_shipping_service, "Shipping service", "", "")
+  Container(auth_identity_provider, "Identity provider", "", "")
+  Container(gw_api_gateway, "API gateway", "nginx", "")
+  ContainerDb(db_orders_db, "Orders DB", "", "")
+  ContainerDb(db_payments_db, "Payments DB", "", "")
+  ContainerDb(db_shipping_db, "Shipping DB", "", "")
+}
+
+Rel(actor_client, gw_api_gateway, "calls", "http")
+Rel(gw_api_gateway, auth_identity_provider, "authenticates with")
+Rel(gw_api_gateway, svc_orders_service, "calls", "http")
+Rel(gw_api_gateway, svc_payments_service, "calls", "http")
+Rel(gw_api_gateway, svc_shipping_service, "calls", "http")
+Rel(svc_orders_service, db_orders_db, "enqueues")
+Rel(svc_orders_service, db_orders_db, "migrates")
+Rel(svc_orders_service, db_orders_db, "reads")
+Rel(svc_orders_service, db_orders_db, "writes")
+Rel(svc_payments_service, db_payments_db, "migrates")
+Rel(svc_payments_service, db_orders_db, "processes")
+Rel(svc_payments_service, db_payments_db, "reads")
+Rel(svc_payments_service, db_payments_db, "writes")
+Rel(svc_shipping_service, db_shipping_db, "migrates")
+Rel(svc_shipping_service, db_shipping_db, "reads")
+Rel(svc_shipping_service, db_shipping_db, "writes")
+
+SHOW_LEGEND()
+@enduml

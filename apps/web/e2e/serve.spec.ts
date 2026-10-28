@@ -1,4 +1,4 @@
-import { cp, mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { cp, mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { expect, test } from '@playwright/test';
@@ -248,4 +248,93 @@ test('an agent analyzes the repository; a person reviews the suggestions and the
   await expect(legend).toBeVisible();
   await expect(node(page, 'tbl.invoice')).toBeVisible();
   await expect(node(page, 'app.web')).toHaveCount(0);
+});
+
+/** Runs the CLI in the workspace and returns its exit code and output. */
+function cli(...args: string[]): Promise<{ code: number; out: string }> {
+  return new Promise((resolve) => {
+    const child = spawn(
+      join(repo, 'node_modules', '.bin', 'tsx'),
+      [join(repo, 'packages/cli/src/bin.ts'), '--workspace', ws.dir, ...args],
+      { stdio: ['ignore', 'pipe', 'inherit'] },
+    );
+    let out = '';
+    child.stdout!.on('data', (chunk: Buffer) => (out += chunk.toString()));
+    child.once('exit', (code) => resolve({ code: code ?? 1, out }));
+  });
+}
+
+test('Phase 9: baseline from a scan, a change set in the UI, the plan, the agent builds it, check passes', async ({
+  page,
+}) => {
+  // Baseline: the repository scan, accepted by the agent.
+  const root = dirname(ws.dir);
+  await cp(join(repo, 'packages/analyzer/fixtures/vite-express-prisma'), root, { recursive: true });
+  await tool('create_project', { name: 'Shop' });
+  await tool('analyze_repository');
+  await tool('apply_analysis', { minConfidence: 0 });
+  expect((await ws.readProject('shop')).model.elements.some((e) => e.id === 'svc.api')).toBe(true);
+
+  // A person plans the feature in the browser.
+  await page.goto(`/?t=${TOKEN}#/p/shop`);
+  await expect(page.getByTestId('save-status')).toContainText('Saved · live');
+  await page.getByRole('button', { name: 'Change sets' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Change sets' });
+  await dialog.getByLabel('Change set name').fill('Send receipts');
+  await dialog.getByLabel('Change set description').fill('E-mail a receipt after an order.');
+  await dialog.getByRole('button', { name: 'Start change set' }).click();
+  await dialog.getByRole('button', { name: 'Close' }).click();
+  await expect(page.getByTestId('changeset-banner')).toBeVisible();
+  await page.getByRole('button', { name: 'Full' }).click();
+  await page.getByTestId('palette-item-node.worker').click();
+  await page.getByLabel('Element name').fill('Mailer');
+  await page.getByLabel('Element name').press('Enter');
+  await expect(node(page, 'wrk.mailer')).toBeVisible();
+  await page.getByRole('tab', { name: 'properties' }).click();
+  await page.getByLabel('Code paths (one glob per line)').fill('services/mailer');
+  await page.getByLabel('Code paths (one glob per line)').press('Tab');
+  // Recorded into the change set on the server; the baseline file is unchanged.
+  await expect
+    .poll(async () => (await ws.readProject('shop')).changeSets[0]?.ops.length ?? 0)
+    .toBeGreaterThan(1);
+  expect((await ws.readProject('shop')).model.elements.some((e) => e.id === 'wrk.mailer')).toBe(
+    false,
+  );
+
+  await page.getByRole('button', { name: 'Tasks and details…' }).click();
+  await dialog.getByRole('tab', { name: /Tasks/ }).click();
+  await dialog.getByTestId('generate-tasks').click();
+  await dialog.getByRole('button', { name: 'Export plan…' }).click();
+  const preview = page.getByRole('dialog', { name: 'Export' }).getByTestId('export-preview');
+  await expect(preview).toContainText('# Plan: Send receipts');
+  await expect(preview).toContainText('**Create wrk.mailer**');
+  await expect(preview).toContainText('Code: `services/mailer`');
+  await page.getByRole('dialog', { name: 'Export' }).getByRole('button', { name: 'Close' }).click();
+
+  // The agent reads the plan, builds the code, and marks the change set implemented.
+  const plan = await mcp.readResource({
+    uri: 'archguide://projects/shop/change-sets/cs.send-receipts',
+  });
+  expect((plan.contents[0] as { text: string }).text).toContain('**Create wrk.mailer**');
+  await mkdir(join(root, 'services/mailer/src'), { recursive: true });
+  await writeFile(
+    join(root, 'services/mailer/package.json'),
+    JSON.stringify({ name: '@shop/mailer', private: true, dependencies: { 'pg-boss': '^10.0.0' } }),
+  );
+  await writeFile(
+    join(root, 'services/mailer/src/main.ts'),
+    "import PgBoss from 'pg-boss';\n\nconst boss = new PgBoss(process.env.DATABASE_URL!);\nawait boss.start();\nawait boss.work('send-receipt', async ([job]) => console.log(job?.data));\n",
+  );
+  await tool('update_change_set', { changeSetId: 'cs.send-receipts', status: 'implemented' });
+
+  // The browser follows: the change is now part of the baseline.
+  await expect(page.getByTestId('changeset-banner')).toHaveCount(0);
+  await expect(node(page, 'wrk.mailer')).toBeVisible();
+  await expect(page.getByTestId('diff-wrk.mailer')).toHaveCount(0);
+
+  // CI gate: the model, the analysis, the dependency rules and drift agree.
+  const check = await cli('check', '--format', 'json');
+  expect(check.code, check.out).toBe(0);
+  const report = JSON.parse(check.out) as { items: { ruleId: string; message: string }[] };
+  expect(report.items.filter((i) => i.ruleId.startsWith('DRIFT'))).toEqual([]);
 });

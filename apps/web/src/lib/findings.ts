@@ -23,14 +23,25 @@ import {
 import type { Point } from './model';
 
 /**
- * Rules run on the main thread, once per project change (Implementation.md §11.3: under
+ * Rules run on the main thread, once per project version (Implementation.md §11.3: under
  * 100 ms for 500 elements). A Web Worker is the next step if real models get slower.
  */
-let cache: { project: Project; findings: Finding[] } | undefined;
+const cache = new WeakMap<Project, Finding[]>();
 
 export function findingsOf(p: Project): Finding[] {
-  if (cache?.project !== p) cache = { project: p, findings: runRules(p, catalog) };
-  return cache.findings;
+  let findings = cache.get(p);
+  if (!findings) cache.set(p, (findings = runRules(p, catalog)));
+  return findings;
+}
+
+/** Change-set mode: keys of the findings the change introduces (not on the baseline). */
+export function introducedKeys(baseline: Project, shown: Project): Set<string> {
+  const before = new Set(findingsOf(baseline).map(findingKey));
+  return new Set(
+    findingsOf(shown)
+      .map(findingKey)
+      .filter((k) => !before.has(k)),
+  );
 }
 
 export const RULES: ReadonlyMap<string, Rule> = new Map(allRules(catalog).map((r) => [r.id, r]));

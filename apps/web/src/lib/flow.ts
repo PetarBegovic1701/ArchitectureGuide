@@ -10,7 +10,7 @@ import type {
   View,
 } from '@archguide/core';
 import { catalog, conceptOf, shapeFor } from './catalog';
-import { colorOf, elementById, isContainer, nodeSize } from './model';
+import { absolutePosition, colorOf, elementById, isContainer, nodeSize } from './model';
 import type { Issue } from './findings';
 import {
   REGION_SIZE,
@@ -42,9 +42,11 @@ export type ShapeNodeData = {
   diff?: DiffMark;
   /** Accepted or proposed decisions linked to the element. */
   decisionIds?: Id[];
+  /** Change-set mode: a shape the change removes, drawn from the baseline. Not editable. */
+  ghost?: boolean;
 };
 
-export type DiffMark = 'added' | 'changed';
+export type DiffMark = 'added' | 'changed' | 'removed';
 
 export type RelationEdgeData = {
   relation: Relation;
@@ -56,6 +58,8 @@ export type RelationEdgeData = {
   issue?: Issue;
   highlighted: boolean;
   diff?: DiffMark;
+  /** Focus mode or a filter: not part of what the user looks at. */
+  dimmed?: boolean;
 };
 
 export type ShapeFlowNode = Node<ShapeNodeData, 'shape'>;
@@ -68,7 +72,13 @@ export interface FlowOptions {
   connecting?: { sourceId: Id; validTargets: ReadonlySet<Id> } | null;
   issues?: ReadonlyMap<Id, Issue>;
   highlightIds?: ReadonlySet<Id>;
-  compare?: { added: ReadonlySet<Id>; changed: ReadonlySet<Id> } | null;
+  compare?: {
+    added: ReadonlySet<Id>;
+    changed: ReadonlySet<Id>;
+    removed?: ReadonlySet<Id>;
+  } | null;
+  /** Focus mode and filters: these are dimmed. */
+  dimmed?: ReadonlySet<Id> | null;
   decisions?: ReadonlyMap<Id, Id[]>;
   /** Ownership colors (database view): they replace the shapes' own colors. */
   ownership?: ReadonlyMap<Id, string> | null;
@@ -112,8 +122,16 @@ export function toFlowNodes(p: Project, view: View, options: FlowOptions = {}): 
         height: size.h,
         zIndex: container ? Z_CONTAINER + d : Z_LEAF + d,
         selected: options.selectedIds?.has(el.id) ?? false,
-        ...(className || container
-          ? { className: [className, container ? 'ag-container' : ''].filter(Boolean).join(' ') }
+        ...(className || container || options.dimmed?.has(el.id)
+          ? {
+              className: [
+                className,
+                container ? 'ag-container' : '',
+                options.dimmed?.has(el.id) ? 'ag-dimmed' : '',
+              ]
+                .filter(Boolean)
+                .join(' '),
+            }
           : {}),
         data: {
           elementId: el.id,
@@ -165,9 +183,59 @@ export function toFlowEdges(p: Project, view: View, options: FlowOptions = {}): 
         ...withIssue(options.issues?.get(r.id)),
         highlighted: options.highlightIds?.has(r.id) ?? false,
         ...diffMark(options, r.id),
+        ...(options.dimmed?.has(r.id) ? { dimmed: true } : {}),
       },
     };
   });
+}
+
+/**
+ * Change-set mode: shapes and arrows the change removes, where the baseline view had them.
+ * They are drawn red and dashed, and cannot be selected or moved (§16.1).
+ */
+export function toGhosts(
+  baseline: Project,
+  shown: Project,
+  viewId: Id,
+  removed: ReadonlySet<Id>,
+): { nodes: ShapeFlowNode[]; edges: RelationFlowEdge[] } {
+  const view = baseline.views.find((v) => v.id === viewId);
+  const live = shown.views.find((v) => v.id === viewId);
+  if (!view || !live || removed.size === 0) return { nodes: [], edges: [] };
+  const inLive = new Set(live.nodes.map((n) => n.elementId));
+  const ghostIds = new Set(
+    view.nodes.map((n) => n.elementId).filter((id) => removed.has(id) && !inLive.has(id)),
+  );
+  const drawn = new Set([...inLive, ...ghostIds]);
+  const base = toFlowNodes(baseline, view, {
+    compare: { added: new Set(), changed: new Set(), removed },
+  });
+  const nodes = base
+    .filter((n) => ghostIds.has(n.id))
+    .map((n): ShapeFlowNode => {
+      const parent = n.parentId && drawn.has(n.parentId) ? n.parentId : undefined;
+      const position = parent ? n.position : absolutePosition(baseline, view, n.id);
+      const { parentId: _p, ...rest } = n;
+      return {
+        ...rest,
+        ...(parent ? { parentId: parent } : {}),
+        position,
+        draggable: false,
+        selectable: false,
+        connectable: false,
+        className: [n.className, 'ag-ghost'].filter(Boolean).join(' '),
+        data: { ...n.data, diff: 'removed', ghost: true },
+      };
+    });
+  const listed = new Set(view.edges.map((e) => e.relationId));
+  const edges = toFlowEdges(baseline, view, {
+    compare: { added: new Set(), changed: new Set(), removed },
+  })
+    .filter(
+      (e) => removed.has(e.id) && listed.has(e.id) && drawn.has(e.source) && drawn.has(e.target),
+    )
+    .map((e) => ({ ...e, id: `ghost:${e.id}`, selectable: false, focusable: false }));
+  return { nodes, edges };
 }
 
 /** Leaves `issue` out of the data when there is none. */
@@ -176,6 +244,7 @@ const withIssue = (issue: Issue | undefined) => (issue ? { issue } : {});
 function diffMark(options: FlowOptions, id: Id): { diff?: DiffMark } {
   if (options.compare?.added.has(id)) return { diff: 'added' };
   if (options.compare?.changed.has(id)) return { diff: 'changed' };
+  if (options.compare?.removed?.has(id)) return { diff: 'removed' };
   return {};
 }
 

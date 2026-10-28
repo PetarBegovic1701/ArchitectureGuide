@@ -1,0 +1,23 @@
+@startuml
+!include <C4/C4_Container>
+
+title Type-safe monorepo – containers
+
+Person(actor_customer, "Customer", "")
+System_Boundary(type_safe_monorepo, "Type-safe monorepo") {
+  Container(app_web, "Web", "", "")
+  Container(svc_api, "API", "", "")
+  Container(api_app_router_types, "App router (types)", "", "Request and response shapes (zod)")
+  ContainerDb(db_app_db, "App DB", "", "")
+}
+
+Rel(actor_customer, app_web, "calls", "https")
+Rel(app_web, svc_api, "calls", "https")
+Rel(app_web, api_app_router_types, "depends on")
+Rel(svc_api, api_app_router_types, "depends on")
+Rel(svc_api, db_app_db, "reads")
+Rel(svc_api, db_app_db, "writes")
+Rel(svc_api, db_app_db, "migrates")
+
+SHOW_LEGEND()
+@enduml

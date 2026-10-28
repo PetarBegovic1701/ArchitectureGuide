@@ -1,0 +1,23 @@
+@startuml
+!include <C4/C4_Container>
+
+title Background jobs on PostgreSQL – containers
+
+Person(actor_customer, "Customer", "")
+System_Ext(ext_e_mail_provider, "E-mail provider", "")
+System_Boundary(background_jobs, "Background jobs on PostgreSQL") {
+  Container(svc_shop_api, "Shop API", "", "")
+  Container(wrk_worker, "Worker", "", "Send confirmation email; Generate invoice PDF")
+  ContainerDb(db_shop_db, "Shop DB", "", "")
+}
+
+Rel(actor_customer, svc_shop_api, "calls", "http")
+Rel(svc_shop_api, db_shop_db, "migrates")
+Rel(svc_shop_api, db_shop_db, "enqueues")
+Rel(svc_shop_api, db_shop_db, "writes")
+Rel(wrk_worker, ext_e_mail_provider, "calls", "http")
+Rel(wrk_worker, db_shop_db, "processes")
+Rel(wrk_worker, db_shop_db, "reads")
+
+SHOW_LEGEND()
+@enduml

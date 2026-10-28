@@ -1,6 +1,6 @@
 import type { Catalog } from '../catalog';
 import { uniqueId } from '../ids';
-import type { Id, ModelOp, Project } from '../schema';
+import type { Id, ModelOp, Project, View } from '../schema';
 import { placeMissingOps } from './place';
 
 export interface DataOwnership {
@@ -82,25 +82,46 @@ export function dataOwners(p: Project, catalog: Catalog): Map<Id, DataOwnership>
 
 /**
  * A database view (kind "database"): the Postgres elements and the deployables that read,
- * write or migrate them, placed. One undo step.
+ * write or migrate them, placed. With a scope (drill-down into one database): only the
+ * Postgres elements inside it. One undo step.
  */
 export function databaseViewOps(
   p: Project,
   catalog: Catalog,
   name = 'Database',
+  scopeElementId?: Id,
 ): { ops: ModelOp[]; viewId: Id } {
-  const viewId = uniqueId('database', new Set(p.views.map((v) => v.id)));
+  const viewId = uniqueId(
+    scopeElementId ? `database-${scopeElementId.replace(/\./g, '-')}` : 'database',
+    new Set(p.views.map((v) => v.id)),
+  );
   const byId = new Map(p.model.elements.map((e) => [e.id, e]));
   const keep = new Set<Id>();
   const withAncestors = (id: Id) => {
     for (let cur = byId.get(id); cur; cur = cur.parentId ? byId.get(cur.parentId) : undefined)
       keep.add(cur.id);
   };
-  for (const e of p.model.elements) if (e.kind.startsWith('pg.')) withAncestors(e.id);
+  const inScope = (id: Id) => {
+    if (!scopeElementId) return true;
+    for (let cur = byId.get(id); cur; cur = cur.parentId ? byId.get(cur.parentId) : undefined)
+      if (cur.id === scopeElementId) return true;
+    return false;
+  };
+  for (const e of p.model.elements)
+    if (e.kind.startsWith('pg.') && inScope(e.id)) withAncestors(e.id);
   const owners = dataOwners(p, catalog);
-  for (const o of owners.values())
-    for (const d of [o.owner, ...o.writers, ...o.readers]) if (d) keep.add(d);
+  for (const [id, o] of owners)
+    if (inScope(id)) for (const d of [o.owner, ...o.writers, ...o.readers]) if (d) keep.add(d);
   // Lay out only what the view shows: a copy of the project that holds just those elements.
+  const view: View = {
+    id: viewId,
+    name,
+    kind: 'database',
+    ...(scopeElementId ? { scopeElementId } : {}),
+    nodes: [],
+    edges: [],
+    annotations: [],
+  };
   const filtered: Project = {
     ...p,
     model: {
@@ -109,16 +130,10 @@ export function databaseViewOps(
         .map((e) => (e.parentId && !keep.has(e.parentId) ? { ...e, parentId: undefined } : e)),
       relations: p.model.relations.filter((r) => keep.has(r.sourceId) && keep.has(r.targetId)),
     },
-    views: [{ id: viewId, name, kind: 'database', nodes: [], edges: [], annotations: [] }],
+    views: [view],
   };
   return {
     viewId,
-    ops: [
-      {
-        op: 'addView',
-        view: { id: viewId, name, kind: 'database', nodes: [], edges: [], annotations: [] },
-      },
-      ...placeMissingOps(filtered, catalog, viewId),
-    ],
+    ops: [{ op: 'addView', view }, ...placeMissingOps(filtered, catalog, viewId)],
   };
 }

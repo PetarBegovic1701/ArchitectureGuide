@@ -1,0 +1,71 @@
+specification {
+  element gen_actor {
+    notation 'User / actor'
+    style {
+      shape person
+    }
+  }
+  element node_middleware {
+    notation 'Middleware'
+  }
+  element node_module {
+    notation 'Module'
+  }
+  element node_service {
+    notation 'Node service'
+  }
+  element pg_database {
+    notation 'Database'
+    style {
+      shape cylinder
+    }
+  }
+  element pg_schema {
+    notation 'Schema'
+    style {
+      shape cylinder
+    }
+  }
+  relationship calls
+  relationship depends_on
+  relationship migrates
+  relationship writes
+}
+
+model {
+  actor_api_client = gen_actor 'API client'
+  db_shop_db = pg_database 'Shop DB' {
+    schema_billing = pg_schema 'billing'
+    schema_catalog = pg_schema 'catalog'
+    schema_orders = pg_schema 'orders'
+  }
+  svc_shop = node_service 'Shop' {
+    mod_billing = node_module 'Billing'
+    mod_catalog = node_module 'Catalog'
+    mod_orders = node_module 'Orders'
+    mw_auth_middleware = node_middleware 'Auth middleware' {
+      description 'Read the session cookie; Reject calls without a valid session'
+    }
+  }
+
+  actor_api_client -[calls]-> svc_shop 'calls'
+  svc_shop.mod_billing -[depends_on]-> svc_shop.mod_orders 'public API'
+  svc_shop.mod_billing -[writes]-> db_shop_db.schema_billing 'writes'
+  svc_shop.mod_catalog -[writes]-> db_shop_db.schema_catalog 'writes'
+  svc_shop.mod_orders -[depends_on]-> svc_shop.mod_catalog 'public API'
+  svc_shop.mod_orders -[writes]-> db_shop_db.schema_orders 'writes'
+  svc_shop -[migrates]-> db_shop_db.schema_billing 'migrates'
+  svc_shop -[migrates]-> db_shop_db.schema_catalog 'migrates'
+  svc_shop -[migrates]-> db_shop_db.schema_orders 'migrates'
+}
+
+views {
+  view index {
+    title 'NestJS modular monolith'
+    include *
+  }
+  view main {
+    title 'Main'
+    include actor_api_client, svc_shop, svc_shop.mw_auth_middleware, db_shop_db, svc_shop.mod_orders, db_shop_db.schema_orders, svc_shop.mod_catalog, db_shop_db.schema_catalog, svc_shop.mod_billing, db_shop_db.schema_billing
+  }
+}

@@ -1,0 +1,17 @@
+@startuml
+!include <C4/C4_Container>
+
+title NestJS modular monolith – containers
+
+Person(actor_api_client, "API client", "")
+System_Boundary(modular_monolith, "NestJS modular monolith") {
+  Container(svc_shop, "Shop", "", "")
+  ContainerDb(db_shop_db, "Shop DB", "", "")
+}
+
+Rel(actor_api_client, svc_shop, "calls", "http")
+Rel(svc_shop, db_shop_db, "writes")
+Rel(svc_shop, db_shop_db, "migrates")
+
+SHOW_LEGEND()
+@enduml

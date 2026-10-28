@@ -1,0 +1,29 @@
+flowchart LR
+  actor__customer(["Customer<br/><small>User / actor</small>"])
+  subgraph db__orders_db["Orders DB"]
+    jobs__changes>"changes<br/><small>Postgres job queue</small>"]
+    subgraph schema__app["app"]
+      tbl__order_summary["Order summary<br/><small>Table</small>"]
+      tbl__orders["orders<br/><small>Table</small>"]
+      view__sales_by_day[("Sales by day<br/><small>View / materialized view</small>")]
+    end
+  end
+  subgraph svc__orders["Orders"]
+    ctl__commands("Commands<br/><small>Controller / route handler</small>")
+    ctl__queries("Queries<br/><small>Controller / route handler</small>")
+    mw__auth_middleware("Auth middleware<br/><small>Middleware</small>")
+    uc__place_order("Place order<br/><small>Use case / application service</small>")
+    uc__read_views("Read views<br/><small>Use case / application service</small>")
+  end
+  wrk__projector["Projector<br/><small>Background worker</small>"]
+  actor__customer -->|"calls"| svc__orders
+  ctl__commands -->|"calls"| uc__place_order
+  ctl__queries -->|"calls"| uc__read_views
+  svc__orders -->|"migrates"| schema__app
+  uc__place_order -.->|"enqueues: project"| jobs__changes
+  uc__place_order ==>|"writes"| tbl__orders
+  uc__read_views -->|"reads"| tbl__order_summary
+  uc__read_views -->|"reads"| view__sales_by_day
+  wrk__projector -.->|"processes"| jobs__changes
+  wrk__projector -->|"reads"| tbl__orders
+  wrk__projector ==>|"writes"| tbl__order_summary

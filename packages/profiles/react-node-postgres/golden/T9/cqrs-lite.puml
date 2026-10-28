@@ -1,0 +1,23 @@
+@startuml
+!include <C4/C4_Container>
+
+title CQRS-lite on PostgreSQL – containers
+
+Person(actor_customer, "Customer", "")
+System_Boundary(cqrs_lite, "CQRS-lite on PostgreSQL") {
+  Container(svc_orders, "Orders", "", "")
+  Container(wrk_projector, "Projector", "", "Keep Order summary, Sales by day up to date")
+  ContainerDb(db_orders_db, "Orders DB", "", "")
+}
+
+Rel(actor_customer, svc_orders, "calls", "http")
+Rel(svc_orders, db_orders_db, "migrates")
+Rel(svc_orders, db_orders_db, "enqueues: project")
+Rel(svc_orders, db_orders_db, "writes")
+Rel(svc_orders, db_orders_db, "reads")
+Rel(wrk_projector, db_orders_db, "processes")
+Rel(wrk_projector, db_orders_db, "reads")
+Rel(wrk_projector, db_orders_db, "writes")
+
+SHOW_LEGEND()
+@enduml

@@ -24,6 +24,7 @@ new projects start with: `core`, `frontend`, `security`, `concurrency`, `api`, `
 | `layered` | Layered | Layers are not skipped. |
 | `hexagonal` | Hexagonal | The domain depends on nothing outside it. |
 | `fsd` | Feature-Sliced Design | Features do not import each other. |
+| `cqrs` | CQRS | Only projectors write read models; queries read them. |
 
 ## Summary
 
@@ -71,6 +72,7 @@ new projects start with: `core`, `frontend`, `security`, `concurrency`, `api`, `
 | [RNP-026](#rnp-026) | Tokens in web storage | warning | security |
 | [RNP-027](#rnp-027) | Logic split between SQL and a service | info | react-node-postgres |
 | [RNP-028](#rnp-028) | Module writes another module's schema | warning | modular-monolith |
+| [RNP-029](#rnp-029) | Read model written outside its projector | warning | cqrs |
 
 ## Generic rules
 
@@ -455,6 +457,16 @@ In a modular monolith each module owns its tables. When one module writes anothe
 **As a rule for agents:** A module MUST only write its own schema; it uses other modules through their public services.
 
 Learn: `pattern.modular-monolith`.
+
+### RNP-029
+
+**Read model written outside its projector** · warning · packs: CQRS
+
+In CQRS the read models (tables tagged "read-model", materialized views) are derived data. When request code writes them directly, they drift from the write tables and nobody can rebuild them. Let the command change the write tables and the projector update the read models.
+
+**As a rule for agents:** Only the projector MAY write a read model; commands write the write tables.
+
+Learn: `pattern.cqrs`.
 
 ## Analysis rules
 

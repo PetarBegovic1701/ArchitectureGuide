@@ -55,11 +55,15 @@ export function computeFacts(
   project: Project,
   catalog: Catalog,
   options: ExportOptions = {},
+  /** Export just these elements (a change set's neighborhood). */
+  only?: ReadonlySet<Id>,
 ): Facts {
   const graph = new GraphQuery(project, catalog);
-  const included = options.focus
-    ? neighborhood(project, catalog, options.focus, options.depth ?? 1)
-    : new Set(project.model.elements.map((e) => e.id));
+  const included = only
+    ? new Set(only)
+    : options.focus
+      ? neighborhood(project, catalog, options.focus, options.depth ?? 1)
+      : new Set(project.model.elements.map((e) => e.id));
   // Actors first (they start every story), then by layer, then the rest.
   const layerRank = (e: Element) => {
     if (graph.category(e) === 'actor') return -1;

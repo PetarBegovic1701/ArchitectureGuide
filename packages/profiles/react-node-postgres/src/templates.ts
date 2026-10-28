@@ -852,6 +852,628 @@ const featureSliced: Template = {
   },
 };
 
+const outbox: Template = {
+  id: 'rnp.outbox',
+  code: 'T8',
+  version: '1.0.0',
+  name: 'Transactional outbox on PostgreSQL',
+  category: 'backend',
+  summary:
+    'The service writes its data and the events about it to an outbox table in one transaction. A relay publishes the outbox rows; consumers react to them.',
+  whenToUse: [
+    'Other parts of the system must hear about a change, and losing or inventing an event is not acceptable.',
+    'You publish to a broker or a queue that is not in the same database transaction.',
+  ],
+  whenNotToUse: [
+    'The consumer only needs a job in the same database: enqueue it in the transaction (T7).',
+  ],
+  tradeoffs: [
+    'No lost or ghost events: an event exists exactly when its data was committed.',
+    'Events arrive a little later, at least once and possibly twice: consumers must be idempotent.',
+  ],
+  parameters: [
+    { key: 'serviceName', label: 'Service name', type: 'string', default: 'Orders' },
+    {
+      key: 'events',
+      label: 'Events',
+      type: 'string[]',
+      default: ['order.placed', 'order.paid'],
+      max: 5,
+    },
+    {
+      key: 'delivery',
+      label: 'Delivery',
+      type: 'enum',
+      options: ['job-queue', 'broker'],
+      default: 'job-queue',
+    },
+  ],
+  rulePacks: ['core', 'event-driven', 'concurrency', 'security'],
+  invariants: [
+    '{serviceName} MUST write its data and the outbox row in one transaction; it MUST NOT publish directly.',
+    'Only the outbox relay MAY publish the events ({events}); it marks rows as sent after publishing.',
+    'Consumers MUST be idempotent: the relay delivers each event at least once.',
+  ],
+  folderLayout: {
+    'node.service': 'services/{serviceName}/**',
+    'node.worker': 'services/{serviceName}/src/outbox/**',
+  },
+  learnId: 'pattern.outbox',
+  build(p, b) {
+    const service = str(p.serviceName);
+    const events = list(p.events);
+    const broker = str(p.delivery) === 'broker';
+    b.el('user', 'gen.actor', 'Customer', { x: 0, y: 80 });
+    b.el('svc', 'node.service', service, {
+      x: 120,
+      y: 0,
+      properties: { framework: 'express', dataAccess: 'prisma' },
+    });
+    authMiddleware(b, 'auth', 'svc', IN.x, IN.y);
+    b.el('routes', 'node.route-handler', `${service} routes`, {
+      parent: 'svc',
+      x: IN.x,
+      y: IN.y + MH + GAP,
+      properties: { validation: 'zod' },
+    });
+    b.el('uc', 'node.use-case', 'Change and record event', {
+      parent: 'svc',
+      x: IN.x + M + GAP,
+      y: IN.y + MH + GAP,
+    });
+    b.el('db', 'pg.database', `${service} DB`, { x: 520, y: 0 });
+    b.el('schema', 'pg.schema', slugify(service).replace(/-/g, '_'), {
+      parent: 'db',
+      ...IN,
+      properties: { migrationTool: 'prisma-migrate' },
+    });
+    b.el('data', 'pg.table', tableName(service), {
+      parent: 'schema',
+      ...IN,
+      properties: entityTable(),
+    });
+    b.el('outbox', 'pg.table', 'outbox', {
+      parent: 'schema',
+      x: IN.x + M + 16,
+      y: IN.y,
+      responsibilities: [`Events not yet sent: ${events.join(', ')}`],
+      properties: {
+        columns: [
+          { name: 'id', type: 'bigserial', nullable: false },
+          { name: 'topic', type: 'text', nullable: false },
+          { name: 'payload', type: 'jsonb', nullable: false },
+          { name: 'created_at', type: 'timestamptz', nullable: false },
+          { name: 'sent_at', type: 'timestamptz', nullable: true },
+        ],
+        primaryKey: ['id'],
+        indexes: [{ columns: ['sent_at', 'id'] }],
+      },
+    });
+    b.el('relay', 'node.worker', 'Outbox relay', {
+      x: 880,
+      y: 0,
+      responsibilities: ['Read unsent outbox rows in order', 'Publish them', 'Mark them sent'],
+      properties: { concurrency: 1 },
+    });
+    if (broker) {
+      b.el('bus', 'gen.other-broker', 'Message broker', {
+        x: 1100,
+        y: 0,
+        properties: { deadLetter: true, ordering: 'per-key' },
+      });
+      b.el('consumer', 'node.service', 'Notifications', { x: 1100, y: 200 });
+      authMiddleware(b, 'consumer-auth', 'consumer', IN.x, IN.y);
+      b.rel('relay', 'publishes', 'bus', { label: events.join(', ') });
+      b.rel('consumer', 'consumes', 'bus', { label: events.join(', ') });
+    } else {
+      b.el('queue', 'pg.job-queue', 'events', {
+        parent: 'db',
+        x: IN.x,
+        y: IN.y + 200,
+        properties: { lib: 'pg-boss', queues: events, deadLetter: true },
+      });
+      b.el('consumer', 'node.worker', 'Notifications', {
+        x: 1100,
+        y: 200,
+        properties: { jobLib: 'pg-boss', concurrency: 5 },
+      });
+      b.rel('relay', 'enqueues', 'queue', { label: events.join(', '), inTransaction: true });
+      b.rel('consumer', 'processes', 'queue');
+    }
+    b.rel('user', 'calls', 'svc', { protocol: 'http' });
+    b.rel('routes', 'calls', 'uc');
+    b.rel('uc', 'writes', 'data', { via: 'prisma', inTransaction: true });
+    b.rel('uc', 'writes', 'outbox', { via: 'prisma', inTransaction: true });
+    b.rel('relay', 'reads', 'outbox', { via: 'pg' });
+    // With a Postgres queue, marking sent and enqueuing share one transaction.
+    b.rel('relay', 'writes', 'outbox', { via: 'pg', label: 'mark sent', inTransaction: !broker });
+    b.rel('svc', 'migrates', 'schema');
+    b.step({
+      title: 'One transaction',
+      body: '"Change and record event" writes the {serviceName} row and the outbox row together. Either both are committed or neither is.',
+      elements: ['uc', 'data', 'outbox'],
+      relations: ['uc>writes>outbox'],
+      conceptIds: ['topic.transactions-and-isolation'],
+    });
+    b.step({
+      title: 'The relay',
+      body: 'A separate process reads unsent rows in order, publishes them ({events}) and marks them sent. If it crashes in between, it sends again: consumers must be idempotent.',
+      elements: ['relay', 'consumer'],
+      relations: ['relay>reads>outbox'],
+    });
+  },
+};
+
+const cqrsLite: Template = {
+  id: 'rnp.cqrs-lite',
+  code: 'T9',
+  version: '1.0.0',
+  name: 'CQRS-lite on PostgreSQL',
+  category: 'backend',
+  summary:
+    'Commands change the write tables; a projector keeps read models (projection tables and materialized views) up to date; queries read only the read models.',
+  whenToUse: [
+    'Screens need data shaped very differently from how it is written (dashboards, search lists, reports).',
+    'Reads are much more frequent than writes, and slightly stale reads are fine.',
+  ],
+  whenNotToUse: [
+    'Simple CRUD screens: read the tables directly.',
+    'Every read must see the latest write (read your own writes) and you cannot design around it.',
+  ],
+  tradeoffs: [
+    'Fast, simple queries on data shaped for the screen.',
+    'Read models lag behind writes; the projector is more code to run and watch.',
+  ],
+  parameters: [
+    { key: 'serviceName', label: 'Service name', type: 'string', default: 'Orders' },
+    {
+      key: 'readModels',
+      label: 'Read models',
+      type: 'string[]',
+      default: ['Order summary', 'Sales by day'],
+      max: 4,
+    },
+  ],
+  rulePacks: ['core', 'cqrs', 'event-driven', 'security'],
+  invariants: [
+    'Queries MUST read only the read models ({readModels}); commands MUST write only the write tables.',
+    'Only the projector MAY write the read models.',
+    'Read models MAY lag behind the write tables; screens MUST NOT assume read-your-own-writes.',
+  ],
+  folderLayout: {
+    'node.use-case': 'services/{serviceName}/src/application/**',
+    'node.worker': 'services/{serviceName}/src/projector/**',
+  },
+  learnId: 'pattern.cqrs',
+  build(p, b) {
+    const service = str(p.serviceName);
+    const models = list(p.readModels);
+    b.el('user', 'gen.actor', 'Customer', { x: 0, y: 80 });
+    b.el('svc', 'node.service', service, {
+      x: 120,
+      y: 0,
+      properties: { framework: 'express', dataAccess: 'prisma' },
+    });
+    authMiddleware(b, 'auth', 'svc', IN.x, IN.y);
+    b.el('commands', 'node.route-handler', 'Commands', {
+      parent: 'svc',
+      x: IN.x,
+      y: IN.y + MH + GAP,
+      properties: { validation: 'zod' },
+    });
+    b.el('queries', 'node.route-handler', 'Queries', {
+      parent: 'svc',
+      x: IN.x,
+      y: IN.y + 2 * (MH + GAP),
+      properties: { validation: 'zod' },
+    });
+    b.el('write', 'node.use-case', 'Place order', {
+      parent: 'svc',
+      x: IN.x + M + GAP,
+      y: IN.y + MH + GAP,
+    });
+    b.el('read', 'node.use-case', 'Read views', {
+      parent: 'svc',
+      x: IN.x + M + GAP,
+      y: IN.y + 2 * (MH + GAP),
+    });
+    b.el('db', 'pg.database', `${service} DB`, { x: 520, y: 0 });
+    b.el('schema', 'pg.schema', 'app', {
+      parent: 'db',
+      ...IN,
+      properties: { migrationTool: 'prisma-migrate' },
+    });
+    b.el('table', 'pg.table', tableName(service), {
+      parent: 'schema',
+      ...IN,
+      tags: ['write-model'],
+      properties: entityTable(),
+    });
+    b.el('queue', 'pg.job-queue', 'changes', {
+      parent: 'db',
+      x: IN.x,
+      y: IN.y + 200,
+      properties: { lib: 'pg-boss', queues: ['project'], deadLetter: true },
+    });
+    models.forEach((m, i) => {
+      b.el(`model${i}`, i === models.length - 1 && models.length > 1 ? 'pg.view' : 'pg.table', m, {
+        parent: 'schema',
+        x: IN.x + (i + 1) * (M + 16),
+        y: IN.y,
+        tags: ['read-model'],
+        properties:
+          i === models.length - 1 && models.length > 1
+            ? { materialized: true, refresh: 'scheduled' }
+            : entityTable(),
+      });
+    });
+    b.el('projector', 'node.worker', 'Projector', {
+      x: 880,
+      y: 120,
+      responsibilities: [`Keep ${models.join(', ')} up to date`],
+      properties: { jobLib: 'pg-boss', concurrency: 1 },
+    });
+    b.rel('user', 'calls', 'svc', { protocol: 'http' });
+    b.rel('commands', 'calls', 'write');
+    b.rel('queries', 'calls', 'read');
+    b.rel('write', 'writes', 'table', { via: 'prisma', inTransaction: true });
+    b.rel('write', 'enqueues', 'queue', { inTransaction: true, label: 'project' });
+    b.rel('projector', 'processes', 'queue');
+    b.rel('projector', 'reads', 'table', { via: 'pg' });
+    models.forEach((_, i) => {
+      const view = i === models.length - 1 && models.length > 1;
+      if (!view) b.rel('projector', 'writes', `model${i}`, { via: 'pg' });
+      b.rel('read', 'reads', `model${i}`, { via: 'prisma' });
+    });
+    b.rel('svc', 'migrates', 'schema');
+    b.step({
+      title: 'Two sides',
+      body: 'Commands change the write table; queries read only the read models ({readModels}).',
+      elements: ['commands', 'queries', 'table'],
+    });
+    b.step({
+      title: 'The projector',
+      body: 'Each change enqueues a "project" job in the same transaction. The projector rebuilds the affected rows of the read models, so they lag a little behind the writes.',
+      elements: ['projector', 'queue'],
+      relations: ['write>enqueues>queue', 'projector>processes>queue'],
+      conceptIds: ['pg.view'],
+    });
+  },
+};
+
+const realtime: Template = {
+  id: 'rnp.realtime',
+  code: 'T10',
+  version: '1.0.0',
+  name: 'Realtime updates',
+  category: 'fullstack',
+  summary:
+    'The browser keeps a WebSocket open to a realtime gateway. Services signal changes with PostgreSQL NOTIFY; the gateway pushes them to the clients. Durable work still goes through a job queue.',
+  whenToUse: [
+    'Screens must update without reloading: chat, live dashboards, order status, collaboration.',
+  ],
+  whenNotToUse: [
+    'Updates every few minutes are fine: poll with the server-state cache.',
+    'Many thousands of messages per second: use a dedicated pub/sub service.',
+  ],
+  tradeoffs: [
+    'Instant updates with no extra infrastructure beyond PostgreSQL.',
+    'NOTIFY is fire-and-forget: clients that were offline must reload the state, not replay messages.',
+  ],
+  parameters: [{ key: 'appName', label: 'App name', type: 'string', default: 'Web' }],
+  rulePacks: ['core', 'event-driven', 'frontend', 'security'],
+  invariants: [
+    'NOTIFY messages MUST only signal that something changed; clients MUST reload the data through the API.',
+    'Work that must not be lost MUST go through the job queue, not NOTIFY.',
+    'The realtime gateway MUST authenticate every connection.',
+  ],
+  learnId: 'pattern.realtime',
+  build(p, b) {
+    b.el('user', 'gen.actor', 'Customer', { x: 0, y: 80 });
+    b.el('app', 'react.app', str(p.appName), {
+      x: 120,
+      y: 0,
+      properties: { bundler: 'vite', router: 'react-router' },
+    });
+    b.el('page', 'react.route', 'Order status', {
+      parent: 'app',
+      ...IN,
+      properties: { path: '/orders/:id' },
+    });
+    b.el('cache', 'react.server-state', 'Server-state cache', {
+      parent: 'app',
+      x: IN.x,
+      y: IN.y + MH + GAP,
+      properties: { lib: 'tanstack-query' },
+    });
+    b.el('client', 'react.api-client', 'API client', {
+      parent: 'app',
+      x: IN.x + M + GAP,
+      y: IN.y + MH + GAP,
+      properties: { kind: 'fetch' },
+    });
+    b.el('svc', 'node.service', 'Orders API', {
+      x: 520,
+      y: 0,
+      properties: { framework: 'express', dataAccess: 'prisma' },
+    });
+    authMiddleware(b, 'auth', 'svc', IN.x, IN.y);
+    b.el('routes', 'node.route-handler', 'Order routes', {
+      parent: 'svc',
+      x: IN.x,
+      y: IN.y + MH + GAP,
+      properties: { validation: 'zod' },
+    });
+    b.el('gw', 'node.ws-gateway', 'Realtime gateway', {
+      x: 520,
+      y: 320,
+      properties: { lib: 'socket.io' },
+      responsibilities: ['Authenticate socket connections', 'Push change signals to rooms'],
+    });
+    b.el('db', 'pg.database', 'Shop DB', { x: 900, y: 0 });
+    b.el('schema', 'pg.schema', 'public', {
+      parent: 'db',
+      ...IN,
+      properties: { migrationTool: 'prisma-migrate' },
+    });
+    b.el('channel', 'pg.channel', 'order_changed', {
+      parent: 'db',
+      x: IN.x,
+      y: IN.y + 120,
+      properties: { channel: 'order_changed' },
+    });
+    b.el('queue', 'pg.job-queue', 'jobs', {
+      parent: 'db',
+      x: IN.x + M + 16,
+      y: IN.y + 120,
+      properties: { lib: 'pg-boss', queues: ['send-receipt'], deadLetter: true },
+    });
+    b.el('worker', 'node.worker', 'Worker', {
+      x: 1260,
+      y: 120,
+      properties: { jobLib: 'pg-boss', concurrency: 5 },
+    });
+    b.rel('user', 'calls', 'app', { protocol: 'https' });
+    b.rel('page', 'uses-state', 'cache');
+    b.rel('cache', 'fetches-via', 'client');
+    b.rel('client', 'calls', 'svc', { protocol: 'https' });
+    b.rel('app', 'calls', 'gw', {
+      protocol: 'websocket',
+      label: 'subscribe',
+      properties: { auth: 'session-cookie' },
+    });
+    b.rel('routes', 'writes', 'schema', { via: 'prisma', inTransaction: true });
+    b.rel('routes', 'notifies', 'channel', { inTransaction: true });
+    b.rel('routes', 'enqueues', 'queue', { inTransaction: true });
+    b.rel('gw', 'listens', 'channel');
+    b.rel('worker', 'processes', 'queue');
+    b.rel('svc', 'migrates', 'schema');
+    b.step({
+      title: 'Signal, then reload',
+      body: 'The order routes write the order and NOTIFY "order_changed" in the same transaction. The gateway listens and pushes the signal to the browser, which reloads the order through the API.',
+      elements: ['routes', 'channel', 'gw'],
+      relations: ['routes>notifies>channel', 'gw>listens>channel'],
+      conceptIds: ['pg.channel'],
+    });
+    b.step({
+      title: 'Durable work',
+      body: 'NOTIFY is lost when nobody listens. Work that must happen (the receipt) goes through the job queue instead.',
+      elements: ['queue', 'worker'],
+      relations: ['routes>enqueues>queue'],
+    });
+  },
+};
+
+const typeSafeMonorepo: Template = {
+  id: 'rnp.type-safe-monorepo',
+  code: 'T12',
+  version: '1.0.0',
+  name: 'Type-safe monorepo',
+  category: 'fullstack',
+  summary:
+    'One repository: the React app and the Node service share an API contract (tRPC router types or an OpenAPI document with zod schemas), so a breaking API change fails the build. Drizzle maps the tables.',
+  whenToUse: ['One team owns the web app and its API, in TypeScript end to end.'],
+  whenNotToUse: [
+    'Public APIs used by clients you do not control: version an OpenAPI contract instead of sharing code.',
+  ],
+  tradeoffs: [
+    'API changes are checked by the compiler on both sides.',
+    'The app and the API are coupled: they must be deployed together or kept compatible.',
+  ],
+  parameters: [
+    {
+      key: 'api',
+      label: 'API style',
+      type: 'enum',
+      options: ['trpc', 'openapi'],
+      default: 'trpc',
+    },
+  ],
+  rulePacks: ['core', 'frontend', 'security'],
+  invariants: [
+    'The app MUST call the API only through the generated or typed API client.',
+    'Request and response shapes MUST be defined once, in packages/contract, and validated on the server.',
+    'Browser code MUST NOT import server code; it MAY import the contract package.',
+  ],
+  folderLayout: {
+    'react.app': 'apps/web/**',
+    'node.service': 'apps/api/**',
+    'node.contract': 'packages/contract/**',
+  },
+  learnId: 'pattern.type-safe-monorepo',
+  build(p, b) {
+    const trpc = str(p.api) === 'trpc';
+    b.el('user', 'gen.actor', 'Customer', { x: 0, y: 80 });
+    b.el('app', 'react.app', 'Web', {
+      x: 120,
+      y: 0,
+      properties: { bundler: 'vite', router: 'react-router' },
+    });
+    b.el('page', 'react.route', 'Orders', {
+      parent: 'app',
+      ...IN,
+      properties: { path: '/orders' },
+    });
+    b.el('cache', 'react.server-state', 'Server-state cache', {
+      parent: 'app',
+      x: IN.x,
+      y: IN.y + MH + GAP,
+      properties: { lib: 'tanstack-query' },
+    });
+    b.el('client', 'react.api-client', trpc ? 'tRPC client' : 'OpenAPI client', {
+      parent: 'app',
+      x: IN.x + M + GAP,
+      y: IN.y + MH + GAP,
+      properties: { kind: trpc ? 'trpc' : 'openapi-generated' },
+    });
+    b.el('contract', 'node.contract', trpc ? 'App router (types)' : 'OpenAPI contract', {
+      x: 480,
+      y: 300,
+      properties: { kind: trpc ? 'trpc-router' : 'openapi' },
+      responsibilities: ['Request and response shapes (zod)'],
+    });
+    b.el('svc', 'node.service', 'API', {
+      x: 560,
+      y: 0,
+      properties: { framework: 'fastify', dataAccess: 'drizzle' },
+    });
+    authMiddleware(b, 'auth', 'svc', IN.x, IN.y);
+    b.el('routes', 'node.route-handler', trpc ? 'Order procedures' : 'Order routes', {
+      parent: 'svc',
+      x: IN.x,
+      y: IN.y + MH + GAP,
+      properties: { validation: 'zod' },
+    });
+    b.el('db', 'pg.database', 'App DB', { x: 940, y: 0 });
+    b.el('schema', 'pg.schema', 'public', {
+      parent: 'db',
+      ...IN,
+      properties: { migrationTool: 'drizzle-kit' },
+    });
+    b.rel('user', 'calls', 'app', { protocol: 'https' });
+    b.rel('page', 'uses-state', 'cache');
+    b.rel('cache', 'fetches-via', 'client');
+    b.rel('client', 'calls', 'svc', { protocol: 'https' });
+    b.rel('client', 'depends-on', 'contract');
+    b.rel('routes', 'depends-on', 'contract');
+    b.rel('routes', 'writes', 'schema', { via: 'drizzle' });
+    b.rel('routes', 'reads', 'schema', { via: 'drizzle' });
+    b.rel('svc', 'migrates', 'schema');
+    b.step({
+      title: 'One contract',
+      body: 'The contract defines every request and response once. The server implements it; the client is typed from it, so a breaking change fails the build.',
+      elements: ['contract', 'client', 'routes'],
+      relations: ['client>depends-on>contract', 'routes>depends-on>contract'],
+      conceptIds: ['node.contract'],
+    });
+  },
+};
+
+const multiTenant: Template = {
+  id: 'rnp.multi-tenant',
+  code: 'T13',
+  version: '1.0.0',
+  name: 'Multi-tenant SaaS',
+  category: 'backend',
+  summary:
+    'Many customers (tenants) share one deployment. Each request is tied to a tenant, and PostgreSQL keeps tenants apart: with row-level security on shared tables, or with one schema per tenant.',
+  whenToUse: ['A SaaS product where each customer organization must only ever see its own data.'],
+  whenNotToUse: [
+    'Customers that need their own database for compliance or very different load: give them separate databases.',
+  ],
+  tradeoffs: [
+    'rls: one schema and simple migrations; every query is filtered by the database.',
+    'schema-per-tenant: strong separation and per-tenant backups; migrations run once per tenant.',
+  ],
+  parameters: [
+    {
+      key: 'strategy',
+      label: 'Isolation',
+      type: 'enum',
+      options: ['rls', 'schema-per-tenant'],
+      default: 'rls',
+    },
+  ],
+  rulePacks: ['core', 'security'],
+  invariants: [
+    'Every request MUST be tied to exactly one tenant before it touches data.',
+    'Tenant data MUST be isolated by the database (row-level security or one schema per tenant), not only by WHERE clauses in code.',
+    'Background jobs MUST carry the tenant ID and set it before they touch data.',
+  ],
+  learnId: 'pattern.multi-tenant',
+  build(p, b) {
+    const rls = str(p.strategy) === 'rls';
+    b.el('user', 'gen.actor', 'Tenant user', { x: 0, y: 80 });
+    b.el('svc', 'node.service', 'SaaS API', {
+      x: 140,
+      y: 0,
+      properties: { framework: 'express', dataAccess: 'prisma' },
+    });
+    authMiddleware(b, 'auth', 'svc', IN.x, IN.y);
+    b.el('tenant', 'node.middleware', 'Tenant resolver', {
+      parent: 'svc',
+      x: IN.x + M + GAP,
+      y: IN.y,
+      properties: { kind: 'other' },
+      responsibilities: rls
+        ? ['Find the tenant of the session', 'SET app.tenant_id for the transaction']
+        : ['Find the tenant of the session', 'SET search_path to the tenant schema'],
+    });
+    b.el('routes', 'node.route-handler', 'Project routes', {
+      parent: 'svc',
+      x: IN.x,
+      y: IN.y + MH + GAP,
+      properties: { validation: 'zod' },
+    });
+    b.el('db', 'pg.database', 'SaaS DB', { x: 560, y: 0 });
+    b.el('control', 'pg.schema', 'control', {
+      parent: 'db',
+      ...IN,
+      responsibilities: ['Tenants, plans, users'],
+      properties: { migrationTool: 'prisma-migrate' },
+    });
+    if (rls) {
+      b.el('data', 'pg.schema', 'app', {
+        parent: 'db',
+        x: IN.x + M + 32,
+        y: IN.y,
+        responsibilities: ['Every table has tenant_id and a row-level security policy'],
+        properties: { migrationTool: 'prisma-migrate', rls: true },
+      });
+    } else {
+      b.el('data', 'pg.schema', 'tenant_template', {
+        parent: 'db',
+        x: IN.x + M + 32,
+        y: IN.y,
+        responsibilities: ['Copied for each tenant (tenant_acme, tenant_globex …)'],
+        properties: { migrationTool: 'prisma-migrate', rls: false },
+      });
+    }
+    b.rel('user', 'calls', 'svc', { protocol: 'https' });
+    b.rel('routes', 'writes', 'data', { via: 'prisma' });
+    b.rel('routes', 'reads', 'data', { via: 'prisma' });
+    b.rel('tenant', 'reads', 'control', { via: 'prisma' });
+    b.rel('svc', 'migrates', 'control');
+    b.rel('svc', 'migrates', 'data');
+    b.step({
+      title: 'Which tenant?',
+      body: rls
+        ? 'The tenant resolver finds the tenant of the session and sets app.tenant_id for the transaction.'
+        : 'The tenant resolver finds the tenant of the session and switches search_path to its schema.',
+      elements: ['tenant'],
+      conceptIds: ['topic.authentication'],
+    });
+    b.step({
+      title: 'The database keeps tenants apart',
+      body: rls
+        ? 'Every table in "app" has a tenant_id column and a row-level security policy, so a forgotten WHERE clause cannot leak data.'
+        : 'Each tenant has its own copy of the schema; migrations run once per tenant schema.',
+      elements: ['data'],
+      conceptIds: ['pg.schema'],
+    });
+  },
+};
+
 export const TEMPLATES: Template[] = [
   starter,
   layered,
@@ -860,5 +1482,10 @@ export const TEMPLATES: Template[] = [
   bff,
   dbPerService,
   backgroundJobs,
+  outbox,
+  cqrsLite,
+  realtime,
   featureSliced,
+  typeSafeMonorepo,
+  multiTenant,
 ];

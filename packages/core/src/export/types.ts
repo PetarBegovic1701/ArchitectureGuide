@@ -11,6 +11,14 @@ export const EXPORT_FORMATS = [
   'dbml',
   'onboarding-md',
   'concept-pack',
+  'plan-md',
+  'speckit',
+  'kiro',
+  'likec4',
+  'structurizr',
+  'plantuml',
+  'sequence',
+  'openapi',
 ] as const;
 export type ExportFormat = (typeof EXPORT_FORMATS)[number];
 
@@ -30,6 +38,13 @@ export interface ExportOptions {
   conceptId?: string;
   /** Where the project file lives, for pointers in agents-snippet. */
   projectPath?: string;
+  /**
+   * Change set: the plan formats (plan-md, speckit, kiro) need one; other formats export
+   * baseline + change set.
+   */
+  changeSetId?: Id;
+  /** sequence: the scenario view to export. */
+  viewId?: Id;
 }
 
 export interface ExportFile {

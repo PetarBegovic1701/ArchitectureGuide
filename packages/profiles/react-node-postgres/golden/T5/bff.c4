@@ -1,0 +1,74 @@
+specification {
+  element gen_actor {
+    notation 'User / actor'
+    style {
+      shape person
+    }
+  }
+  element node_bff {
+    notation 'Backend-for-Frontend'
+  }
+  element node_middleware {
+    notation 'Middleware'
+  }
+  element node_service {
+    notation 'Node service'
+  }
+  element pg_database {
+    notation 'Database'
+    style {
+      shape cylinder
+    }
+  }
+  element pg_schema {
+    notation 'Schema'
+    style {
+      shape cylinder
+    }
+  }
+  element react_app {
+    notation 'React app'
+  }
+  relationship calls
+  relationship migrates
+  relationship reads
+  relationship writes
+}
+
+model {
+  actor_customer = gen_actor 'Customer'
+  app_web = react_app 'Web'
+  bff_web_bff = node_bff 'Web BFF' {
+    mw_auth_middleware = node_middleware 'Auth middleware' {
+      description 'Read the session cookie; Reject calls without a valid session'
+    }
+  }
+  db_services_db = pg_database 'Services DB' {
+    schema_catalog = pg_schema 'catalog'
+    schema_orders = pg_schema 'orders'
+  }
+  svc_catalog_service = node_service 'Catalog service'
+  svc_orders_service = node_service 'Orders service'
+
+  actor_customer -[calls]-> app_web 'uses'
+  app_web -[calls]-> bff_web_bff 'one call per screen'
+  bff_web_bff -[calls]-> svc_catalog_service 'calls'
+  bff_web_bff -[calls]-> svc_orders_service 'calls'
+  svc_catalog_service -[migrates]-> db_services_db.schema_catalog 'migrates'
+  svc_catalog_service -[reads]-> db_services_db.schema_catalog 'reads'
+  svc_catalog_service -[writes]-> db_services_db.schema_catalog 'writes'
+  svc_orders_service -[migrates]-> db_services_db.schema_orders 'migrates'
+  svc_orders_service -[reads]-> db_services_db.schema_orders 'reads'
+  svc_orders_service -[writes]-> db_services_db.schema_orders 'writes'
+}
+
+views {
+  view index {
+    title 'React + Node backend-for-frontend'
+    include *
+  }
+  view main {
+    title 'Main'
+    include actor_customer, app_web, bff_web_bff, bff_web_bff.mw_auth_middleware, db_services_db, svc_orders_service, db_services_db.schema_orders, svc_catalog_service, db_services_db.schema_catalog
+  }
+}

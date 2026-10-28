@@ -67,6 +67,39 @@ export function registerResources(server: McpServer, ctx: McpContext): void {
   );
 
   server.registerResource(
+    'change-set',
+    new ResourceTemplate('archguide://projects/{id}/change-sets/{csId}', {
+      list: async () => {
+        const out: { uri: string; name: string; mimeType: string }[] = [];
+        for (const entry of await ws.listProjects()) {
+          const p = await readProject(ctx, entry.id);
+          for (const c of p.changeSets)
+            if (c.status === 'draft' || c.status === 'ready')
+              out.push({
+                uri: `archguide://projects/${p.id}/change-sets/${c.id}`,
+                name: `${p.name}: ${c.name}`,
+                mimeType: 'text/markdown',
+              });
+        }
+        return { resources: out };
+      },
+    }),
+    {
+      title: 'Change-set plan',
+      description: 'The plan of a change set (plan-md): changes, invariants, rule check, tasks.',
+      mimeType: 'text/markdown',
+    },
+    async (uri, { id, csId }) =>
+      text(
+        uri,
+        exportProject('plan-md', await readProject(ctx, one(id)), catalog, {
+          changeSetId: one(csId),
+        }).files[0]!.content,
+        'text/markdown',
+      ),
+  );
+
+  server.registerResource(
     'catalog',
     'archguide://catalog',
     {

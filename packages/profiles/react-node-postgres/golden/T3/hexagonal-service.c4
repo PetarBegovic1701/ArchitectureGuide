@@ -1,0 +1,95 @@
+specification {
+  element gen_actor {
+    notation 'User / actor'
+    style {
+      shape person
+    }
+  }
+  element node_domain {
+    notation 'Domain model / aggregate'
+  }
+  element node_middleware {
+    notation 'Middleware'
+  }
+  element node_port {
+    notation 'Port (interface)'
+  }
+  element node_repository {
+    notation 'Repository / data access'
+  }
+  element node_route_handler {
+    notation 'Controller / route handler'
+  }
+  element node_service {
+    notation 'Node service'
+  }
+  element node_use_case {
+    notation 'Use case / application service'
+  }
+  element pg_database {
+    notation 'Database'
+    style {
+      shape cylinder
+    }
+  }
+  element pg_schema {
+    notation 'Schema'
+    style {
+      shape cylinder
+    }
+  }
+  element pg_table {
+    notation 'Table'
+    style {
+      shape cylinder
+    }
+  }
+  relationship calls
+  relationship depends_on
+  relationship implements
+  relationship migrates
+  relationship reads
+  relationship uses_port
+  relationship writes
+}
+
+model {
+  actor_api_client = gen_actor 'API client'
+  db_database = pg_database 'Database' {
+    schema_orders = pg_schema 'orders' {
+      tbl_orders = pg_table 'orders'
+    }
+  }
+  svc_orders = node_service 'Orders' {
+    ctl_order_http_adapter = node_route_handler 'Order HTTP adapter'
+    dom_order = node_domain 'Order' {
+      description 'Keep order totals and states valid'
+    }
+    mw_auth_middleware = node_middleware 'Auth middleware' {
+      description 'Read the session cookie; Reject calls without a valid session'
+    }
+    port_order_repository_port = node_port 'Order repository port'
+    repo_order_repository_prisma = node_repository 'Order repository (prisma)'
+    uc_place_order = node_use_case 'Place order'
+  }
+
+  actor_api_client -[calls]-> svc_orders 'calls'
+  svc_orders.ctl_order_http_adapter -[calls]-> svc_orders.uc_place_order 'calls'
+  svc_orders.repo_order_repository_prisma -[implements]-> svc_orders.port_order_repository_port 'implements'
+  svc_orders.repo_order_repository_prisma -[reads]-> db_database.schema_orders.tbl_orders 'reads'
+  svc_orders.repo_order_repository_prisma -[writes]-> db_database.schema_orders.tbl_orders 'writes'
+  svc_orders -[migrates]-> db_database.schema_orders 'migrates'
+  svc_orders.uc_place_order -[depends_on]-> svc_orders.dom_order 'depends on'
+  svc_orders.uc_place_order -[uses_port]-> svc_orders.port_order_repository_port 'uses port'
+}
+
+views {
+  view index {
+    title 'Hexagonal Node service'
+    include *
+  }
+  view main {
+    title 'Main'
+    include actor_api_client, svc_orders, svc_orders.mw_auth_middleware, svc_orders.ctl_order_http_adapter, svc_orders.uc_place_order, svc_orders.port_order_repository_port, svc_orders.repo_order_repository_prisma, svc_orders.dom_order, db_database, db_database.schema_orders, db_database.schema_orders.tbl_orders
+  }
+}

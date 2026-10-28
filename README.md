@@ -20,16 +20,17 @@ See [Implementation.md](Implementation.md) for the full design and the delivery 
 
 ## Status
 
-Phases 0 to 8 are done: foundations, canvas, rules engine, templates and projects, notes and
-exports, responsive editor, learning mode, the server, CLI and MCP server, and repository
-analysis with enforcement. Run `pnpm install && pnpm dev` and open http://localhost:5179:
+Phases 0 to 9 are done: foundations, canvas, rules engine, templates and projects, notes and
+exports, responsive editor, learning mode, the server, CLI and MCP server, repository
+analysis with enforcement, and change sets with advanced views. Run `pnpm install && pnpm dev` and open http://localhost:5179:
 create a project or open the starter, drag shapes from the palette, connect them, and open
 the **Learn** tab. The **Problems** panel lists anti-patterns in the design, with quick fixes
 and a "Why?" explanation for each. All rules: [docs/RULES.md](docs/RULES.md).
 
-Start from one of eight architecture templates (starter, layered, hexagonal, modular
-monolith, backend-for-frontend, database per service, background jobs, Feature-Sliced
-Design), each with a tour and a learning text. Save snapshots and compare the canvas
+Start from one of thirteen architecture templates (starter, layered, hexagonal, modular
+monolith, backend-for-frontend, database per service, background jobs, transactional outbox,
+CQRS-lite, realtime, Feature-Sliced Design, type-safe monorepo, multi-tenant SaaS), each with a
+tour and a learning text. Save snapshots and compare the canvas
 with them, tidy the layout automatically, and keep projects as files in your repository
 with **Open folder** (Chromium browsers).
 
@@ -37,20 +38,20 @@ Annotate the canvas (sticky notes, regions, callouts, comment threads), keep pro
 notes with `@` mentions, a glossary and decision records, and play or write guided
 tours. **Export** (Ctrl+E) writes `ARCHITECTURE.md` for AI agents, an `AGENTS.md`
 snippet, YAML, an onboarding pack for new team members, concept packs, Mermaid, DBML,
-JSON, PNG and SVG. Examples for every template: [golden files](packages/profiles/react-node-postgres/golden).
+LikeC4, Structurizr DSL, C4-PlantUML, an OpenAPI skeleton, sequence diagrams, JSON, PNG and SVG. Examples for every template: [golden files](packages/profiles/react-node-postgres/golden).
 
-| Package                                                                          | Content                                                                                                                                                                                                                                                                                                                                                                                                                                     |
-| -------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [`apps/web`](apps/web)                                                           | The builder: React Flow canvas, palette, inspector with generated property forms, Learn tab with three levels, refusals with fixes and explanations, Problems panel with finding badges, quick fixes and suppressions, templates, snapshots with compare, automatic layout and align, undo/redo, copy/paste, command palette, autosave in the browser or to a folder, JSON import/export                                                    |
-| [`packages/core`](packages/core)                                                 | Zod schema of the project file, deterministic serialization, migrations, readable IDs, the concept catalog (shapes, categories, relation rules and properties, concept guides), the op engine with undo, graph queries and the rules engine with 18 generic anti-pattern rules, the template engine, project diff, and the learning module (content schemas, parsers, lesson checks)                                                        |
-| [`packages/profiles/react-node-postgres`](packages/profiles/react-node-postgres) | React, Node.js and PostgreSQL concepts, profile relation types, the hard constraints, 24 stack rules (ownership, concurrency, API design, authentication, state management), eight architecture templates, concept guides (real-world uses and typical connections for every shape), and learning content: [texts](packages/profiles/react-node-postgres/content/docs) and [lessons](packages/profiles/react-node-postgres/content/lessons) |
-| [`packages/analyzer`](packages/analyzer)                                         | The repository analyzer: discover, engines (TypeScript index, Prisma, SQL, compose, env), detectors, resolve and match, cache, live Postgres introspection, `archguide check`; [fixture repositories](packages/analyzer/fixtures)                                                                                                                                                                                                           |
-| [`packages/workspace`](packages/workspace)                                       | File IO shared by the server, the CLI and MCP: atomic writes, file locks, revision checks, the serve lock file, export writing                                                                                                                                                                                                                                                                                                              |
-| [`packages/server`](packages/server)                                             | `archguide serve`: the web app, the HTTP API and the WebSocket protocol, the single writer of the files while it runs, file watching                                                                                                                                                                                                                                                                                                        |
-| [`packages/mcp-server`](packages/mcp-server)                                     | `archguide-mcp`: tools, resources and prompts for AI agents (stdio)                                                                                                                                                                                                                                                                                                                                                                         |
-| [`packages/cli`](packages/cli)                                                   | `archguide`: init, serve, validate, export, templates, explain, onboarding, migrate, mcp                                                                                                                                                                                                                                                                                                                                                    |
-| [`skills/archguide`](skills/archguide)                                           | The Claude Code skill that `archguide init` copies into a repository                                                                                                                                                                                                                                                                                                                                                                        |
-| [`schema/archguide.schema.json`](schema/archguide.schema.json)                   | JSON Schema of the project file, generated from the Zod schema                                                                                                                                                                                                                                                                                                                                                                              |
+| Package                                                                          | Content                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| -------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [`apps/web`](apps/web)                                                           | The builder: React Flow canvas, palette, inspector with generated property forms, Learn tab with three levels, refusals with fixes and explanations, Problems panel with finding badges, quick fixes and suppressions, templates, snapshots with compare, automatic layout and align, undo/redo, copy/paste, command palette, autosave in the browser or to a folder, JSON import/export                                                             |
+| [`packages/core`](packages/core)                                                 | Zod schema of the project file, deterministic serialization, migrations, readable IDs, the concept catalog (shapes, categories, relation rules and properties, concept guides), the op engine with undo, graph queries and the rules engine with 18 generic anti-pattern rules, the template engine, project diff, and the learning module (content schemas, parsers, lesson checks)                                                                 |
+| [`packages/profiles/react-node-postgres`](packages/profiles/react-node-postgres) | React, Node.js and PostgreSQL concepts, profile relation types, the hard constraints, 25 stack rules (ownership, concurrency, API design, authentication, state management, CQRS), thirteen architecture templates, concept guides (real-world uses and typical connections for every shape), and learning content: [texts](packages/profiles/react-node-postgres/content/docs) and [lessons](packages/profiles/react-node-postgres/content/lessons) |
+| [`packages/analyzer`](packages/analyzer)                                         | The repository analyzer: discover, engines (TypeScript index, Prisma, SQL, compose, env), detectors, resolve and match, cache, live Postgres introspection, `archguide check`; [fixture repositories](packages/analyzer/fixtures)                                                                                                                                                                                                                    |
+| [`packages/workspace`](packages/workspace)                                       | File IO shared by the server, the CLI and MCP: atomic writes, file locks, revision checks, the serve lock file, export writing                                                                                                                                                                                                                                                                                                                       |
+| [`packages/server`](packages/server)                                             | `archguide serve`: the web app, the HTTP API and the WebSocket protocol, the single writer of the files while it runs, file watching                                                                                                                                                                                                                                                                                                                 |
+| [`packages/mcp-server`](packages/mcp-server)                                     | `archguide-mcp`: tools, resources and prompts for AI agents (stdio)                                                                                                                                                                                                                                                                                                                                                                                  |
+| [`packages/cli`](packages/cli)                                                   | `archguide`: init, serve, validate, export, templates, explain, onboarding, migrate, mcp                                                                                                                                                                                                                                                                                                                                                             |
+| [`skills/archguide`](skills/archguide)                                           | The Claude Code skill that `archguide init` copies into a repository                                                                                                                                                                                                                                                                                                                                                                                 |
+| [`schema/archguide.schema.json`](schema/archguide.schema.json)                   | JSON Schema of the project file, generated from the Zod schema                                                                                                                                                                                                                                                                                                                                                                                       |
 
 Pick a shape and the builder explains it: what it is for, where it is used in real
 projects, and what it connects to (for example: actions update a Redux store, an effect
@@ -82,7 +83,7 @@ The packages are not on npm yet: in this repository, use `pnpm archguide …` in
 While `archguide serve` runs, every change an agent makes through MCP (or the CLI) shows up
 live in the open browser tab, and changes in the browser are saved to the files. When a file
 changes outside the app while you have unsaved changes, the editor asks: reapply or discard.
-The MCP server has 26 tools (read and edit the model, templates, rules and quick fixes,
+The MCP server has 35 tools (read and edit the model, change sets, templates, rules and quick fixes,
 exports, learning texts, lessons, onboarding and tours), resources and the `plan-feature`
 prompt; every write returns only the findings it introduced. The CLI also validates
 (`archguide validate --fail-on warning`), exports, explains concepts in the terminal and
@@ -108,7 +109,21 @@ database view** colors the data by the service that owns it. MCP agents get
 `analyze_repository`, `apply_analysis`, `diff_with_repository`, `generate_enforcement` and the
 `map-repository` and `review-change` prompts. CI: [docs/examples/architecture.yml](docs/examples/architecture.yml).
 
-Next: Phase 9, change sets and advanced views (Implementation.md §16).
+**Plan features as change sets** (Phase 9): **Change sets → Start change set** puts the
+editor in change-set mode. Your edits go into the change set, not the model; the canvas shows
+what it adds (green), changes (amber) and removes (red, dashed), and the Problems panel the
+findings it introduces. Generate the tasks in build order (data first, frontend last), tick and
+reorder them, export the plan (`plans/<id>.md`, Spec Kit or Kiro), and **Apply to baseline**
+once it is built. When the model changes under a change set, its conflicts are listed. Agents
+do the same through MCP (`create_change_set`, `changeSetId` on every write, `generate_tasks`,
+`export` with `plan-md`; the `plan-feature` prompt walks through it); the CLI has
+`validate --change-set` and `export plan-md --change-set`.
+
+The **Views** menu creates context, container, component, database and scenario views.
+Double-click a service or a database to open what is inside (breadcrumbs lead back). Record a
+scenario by clicking arrows in order, play it back, and export it as a sequence diagram. The
+**API view** lists the endpoints with their data shapes and exports an OpenAPI skeleton. Press
+**F** to focus on the selection, and **Filter** by tag, layer, status or owner.
 
 ## Development
 

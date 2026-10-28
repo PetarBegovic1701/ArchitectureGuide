@@ -15,6 +15,7 @@ import {
   countBySeverity,
   findingKey,
   findingsOf,
+  introducedKeys,
   severityLabel,
 } from '../lib/findings';
 import { catalog } from '../lib/catalog';
@@ -93,9 +94,18 @@ export function ProblemsPanel({ variant = 'side' }: { variant?: 'side' | 'sheet'
   const open = useUi((s) => s.problemsOpen);
   const level = useUi((s) => s.level);
   const showSuppressed = useUi((s) => s.showSuppressed);
+  const showAll = useUi((s) => s.showAllFindings);
+  const changeSetId = useProject((s) => s.changeSetId);
+  const baseline = useProject((s) => s.baseline);
   const findings = useFindings();
   if ((!open && variant === 'side') || !project) return null;
-  const visible = findings.filter((f) => showSuppressed || !f.suppressed);
+  // Change-set mode: by default only what the change introduces (§16.1).
+  const introduced = changeSetId && baseline ? introducedKeys(baseline, project) : null;
+  const visible = findings.filter(
+    (f) =>
+      (showSuppressed || !f.suppressed) &&
+      (!introduced || showAll || introduced.has(findingKey(f))),
+  );
   const suppressedCount = findings.filter((f) => f.suppressed).length;
 
   return (
@@ -111,7 +121,20 @@ export function ProblemsPanel({ variant = 'side' }: { variant?: 'side' | 'sheet'
             ? 'Things that often go wrong in designs like this one. Click one to see where it is.'
             : `${visible.length} shown`}
         </span>
-        <label className="ml-auto flex items-center gap-1 text-xs text-[var(--ag-muted)]">
+        {introduced && (
+          <label className="ml-auto flex items-center gap-1 text-xs text-[var(--ag-muted)]">
+            <input
+              type="checkbox"
+              checked={!showAll}
+              onChange={(e) => useUi.getState().set({ showAllFindings: !e.target.checked })}
+              data-testid="only-new-findings"
+            />
+            Only new in this change ({introduced.size})
+          </label>
+        )}
+        <label
+          className={`${introduced ? '' : 'ml-auto '}flex items-center gap-1 text-xs text-[var(--ag-muted)]`}
+        >
           <input
             type="checkbox"
             checked={showSuppressed}
@@ -134,7 +157,9 @@ export function ProblemsPanel({ variant = 'side' }: { variant?: 'side' | 'sheet'
       <div className="flex-1 overflow-y-auto px-3 py-2">
         {visible.length === 0 ? (
           <p className="text-sm text-[var(--ag-muted)]" data-testid="no-problems">
-            No problems found by the active rules.
+            {introduced && !showAll
+              ? 'This change introduces no problems.'
+              : 'No problems found by the active rules.'}
           </p>
         ) : (
           SEVERITIES.map((severity) => {

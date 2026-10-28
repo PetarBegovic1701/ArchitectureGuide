@@ -138,6 +138,14 @@ export function useShortcuts(): void {
         const selected = useProject.getState().selection.elements;
         if (useUi.getState().connectMode) cancelConnectMode();
         else startConnectMode(selected.length === 1 ? selected[0] : undefined);
+      } else if (key === 'f' && !mod && !e.altKey) {
+        // Focus mode: dim what is not connected to the selection; Shift+F changes the depth.
+        const ui = useUi.getState();
+        if (e.shiftKey && ui.focusDepth)
+          ui.set({ focusDepth: ((ui.focusDepth % 3) + 1) as 1 | 2 | 3 });
+        else if (ui.focusDepth) ui.set({ focusDepth: null });
+        else if (useProject.getState().selection.elements.length) ui.set({ focusDepth: 1 });
+        else ui.toast({ tone: 'info', message: 'Select a shape, then press F to focus on it.' });
       } else if (key === 'escape') {
         if (useUi.getState().connectMode) cancelConnectMode();
         useUi.getState().set({ picker: null, editingId: null, contextMenu: null });
@@ -202,7 +210,7 @@ export function useAutosave(): SaveStatus {
   const flush = useCallback(async () => {
     if (!pending.current) return;
     pending.current = false;
-    const project = useProject.getState().project;
+    const project = useProject.getState().baseline;
     if (!project) return;
     try {
       const saved = await saveProject(project);
@@ -257,11 +265,11 @@ export function useServeSync(projectId: string): SyncState | null {
     if (!isServed(projectId)) return;
     const store = useProject.getState;
     const next = new ServeSync(projectId, {
-      current: () => store().project,
+      current: () => store().baseline,
       applyRemote: (ops, revision) => store().applyRemote(ops, revision),
       replaceRemote: (project) => store().replaceRemote(project),
       setRevision: (revision) => {
-        const p = store().project;
+        const p = store().baseline;
         if (p && p.revision < revision) store().markSaved(revision, p.updatedAt);
       },
       rejected: (errors) =>

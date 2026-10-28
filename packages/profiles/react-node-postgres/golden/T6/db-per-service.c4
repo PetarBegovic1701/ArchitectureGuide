@@ -1,0 +1,89 @@
+specification {
+  element gen_actor {
+    notation 'User / actor'
+    style {
+      shape person
+    }
+  }
+  element gen_auth_provider {
+    notation 'Auth provider'
+  }
+  element gen_gateway {
+    notation 'API gateway / reverse proxy'
+  }
+  element node_service {
+    notation 'Node service'
+  }
+  element pg_cluster {
+    notation 'Postgres server'
+  }
+  element pg_database {
+    notation 'Database'
+    style {
+      shape cylinder
+    }
+  }
+  element pg_job_queue {
+    notation 'Postgres job queue'
+    style {
+      shape queue
+    }
+  }
+  relationship authenticates_with
+  relationship calls
+  relationship enqueues {
+    line dashed
+  }
+  relationship migrates
+  relationship processes {
+    line dashed
+  }
+  relationship reads
+  relationship writes
+}
+
+model {
+  actor_client = gen_actor 'Client'
+  auth_identity_provider = gen_auth_provider 'Identity provider'
+  gw_api_gateway = gen_gateway 'API gateway' {
+    technology 'nginx'
+  }
+  pgc_postgresql_server = pg_cluster 'PostgreSQL server' {
+    db_orders_db = pg_database 'Orders DB' {
+      jobs_orders_jobs = pg_job_queue 'Orders jobs'
+    }
+    db_payments_db = pg_database 'Payments DB'
+    db_shipping_db = pg_database 'Shipping DB'
+  }
+  svc_orders_service = node_service 'Orders service'
+  svc_payments_service = node_service 'Payments service'
+  svc_shipping_service = node_service 'Shipping service'
+
+  actor_client -[calls]-> gw_api_gateway 'calls'
+  gw_api_gateway -[authenticates_with]-> auth_identity_provider 'authenticates with'
+  gw_api_gateway -[calls]-> svc_orders_service 'calls'
+  gw_api_gateway -[calls]-> svc_payments_service 'calls'
+  gw_api_gateway -[calls]-> svc_shipping_service 'calls'
+  svc_orders_service -[enqueues]-> pgc_postgresql_server.db_orders_db.jobs_orders_jobs 'enqueues'
+  svc_orders_service -[migrates]-> pgc_postgresql_server.db_orders_db 'migrates'
+  svc_orders_service -[reads]-> pgc_postgresql_server.db_orders_db 'reads'
+  svc_orders_service -[writes]-> pgc_postgresql_server.db_orders_db 'writes'
+  svc_payments_service -[migrates]-> pgc_postgresql_server.db_payments_db 'migrates'
+  svc_payments_service -[processes]-> pgc_postgresql_server.db_orders_db.jobs_orders_jobs 'processes'
+  svc_payments_service -[reads]-> pgc_postgresql_server.db_payments_db 'reads'
+  svc_payments_service -[writes]-> pgc_postgresql_server.db_payments_db 'writes'
+  svc_shipping_service -[migrates]-> pgc_postgresql_server.db_shipping_db 'migrates'
+  svc_shipping_service -[reads]-> pgc_postgresql_server.db_shipping_db 'reads'
+  svc_shipping_service -[writes]-> pgc_postgresql_server.db_shipping_db 'writes'
+}
+
+views {
+  view index {
+    title 'Node services, database per service'
+    include *
+  }
+  view main {
+    title 'Main'
+    include actor_client, gw_api_gateway, auth_identity_provider, pgc_postgresql_server, svc_orders_service, pgc_postgresql_server.db_orders_db, svc_payments_service, pgc_postgresql_server.db_payments_db, svc_shipping_service, pgc_postgresql_server.db_shipping_db, pgc_postgresql_server.db_orders_db.jobs_orders_jobs
+  }
+}

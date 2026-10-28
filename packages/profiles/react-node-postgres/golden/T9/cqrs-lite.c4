@@ -1,0 +1,110 @@
+specification {
+  element gen_actor {
+    notation 'User / actor'
+    style {
+      shape person
+    }
+  }
+  element node_middleware {
+    notation 'Middleware'
+  }
+  element node_route_handler {
+    notation 'Controller / route handler'
+  }
+  element node_service {
+    notation 'Node service'
+  }
+  element node_use_case {
+    notation 'Use case / application service'
+  }
+  element node_worker {
+    notation 'Background worker'
+  }
+  element pg_database {
+    notation 'Database'
+    style {
+      shape cylinder
+    }
+  }
+  element pg_job_queue {
+    notation 'Postgres job queue'
+    style {
+      shape queue
+    }
+  }
+  element pg_schema {
+    notation 'Schema'
+    style {
+      shape cylinder
+    }
+  }
+  element pg_table {
+    notation 'Table'
+    style {
+      shape cylinder
+    }
+  }
+  element pg_view {
+    notation 'View / materialized view'
+    style {
+      shape cylinder
+    }
+  }
+  relationship calls
+  relationship enqueues {
+    line dashed
+  }
+  relationship migrates
+  relationship processes {
+    line dashed
+  }
+  relationship reads
+  relationship writes
+}
+
+model {
+  actor_customer = gen_actor 'Customer'
+  db_orders_db = pg_database 'Orders DB' {
+    jobs_changes = pg_job_queue 'changes'
+    schema_app = pg_schema 'app' {
+      tbl_order_summary = pg_table 'Order summary'
+      tbl_orders = pg_table 'orders'
+      view_sales_by_day = pg_view 'Sales by day'
+    }
+  }
+  svc_orders = node_service 'Orders' {
+    ctl_commands = node_route_handler 'Commands'
+    ctl_queries = node_route_handler 'Queries'
+    mw_auth_middleware = node_middleware 'Auth middleware' {
+      description 'Read the session cookie; Reject calls without a valid session'
+    }
+    uc_place_order = node_use_case 'Place order'
+    uc_read_views = node_use_case 'Read views'
+  }
+  wrk_projector = node_worker 'Projector' {
+    description 'Keep Order summary, Sales by day up to date'
+  }
+
+  actor_customer -[calls]-> svc_orders 'calls'
+  svc_orders.ctl_commands -[calls]-> svc_orders.uc_place_order 'calls'
+  svc_orders.ctl_queries -[calls]-> svc_orders.uc_read_views 'calls'
+  svc_orders -[migrates]-> db_orders_db.schema_app 'migrates'
+  svc_orders.uc_place_order -[enqueues]-> db_orders_db.jobs_changes 'project'
+  svc_orders.uc_place_order -[writes]-> db_orders_db.schema_app.tbl_orders 'writes'
+  svc_orders.uc_read_views -[reads]-> db_orders_db.schema_app.tbl_order_summary 'reads'
+  svc_orders.uc_read_views -[reads]-> db_orders_db.schema_app.view_sales_by_day 'reads'
+  wrk_projector -[processes]-> db_orders_db.jobs_changes 'processes'
+  wrk_projector -[reads]-> db_orders_db.schema_app.tbl_orders 'reads'
+  wrk_projector -[writes]-> db_orders_db.schema_app.tbl_order_summary 'writes'
+}
+
+views {
+  view index {
+    title 'CQRS-lite on PostgreSQL'
+    include *
+  }
+  view main {
+    title 'Main'
+    include actor_customer, svc_orders, svc_orders.mw_auth_middleware, svc_orders.ctl_commands, svc_orders.ctl_queries, svc_orders.uc_place_order, svc_orders.uc_read_views, db_orders_db, db_orders_db.schema_app, db_orders_db.schema_app.tbl_orders, db_orders_db.jobs_changes, db_orders_db.schema_app.tbl_order_summary, db_orders_db.schema_app.view_sales_by_day, wrk_projector
+  }
+}

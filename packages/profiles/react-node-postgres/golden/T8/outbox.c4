@@ -1,0 +1,102 @@
+specification {
+  element gen_actor {
+    notation 'User / actor'
+    style {
+      shape person
+    }
+  }
+  element node_middleware {
+    notation 'Middleware'
+  }
+  element node_route_handler {
+    notation 'Controller / route handler'
+  }
+  element node_service {
+    notation 'Node service'
+  }
+  element node_use_case {
+    notation 'Use case / application service'
+  }
+  element node_worker {
+    notation 'Background worker'
+  }
+  element pg_database {
+    notation 'Database'
+    style {
+      shape cylinder
+    }
+  }
+  element pg_job_queue {
+    notation 'Postgres job queue'
+    style {
+      shape queue
+    }
+  }
+  element pg_schema {
+    notation 'Schema'
+    style {
+      shape cylinder
+    }
+  }
+  element pg_table {
+    notation 'Table'
+    style {
+      shape cylinder
+    }
+  }
+  relationship calls
+  relationship enqueues {
+    line dashed
+  }
+  relationship migrates
+  relationship processes {
+    line dashed
+  }
+  relationship reads
+  relationship writes
+}
+
+model {
+  actor_customer = gen_actor 'Customer'
+  db_orders_db = pg_database 'Orders DB' {
+    jobs_events = pg_job_queue 'events'
+    schema_orders = pg_schema 'orders' {
+      tbl_orders = pg_table 'orders'
+      tbl_outbox = pg_table 'outbox' {
+        description 'Events not yet sent: order.placed, order.paid'
+      }
+    }
+  }
+  svc_orders = node_service 'Orders' {
+    ctl_orders_routes = node_route_handler 'Orders routes'
+    mw_auth_middleware = node_middleware 'Auth middleware' {
+      description 'Read the session cookie; Reject calls without a valid session'
+    }
+    uc_change_and_record_event = node_use_case 'Change and record event'
+  }
+  wrk_notifications = node_worker 'Notifications'
+  wrk_outbox_relay = node_worker 'Outbox relay' {
+    description 'Read unsent outbox rows in order; Publish them; Mark them sent'
+  }
+
+  actor_customer -[calls]-> svc_orders 'calls'
+  svc_orders.ctl_orders_routes -[calls]-> svc_orders.uc_change_and_record_event 'calls'
+  svc_orders -[migrates]-> db_orders_db.schema_orders 'migrates'
+  svc_orders.uc_change_and_record_event -[writes]-> db_orders_db.schema_orders.tbl_orders 'writes'
+  svc_orders.uc_change_and_record_event -[writes]-> db_orders_db.schema_orders.tbl_outbox 'writes'
+  wrk_notifications -[processes]-> db_orders_db.jobs_events 'processes'
+  wrk_outbox_relay -[enqueues]-> db_orders_db.jobs_events 'order.placed, order.paid'
+  wrk_outbox_relay -[reads]-> db_orders_db.schema_orders.tbl_outbox 'reads'
+  wrk_outbox_relay -[writes]-> db_orders_db.schema_orders.tbl_outbox 'mark sent'
+}
+
+views {
+  view index {
+    title 'Transactional outbox on PostgreSQL'
+    include *
+  }
+  view main {
+    title 'Main'
+    include actor_customer, svc_orders, svc_orders.mw_auth_middleware, svc_orders.ctl_orders_routes, svc_orders.uc_change_and_record_event, db_orders_db, db_orders_db.schema_orders, db_orders_db.schema_orders.tbl_orders, db_orders_db.schema_orders.tbl_outbox, wrk_outbox_relay, db_orders_db.jobs_events, wrk_notifications
+  }
+}

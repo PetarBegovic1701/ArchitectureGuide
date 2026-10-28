@@ -16,3 +16,4 @@ export * from './tools';
 export * from './sync';
 export * from './analysis';
 export * from './enforce';
+export * from './changesets';

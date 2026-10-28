@@ -1,0 +1,29 @@
+flowchart LR
+  actor__customer(["Customer<br/><small>User / actor</small>"])
+  subgraph app__web["Web"]
+    apic__api_client[["API client<br/><small>API client</small>"]]
+    qcache__server_state_cache[("Server-state cache<br/><small>Server-state cache</small>")]
+    route__order_status["Order status<br/><small>Route / page</small>"]
+  end
+  subgraph db__shop_db["Shop DB"]
+    chan__order_changed>"order_changed<br/><small>LISTEN/NOTIFY channel</small>"]
+    jobs__jobs>"jobs<br/><small>Postgres job queue</small>"]
+    schema__public[("public<br/><small>Schema</small>")]
+  end
+  subgraph svc__orders_api["Orders API"]
+    ctl__order_routes("Order routes<br/><small>Controller / route handler</small>")
+    mw__auth_middleware("Auth middleware<br/><small>Middleware</small>")
+  end
+  wrk__worker["Worker<br/><small>Background worker</small>"]
+  ws__realtime_gateway{"Realtime gateway<br/><small>Realtime gateway</small>"}
+  actor__customer -->|"calls"| app__web
+  apic__api_client -->|"calls"| svc__orders_api
+  app__web -->|"calls: subscribe"| ws__realtime_gateway
+  ctl__order_routes -.->|"enqueues"| jobs__jobs
+  ctl__order_routes -.->|"notifies"| chan__order_changed
+  ctl__order_routes ==>|"writes"| schema__public
+  qcache__server_state_cache -->|"fetches via"| apic__api_client
+  route__order_status -->|"uses state"| qcache__server_state_cache
+  svc__orders_api -->|"migrates"| schema__public
+  wrk__worker -.->|"processes"| jobs__jobs
+  ws__realtime_gateway -.->|"listens"| chan__order_changed

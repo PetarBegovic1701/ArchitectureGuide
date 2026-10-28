@@ -1,5 +1,7 @@
 import {
   databaseViewOps,
+  drillDown,
+  generateViewOps,
   RULE_PACKS,
   applyOps,
   checkNesting,
@@ -11,6 +13,7 @@ import {
   validRelationTypes,
 } from '@archguide/core';
 import type {
+  GeneratedViewKind,
   Annotation,
   ConceptLink,
   Finding,
@@ -668,6 +671,44 @@ export async function readProjectFile(file: File): Promise<Project> {
 }
 
 /** Adds a database view: the Postgres elements and their readers and writers, colored by owner. */
+const VIEW_TEXT: Record<GeneratedViewKind, string> = {
+  context: 'the context view: who uses the system, what runs, and the outside systems',
+  container: 'the container view: what runs and where the data lives',
+  component: 'the component view: what is inside',
+  database: 'the database view: shapes are colored by the service that owns the data',
+  scenario: 'a scenario: click arrows in order to record the steps',
+};
+
+/** Creates a generated view, switches to it and lays it out (§13.8). */
+export function createView(
+  kind: GeneratedViewKind,
+  options: { scopeElementId?: Id; name?: string } = {},
+): Id | undefined {
+  const { project: p, viewId: current } = project();
+  if (!p) return undefined;
+  const { ops, viewId } = generateViewOps(p, catalog, { kind, ...options, fromViewId: current });
+  if (!dispatch(ops, { label: `Create ${kind} view` })) return undefined;
+  project().setView(viewId);
+  if (kind === 'scenario') ui().set({ recording: true, playStep: null });
+  else void tidyUp();
+  ui().toast({ tone: 'success', message: `Added ${VIEW_TEXT[kind]}.` });
+  return viewId;
+}
+
+/**
+ * Drill-down (§13.3): opens the view of what is inside a deployable or a database,
+ * creating it the first time. Returns false when there is nothing to drill into.
+ */
+export function drillInto(elementId: Id): boolean {
+  const p = project().project;
+  if (!p) return false;
+  const target = drillDown(p, catalog, elementId);
+  if (!target) return false;
+  if ('viewId' in target) project().setView(target.viewId);
+  else createView(target.create.kind, { scopeElementId: target.create.scopeElementId });
+  return true;
+}
+
 export function createDatabaseView(): void {
   const p = project().project;
   if (!p) return;

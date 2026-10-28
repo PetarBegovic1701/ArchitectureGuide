@@ -1,0 +1,27 @@
+@startuml
+!include <C4/C4_Container>
+
+title React + Node backend-for-frontend – containers
+
+Person(actor_customer, "Customer", "")
+System_Boundary(bff, "React + Node backend-for-frontend") {
+  Container(app_web, "Web", "", "")
+  Container(bff_web_bff, "Web BFF", "", "")
+  Container(svc_catalog_service, "Catalog service", "", "")
+  Container(svc_orders_service, "Orders service", "", "")
+  ContainerDb(db_services_db, "Services DB", "", "")
+}
+
+Rel(actor_customer, app_web, "calls: uses")
+Rel(app_web, bff_web_bff, "calls: one call per screen", "http")
+Rel(bff_web_bff, svc_catalog_service, "calls", "http")
+Rel(bff_web_bff, svc_orders_service, "calls", "http")
+Rel(svc_catalog_service, db_services_db, "migrates")
+Rel(svc_catalog_service, db_services_db, "reads")
+Rel(svc_catalog_service, db_services_db, "writes")
+Rel(svc_orders_service, db_services_db, "migrates")
+Rel(svc_orders_service, db_services_db, "reads")
+Rel(svc_orders_service, db_services_db, "writes")
+
+SHOW_LEGEND()
+@enduml

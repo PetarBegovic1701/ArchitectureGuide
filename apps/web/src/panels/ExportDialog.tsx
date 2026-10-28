@@ -48,6 +48,50 @@ const FORMATS: { id: Format; name: string; description: string }[] = [
     description: 'PostgreSQL tables with columns, for dbdiagram.io and similar tools.',
   },
   {
+    id: 'plan-md',
+    name: 'Change-set plan',
+    description:
+      'plans/<id>.md: what a change set adds and changes, the invariants it must respect, the rule check and the tasks in build order.',
+  },
+  {
+    id: 'speckit',
+    name: 'Spec Kit',
+    description: 'specs/<n>-<name>/spec.md, plan.md and tasks.md of a change set.',
+  },
+  {
+    id: 'kiro',
+    name: 'Kiro spec',
+    description:
+      '.kiro/specs/<name>/: requirements (WHEN … THE SYSTEM SHALL …), design and tasks of a change set.',
+  },
+  {
+    id: 'openapi',
+    name: 'OpenAPI skeleton',
+    description:
+      'OpenAPI 3.1 paths and schemas from the endpoints (of the selected route handler or contract).',
+  },
+  {
+    id: 'sequence',
+    name: 'Sequence diagram',
+    description: 'A scenario view as a Mermaid sequenceDiagram.',
+  },
+  {
+    id: 'likec4',
+    name: 'LikeC4',
+    description: 'The model, its kinds and views as LikeC4 source.',
+  },
+  {
+    id: 'structurizr',
+    name: 'Structurizr DSL',
+    description: 'A C4 workspace: people, systems, containers and components.',
+  },
+  {
+    id: 'plantuml',
+    name: 'C4-PlantUML',
+    description:
+      'A C4 container diagram, or the components of the selected deployable, for PlantUML.',
+  },
+  {
     id: 'json',
     name: 'Project JSON',
     description: 'The full project file; import it again or keep it in Git.',
@@ -62,10 +106,23 @@ const field =
 /** Export with options, a live preview, copy and download (Implementation.md §18). */
 export function ExportDialog({ onClose }: { onClose: () => void }) {
   const project = useProject((s) => s.project)!;
+  const baseline = useProject((s) => s.baseline)!;
+  const activeChangeSet = useProject((s) => s.changeSetId);
+  const viewId = useProject((s) => s.viewId);
   const selection = useProject((s) => s.selection);
+  const changeSets = baseline.changeSets.filter(
+    (c) => c.status === 'draft' || c.status === 'ready',
+  );
+  const [changeSetId, setChangeSetId] = useState(activeChangeSet ?? changeSets[0]?.id ?? '');
+  const scenarios = project.views.filter((v) => v.kind === 'scenario');
+  const [scenarioId, setScenarioId] = useState(
+    scenarios.some((v) => v.id === viewId) ? viewId : (scenarios[0]?.id ?? ''),
+  );
   const level = useUi((s) => s.level);
   const toast = useUi((s) => s.toast);
-  const [format, setFormat] = useState<Format>('agent-md');
+  const initial = useUi((s) => s.exportFormat);
+  const [format, setFormat] = useState<Format>(initial ?? 'agent-md');
+  const isPlan = format === 'plan-md' || format === 'speckit' || format === 'kiro';
   const [focusOn, setFocusOn] = useState(false);
   const [depth, setDepth] = useState(1);
   const [includeNotes, setIncludeNotes] = useState(true);
@@ -93,16 +150,23 @@ export function ExportDialog({ onClose }: { onClose: () => void }) {
 
   const options: ExportOptions = {
     ...(focusOn && focus ? { focus, depth } : {}),
+    // OpenAPI: the selected route handler or contract is the scope.
+    ...(format === 'openapi' && focus ? { focus } : {}),
     includeNotes,
     includeConcepts,
     level: readerLevel,
     conceptId,
+    ...(isPlan && changeSetId ? { changeSetId } : {}),
+    ...(format === 'sequence' && scenarioId ? { viewId: scenarioId } : {}),
   };
   const isImage = format === 'png' || format === 'svg';
   const result = useMemo(() => {
     if (isImage) return undefined;
     try {
-      return { files: exportProject(format, project, catalog, options).files };
+      // Plans and the project file come from the saved project (with its change sets);
+      // everything else shows what the canvas shows.
+      const source = isPlan || format === 'json' ? baseline : project;
+      return { files: exportProject(format, source, catalog, options).files };
     } catch (error) {
       return { error: (error as Error).message };
     }
@@ -116,7 +180,12 @@ export function ExportDialog({ onClose }: { onClose: () => void }) {
     includeConcepts,
     readerLevel,
     conceptId,
+    changeSetId,
+    scenarioId,
+    baseline,
   ]);
+  const [shown, setShown] = useState(0);
+  useEffect(() => setShown(0), [format, changeSetId]);
 
   useEffect(() => {
     if (!isImage) return;
@@ -133,7 +202,8 @@ export function ExportDialog({ onClose }: { onClose: () => void }) {
     };
   }, [format, isImage, toast]);
 
-  const file = result && 'files' in result ? result.files![0] : undefined;
+  const files = result && 'files' in result ? result.files! : [];
+  const file = files[Math.min(shown, files.length - 1)];
   const copy = async () => {
     if (!file) return;
     await navigator.clipboard.writeText(file.content);
@@ -183,21 +253,23 @@ export function ExportDialog({ onClose }: { onClose: () => void }) {
         </nav>
         <section className="flex min-h-0 min-w-0 flex-1 flex-col">
           <header className="flex flex-wrap items-center gap-3 border-b border-[var(--ag-border)] px-3 py-2 text-sm">
-            {!isImage && format !== 'json' && format !== 'concept-pack' && (
-              <label
-                className="flex items-center gap-1"
-                title={focus ? '' : 'Select one shape first'}
-              >
-                <input
-                  type="checkbox"
-                  checked={focusOn && !!focus}
-                  disabled={!focus}
-                  onChange={(e) => setFocusOn(e.target.checked)}
-                />
-                Only around{' '}
-                {focus ? (elementById(project, focus)?.name ?? focus) : 'the selected shape'}
-              </label>
-            )}
+            {!isImage &&
+              !isPlan &&
+              !['json', 'concept-pack', 'sequence', 'openapi'].includes(format) && (
+                <label
+                  className="flex items-center gap-1"
+                  title={focus ? '' : 'Select one shape first'}
+                >
+                  <input
+                    type="checkbox"
+                    checked={focusOn && !!focus}
+                    disabled={!focus}
+                    onChange={(e) => setFocusOn(e.target.checked)}
+                  />
+                  Only around{' '}
+                  {focus ? (elementById(project, focus)?.name ?? focus) : 'the selected shape'}
+                </label>
+              )}
             {focusOn && focus && !isImage && (
               <label className="flex items-center gap-1">
                 Depth
@@ -245,6 +317,59 @@ export function ExportDialog({ onClose }: { onClose: () => void }) {
                   {LEVELS.map((l) => (
                     <option key={l} value={l}>
                       {l}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
+            {isPlan && (
+              <label className="flex items-center gap-1">
+                Change set
+                <select
+                  aria-label="Change set"
+                  className={`${field} max-w-72`}
+                  value={changeSetId}
+                  onChange={(e) => setChangeSetId(e.target.value)}
+                >
+                  {changeSets.length === 0 && <option value="">No open change set</option>}
+                  {changeSets.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
+            {format === 'sequence' && (
+              <label className="flex items-center gap-1">
+                Scenario
+                <select
+                  aria-label="Scenario"
+                  className={`${field} max-w-72`}
+                  value={scenarioId}
+                  onChange={(e) => setScenarioId(e.target.value)}
+                >
+                  {scenarios.length === 0 && <option value="">No scenario view</option>}
+                  {scenarios.map((v) => (
+                    <option key={v.id} value={v.id}>
+                      {v.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
+            {files.length > 1 && (
+              <label className="flex items-center gap-1">
+                File
+                <select
+                  aria-label="File"
+                  className={`${field} max-w-72`}
+                  value={shown}
+                  onChange={(e) => setShown(Number(e.target.value))}
+                >
+                  {files.map((f, i) => (
+                    <option key={f.path} value={i}>
+                      {f.path}
                     </option>
                   ))}
                 </select>

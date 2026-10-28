@@ -1,0 +1,50 @@
+archguide: 1
+project: outbox
+profile: react-node-postgres
+patterns:
+  - outbox
+revision: 0
+elements:
+  - { id: actor.customer, kind: gen.actor, name: Customer }
+  - { id: ctl.orders-routes, kind: node.route-handler, name: Orders routes, parent: svc.orders, layer: application }
+  - { id: mw.auth-middleware, kind: node.middleware, name: Auth middleware, parent: svc.orders, layer: application, does: [ Read the session cookie, Reject calls without a valid session ] }
+  - { id: svc.orders, kind: node.service, name: Orders, layer: application, code: [ services/Orders/** ] }
+  - { id: uc.change-and-record-event, kind: node.use-case, name: Change and record event, parent: svc.orders, layer: application }
+  - { id: wrk.notifications, kind: node.worker, name: Notifications, layer: application, code: [ services/Orders/src/outbox/** ] }
+  - { id: wrk.outbox-relay, kind: node.worker, name: Outbox relay, layer: application, does: [ Read unsent outbox rows in order, Publish them, Mark them sent ], code: [ services/Orders/src/outbox/** ] }
+  - { id: db.orders-db, kind: pg.database, name: Orders DB, layer: data }
+  - { id: jobs.events, kind: pg.job-queue, name: events, parent: db.orders-db, layer: data }
+  - { id: schema.orders, kind: pg.schema, name: orders, parent: db.orders-db, layer: data, ownedBy: svc.orders }
+  - { id: tbl.orders, kind: pg.table, name: orders, parent: schema.orders, layer: data }
+  - { id: tbl.outbox, kind: pg.table, name: outbox, parent: schema.orders, layer: data, does: [ "Events not yet sent: order.placed, order.paid" ] }
+relations:
+  - [ actor.customer, calls, svc.orders, { protocol: http } ]
+  - [ ctl.orders-routes, calls, uc.change-and-record-event ]
+  - [ svc.orders, migrates, schema.orders ]
+  - [ uc.change-and-record-event, writes, tbl.orders, { via: prisma, inTransaction: true } ]
+  - [ uc.change-and-record-event, writes, tbl.outbox, { via: prisma, inTransaction: true } ]
+  - [ wrk.notifications, processes, jobs.events ]
+  - [ wrk.outbox-relay, enqueues, jobs.events, { label: "order.placed, order.paid", inTransaction: true } ]
+  - [ wrk.outbox-relay, reads, tbl.outbox, { via: pg } ]
+  - [ wrk.outbox-relay, writes, tbl.outbox, { label: mark sent, via: pg, inTransaction: true } ]
+invariants:
+  - Orders MUST write its data and the outbox row in one transaction; it MUST NOT publish directly. (T8)
+  - Only the outbox relay MAY publish the events (order.placed, order.paid); it marks rows as sent after publishing. (T8)
+  - "Consumers MUST be idempotent: the relay delivers each event at least once. (T8)"
+  - Modules MUST NOT depend on each other in a cycle. (AP-003)
+  - Services MUST NOT call each other synchronously in a cycle. (AP-006)
+  - Synchronous call chains between services MUST stay at most 4 services long. (AP-007)
+  - Consumers MUST move messages that keep failing to a dead-letter queue. (AP-012)
+  - Sensitive data (PII, secrets) MUST NOT be reachable from browser code. (AP-015)
+  - Consumers MUST NOT call the publisher of a message back synchronously. (AP-017)
+  - Each PostgreSQL schema MUST have one writing service; other services use its API or events. (RNP-001)
+  - Each schema MUST have exactly one migration owner. (RNP-002)
+  - Jobs MUST be enqueued in the same transaction as their data; messages to other brokers go through an outbox. (RNP-007)
+  - Horizontally scaled or serverless services MUST connect to PostgreSQL through a connection pooler. (RNP-009)
+  - Route handlers MUST validate every request with a schema (zod or similar). (RNP-015)
+  - Services reachable from the browser MUST authenticate callers (auth middleware, gateway or auth provider). (RNP-016)
+  - Writes to rows that several writers change MUST use a row lock or an optimistic version check. (RNP-019)
+  - The connection pools of all services together MUST stay below 80% of max_connections, or go through a pooler. (RNP-020)
+  - CPU-heavy work MUST NOT run on the event loop of a request-serving process; use worker threads or a worker. (RNP-021)
+  - Serializable transactions MUST be retried on SQLSTATE 40001. (RNP-022)
+known_issues: []
