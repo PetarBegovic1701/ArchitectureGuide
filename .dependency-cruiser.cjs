@@ -85,7 +85,7 @@ module.exports = {
   ],
   options: {
     doNotFollow: { path: 'node_modules' },
-    exclude: { path: '(node_modules|dist|\\.test\\.ts$)' },
+    exclude: { path: '(node_modules|dist|\\.test\\.ts$|/fixtures/)' },
     tsConfig: { fileName: 'tsconfig.base.json' },
     tsPreCompilationDeps: true,
     combinedDependencies: true,

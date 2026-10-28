@@ -1,0 +1,5 @@
+{
+  "name": "@tickets/catalog",
+  "dependencies": { "fastify": "^5.0.0", "pg": "^8.0.0", "zod": "^4.0.0" },
+  "devDependencies": { "node-pg-migrate": "^7.0.0" }
+}

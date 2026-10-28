@@ -1,0 +1,11 @@
+{
+  "name": "@bad/web",
+  "dependencies": {
+    "@reduxjs/toolkit": "^2.0.0",
+    "@tanstack/react-query": "^5.0.0",
+    "pg": "^8.0.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": { "vite": "^7.0.0" }
+}

@@ -1,0 +1,15 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+  schemas  = ["orders"]
+}
+
+model TicketOrder {
+  id        String @id @default(uuid())
+  eventId   String
+  seats     Int
+  paymentId String
+
+  @@map("ticket_order")
+  @@schema("orders")
+}

@@ -1,0 +1,38 @@
+{
+  "description": "Hand-made model: a NestJS modular monolith with a schema per module (T4), and a Feature-Sliced React app.",
+  "elements": [
+    { "kind": "react.app", "name": "Web" },
+    { "kind": "react.route", "name": "Home" },
+    { "kind": "react.route", "name": "/cart" },
+    { "kind": "react.feature", "name": "Cart" },
+    { "kind": "react.feature", "name": "Product" },
+    { "kind": "react.client-store", "name": "Cart store" },
+    { "kind": "react.api-client" },
+    { "kind": "node.service", "name": "API" },
+    { "kind": "node.module", "name": "Orders" },
+    { "kind": "node.module", "name": "Catalog" },
+    { "kind": "node.module", "name": "Users" },
+    { "kind": "node.route-handler", "name": "Orders controller" },
+    { "kind": "node.route-handler", "name": "Catalog controller" },
+    { "kind": "node.route-handler", "name": "Users controller" },
+    { "kind": "node.use-case", "name": "Orders service" },
+    { "kind": "node.use-case", "name": "Catalog service" },
+    { "kind": "pg.database" },
+    { "kind": "pg.schema", "name": "orders" },
+    { "kind": "pg.schema", "name": "catalog" },
+    { "kind": "pg.schema", "name": "users" },
+    { "kind": "pg.table", "name": "order" },
+    { "kind": "pg.table", "name": "order_line" },
+    { "kind": "pg.table", "name": "product" },
+    { "kind": "pg.table", "name": "user" }
+  ],
+  "relations": [
+    { "type": "calls", "from": "Web", "to": "API" },
+    { "type": "depends-on", "from": "Orders", "to": "Catalog" },
+    { "type": "writes", "from": "API", "to": "order" },
+    { "type": "writes", "from": "API", "to": "order_line" },
+    { "type": "reads", "from": "API", "to": "product" },
+    { "type": "reads", "from": "API", "to": "user" },
+    { "type": "migrates", "from": "API", "to": "orders" }
+  ]
+}

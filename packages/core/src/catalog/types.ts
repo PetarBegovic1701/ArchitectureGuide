@@ -3,6 +3,8 @@ import type { Layer } from '../schema';
 import type { LearningDoc, Lesson } from '../learn/schema';
 import type { Rule } from '../rules/types';
 import type { Template } from '../templates/types';
+import type { AnalysisRule } from '../analysis/rules';
+import type { EnforcementGenerator } from '../enforce/types';
 
 export const CATEGORY_IDS = [
   'deployable',
@@ -183,4 +185,8 @@ export interface StackProfile {
   guides?: Record<string, ConceptGuide>;
   /** Learning texts and lessons (Implementation.md §17). */
   content?: { docs: readonly LearningDoc[]; lessons: readonly Lesson[] };
+  /** Rules about code, run by the analyzer (Implementation.md §11.6, scope "analysis"). */
+  analysisRules?: AnalysisRule[];
+  /** Enforcement configs generated from the model (Implementation.md §23.1). */
+  generators?: EnforcementGenerator[];
 }

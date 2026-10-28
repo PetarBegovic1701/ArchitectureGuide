@@ -4,6 +4,7 @@ import { RELATION_RULES, RELATION_TYPES } from './relations';
 import { DOCS, LESSONS } from './content.generated';
 import { GUIDES } from './guides';
 import { RULES } from './rules';
+import { ANALYSIS_RULES } from './analysis-rules';
 import { TEMPLATES } from './templates';
 
 export const PROFILE_ID = 'react-node-postgres';
@@ -17,9 +18,20 @@ export const profile: StackProfile = {
   relationTypes: RELATION_TYPES,
   relationRules: RELATION_RULES,
   rules: RULES,
+  analysisRules: ANALYSIS_RULES,
   templates: TEMPLATES,
   guides: GUIDES,
   content: { docs: DOCS, lessons: LESSONS },
 };
 
-export { CONCEPTS, DOCS, GUIDES, LESSONS, RELATION_RULES, RELATION_TYPES, RULES, TEMPLATES };
+export {
+  ANALYSIS_RULES,
+  CONCEPTS,
+  DOCS,
+  GUIDES,
+  LESSONS,
+  RELATION_RULES,
+  RELATION_TYPES,
+  RULES,
+  TEMPLATES,
+};

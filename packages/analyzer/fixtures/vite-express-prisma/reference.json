@@ -1,0 +1,28 @@
+{
+  "description": "Hand-made model of the repository, as a person would draw it (T1 shape).",
+  "elements": [
+    { "kind": "react.app", "name": "Web" },
+    { "kind": "react.layout", "name": "Layout" },
+    { "kind": "react.route", "name": "Home" },
+    { "kind": "react.route", "name": "/products" },
+    { "kind": "react.route", "name": "/orders/:id" },
+    { "kind": "react.server-state" },
+    { "kind": "react.api-client" },
+    { "kind": "node.service", "name": "API" },
+    { "kind": "node.route-handler", "name": "Products routes" },
+    { "kind": "node.route-handler", "name": "Orders routes" },
+    { "kind": "pg.cluster" },
+    { "kind": "pg.database" },
+    { "kind": "pg.schema", "name": "public" },
+    { "kind": "pg.table", "name": "product" },
+    { "kind": "pg.table", "name": "order" },
+    { "kind": "pg.table", "name": "order_item" }
+  ],
+  "relations": [
+    { "type": "calls", "from": "Web", "to": "API" },
+    { "type": "writes", "from": "API", "to": "order" },
+    { "type": "writes", "from": "API", "to": "order_item" },
+    { "type": "reads", "from": "API", "to": "product" },
+    { "type": "migrates", "from": "API", "to": "public" }
+  ]
+}

@@ -1,0 +1,16 @@
+services:
+  db:
+    image: postgres:16
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: shop
+      POSTGRES_PASSWORD: shop
+  api:
+    build: ./services/api
+    ports:
+      - "3000:3000"
+    environment:
+      DATABASE_URL: postgres://shop:shop@db:5432/shop
+    depends_on:
+      - db

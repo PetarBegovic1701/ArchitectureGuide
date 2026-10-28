@@ -1,0 +1,19 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Order {
+  id     String @id @default(uuid())
+  status String @default("new")
+
+  @@map("order")
+}
+
+model Invoice {
+  id      String @id @default(uuid())
+  orderId String
+  total   Int
+
+  @@map("invoice")
+}

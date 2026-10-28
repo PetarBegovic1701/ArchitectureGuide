@@ -1,0 +1,42 @@
+{
+  "description": "Hand-made model: React, a backend-for-frontend, two services and a pg-boss worker (T5 + T7).",
+  "elements": [
+    { "kind": "react.app", "name": "Web" },
+    { "kind": "react.route", "name": "Home" },
+    { "kind": "react.route", "name": "/checkout/:eventId" },
+    { "kind": "react.server-state" },
+    { "kind": "react.api-client" },
+    { "kind": "node.bff", "name": "BFF" },
+    { "kind": "node.service", "name": "Orders" },
+    { "kind": "node.service", "name": "Catalog" },
+    { "kind": "node.worker", "name": "Mailer" },
+    { "kind": "node.contract", "name": "Contracts" },
+    { "kind": "node.route-handler", "name": "Orders routes" },
+    { "kind": "node.route-handler", "name": "Events routes" },
+    { "kind": "node.route-handler", "name": "Catalog routes" },
+    { "kind": "node.middleware", "name": "Auth middleware" },
+    { "kind": "gen.external", "name": "Stripe" },
+    { "kind": "gen.external", "name": "SendGrid" },
+    { "kind": "pg.job-queue" },
+    { "kind": "pg.cluster" },
+    { "kind": "pg.pooler", "name": "PgBouncer" },
+    { "kind": "pg.database" },
+    { "kind": "pg.schema", "name": "orders" },
+    { "kind": "pg.schema", "name": "catalog" },
+    { "kind": "pg.table", "name": "ticket_order" },
+    { "kind": "pg.table", "name": "event" },
+    { "kind": "pg.table", "name": "seat" }
+  ],
+  "relations": [
+    { "type": "calls", "from": "Web", "to": "BFF" },
+    { "type": "calls", "from": "BFF", "to": "Orders" },
+    { "type": "calls", "from": "BFF", "to": "Catalog" },
+    { "type": "enqueues", "from": "Orders", "to": "Job queue", "inTransaction": true },
+    { "type": "processes", "from": "Mailer", "to": "Job queue" },
+    { "type": "calls", "from": "Orders", "to": "Stripe" },
+    { "type": "calls", "from": "Mailer", "to": "SendGrid" },
+    { "type": "writes", "from": "Orders", "to": "ticket_order" },
+    { "type": "writes", "from": "Catalog", "to": "event" },
+    { "type": "connects-via", "from": "Orders", "to": "PgBouncer" }
+  ]
+}

@@ -1,0 +1,2 @@
+CREATE TABLE "order" ("id" TEXT PRIMARY KEY, "status" TEXT NOT NULL DEFAULT 'new');
+CREATE TABLE "invoice" ("id" TEXT PRIMARY KEY, "orderId" TEXT NOT NULL, "total" INTEGER NOT NULL);

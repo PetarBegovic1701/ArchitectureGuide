@@ -1,0 +1,1 @@
+{ "name": "@tickets/contracts", "main": "src/index.ts", "dependencies": { "zod": "^4.0.0" } }

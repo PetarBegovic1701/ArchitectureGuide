@@ -10,6 +10,8 @@ export default tseslint.config(
       'schema/**',
       '**/test-results/**',
       '**/playwright-report/**',
+      // Sample repositories the analyzer reads; not part of this codebase.
+      'packages/analyzer/fixtures/**',
     ],
   },
   js.configs.recommended,

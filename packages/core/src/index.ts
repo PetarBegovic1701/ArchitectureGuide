@@ -14,3 +14,5 @@ export * from './export';
 export * from './tours';
 export * from './tools';
 export * from './sync';
+export * from './analysis';
+export * from './enforce';

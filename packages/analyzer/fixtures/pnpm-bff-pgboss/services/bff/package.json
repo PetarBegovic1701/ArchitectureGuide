@@ -1,0 +1,4 @@
+{
+  "name": "@tickets/bff",
+  "dependencies": { "@fastify/jwt": "^9.0.0", "@tickets/contracts": "workspace:*", "fastify": "^5.0.0" }
+}

@@ -1,0 +1,1 @@
+{ "name": "@tickets/mailer", "dependencies": { "@sendgrid/mail": "^8.0.0", "pg-boss": "^10.0.0" } }

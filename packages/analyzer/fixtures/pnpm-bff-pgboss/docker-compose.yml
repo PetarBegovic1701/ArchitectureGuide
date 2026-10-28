@@ -1,0 +1,25 @@
+services:
+  postgres:
+    image: postgres:17
+    ports: ["5432:5432"]
+  pgbouncer:
+    image: edoburu/pgbouncer:latest
+    environment:
+      DATABASE_URL: postgres://app:app@postgres:5432/tickets
+    depends_on: [postgres]
+  orders:
+    build: ./services/orders
+    ports: ["4001:4001"]
+    environment:
+      DATABASE_URL: postgres://app:app@pgbouncer:6432/tickets
+    depends_on: [pgbouncer]
+  catalog:
+    build: ./services/catalog
+    ports: ["4002:4002"]
+    depends_on: [postgres]
+  bff:
+    build: ./services/bff
+    ports: ["4000:4000"]
+  mailer:
+    build: ./workers/mailer
+    depends_on: [postgres]
