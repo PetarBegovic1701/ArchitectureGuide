@@ -1,0 +1,114 @@
+id: lesson.model-a-table
+title: Model your first tables
+summary: Design the tables for orders — columns, a primary key, a foreign key — and connect the code that writes them.
+track: data-and-models
+level: beginner
+minutes: 12
+profile: react-node-postgres
+conceptIds: [pg.table, pg.schema, node.repository, writes]
+start:
+  ops:
+    - op: addElement
+      element: { id: svc.api, kind: node.service, name: API, status: existing }
+    - op: addElement
+      element: { id: repo.orders, kind: node.repository, name: OrderRepository, parentId: svc.api, status: existing, properties: { dataAccess: prisma } }
+    - op: addElement
+      element: { id: db.shop, kind: pg.database, name: Shop DB, status: existing }
+    - op: addElement
+      element: { id: schema.shop, kind: pg.schema, name: shop, parentId: db.shop, status: existing }
+    - op: addRelation
+      relation: { id: rel.api-migrates-shop, type: migrates, sourceId: svc.api, targetId: schema.shop, status: existing }
+steps:
+  - id: rows-and-columns
+    title: Rows, columns and keys
+    body: |
+      A **table** is like a spreadsheet with strict rules: every **column** has a type, every
+      **row** is one thing (one order), and the **primary key** is the column that identifies a
+      row — no two rows share it.
+
+      A **foreign key** points from one table to another: an order item belongs to an order.
+      PostgreSQL then refuses items for orders that do not exist.
+
+  - id: orders-table
+    title: Add the orders table
+    body: |
+      Inside the **shop** schema, add a **Table** named "orders". In the inspector, give it the
+      columns `id` (uuid), `customer_id` (uuid), `status` (text) and `total` (numeric), and the
+      primary key `id`.
+    check:
+      hasElement:
+        kind: pg.table
+        nameIncludes: orders
+        parent: { kind: pg.schema }
+        where:
+          properties.primaryKey: { exists: true }
+      message: Add an "orders" table inside the schema, with a primary key.
+    hints:
+      - Tables only fit inside a schema; drop it on the shop schema.
+      - The Table shape is in the Full palette (Data group).
+    success: |
+      Every order now has an identity that never changes, even when its status does.
+    solution:
+      - op: addElement
+        element:
+          id: tbl.orders
+          kind: pg.table
+          name: orders
+          parentId: schema.shop
+          status: planned
+          properties:
+            columns:
+              - { name: id, type: uuid }
+              - { name: customer_id, type: uuid }
+              - { name: status, type: text }
+              - { name: total, type: numeric }
+            primaryKey: [id]
+
+  - id: items-table
+    title: Order items and a foreign key
+    body: |
+      One order has many items. Add a table "order_items" with `id`, `order_id`, `product_id`
+      and `quantity`, and a **foreign key** from `order_id` to `orders.id`.
+    check:
+      hasElement:
+        kind: pg.table
+        nameIncludes: items
+        where:
+          properties.foreignKeys: { exists: true }
+      message: Add an "order_items" table with a foreign key to orders.
+    success: |
+      The database itself now guards the link between orders and their items. A bug in the API
+      cannot create items for a missing order.
+    solution:
+      - op: addElement
+        element:
+          id: tbl.order-items
+          kind: pg.table
+          name: order_items
+          parentId: schema.shop
+          status: planned
+          properties:
+            columns:
+              - { name: id, type: uuid }
+              - { name: order_id, type: uuid }
+              - { name: product_id, type: uuid }
+              - { name: quantity, type: integer }
+            primaryKey: [id]
+            foreignKeys:
+              - { columns: [order_id], references: orders, refColumns: [id] }
+            indexes:
+              - { columns: [order_id] }
+
+  - id: write-it
+    title: Who writes the orders?
+    body: |
+      Connect **OrderRepository** to the orders table with **writes**. The repository is the
+      only code that knows the table names; the rest of the API asks it for orders.
+    check:
+      hasRelation: { type: writes, from: { id: repo.orders }, to: { kind: pg.table, nameIncludes: orders } }
+    success: |
+      Notice the index on `order_items.order_id`: PostgreSQL does not create indexes for foreign
+      keys by itself, and "all items of this order" is the query you will run most.
+    solution:
+      - op: addRelation
+        relation: { id: rel.repo-writes-orders, type: writes, sourceId: repo.orders, targetId: tbl.orders, via: prisma, status: planned }

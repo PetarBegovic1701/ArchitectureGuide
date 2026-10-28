@@ -1,0 +1,112 @@
+id: lesson.redux-flow
+title: "A Redux flow: store, actions, effects"
+summary: Build the classic Redux loop for a cart and an order page — a store, actions that update it, a button and an effect that dispatch, and a thunk that calls the API.
+track: state-management
+level: beginner
+minutes: 15
+profile: react-node-postgres
+conceptIds: [react.client-store, react.action, react.effect, dispatches, updates, uses-state]
+start:
+  ops:
+    - op: addElement
+      element: { id: app.shop, kind: react.app, name: Shop, status: existing }
+    - op: addElement
+      element: { id: route.order, kind: react.route, name: Order page, parentId: app.shop, status: existing, properties: { path: /orders/:id } }
+    - op: addElement
+      element: { id: cmp.add-button, kind: react.component, name: AddToCartButton, parentId: app.shop, status: existing }
+    - op: addElement
+      element: { id: cmp.header, kind: react.component, name: Header, parentId: app.shop, status: existing }
+    - op: addElement
+      element: { id: apic.http, kind: react.api-client, name: API client, parentId: app.shop, status: existing }
+    - op: addElement
+      element: { id: svc.api, kind: node.service, name: API, status: existing }
+    - op: addElement
+      element: { id: mw.auth, kind: node.middleware, name: Session check, parentId: svc.api, status: existing, properties: { kind: auth } }
+    - op: addRelation
+      relation: { id: rel.client-calls-api, type: calls, sourceId: apic.http, targetId: svc.api, protocol: http, status: existing }
+steps:
+  - id: the-loop
+    title: The loop
+    body: |
+      Redux keeps shared state in one **store** and changes it in one way:
+
+      1. UI code **dispatches** an **action** — "item added".
+      2. The action **updates** the store (a reducer applies it).
+      3. Components that **use** that state re-render.
+
+      Every change has a name, so the Redux DevTools show exactly what happened and when.
+
+  - id: store-and-action
+    title: A store and its first action
+    body: |
+      Inside the app, add a **Client state store** named "Cart store" and an **Action / thunk**
+      named "itemAdded". The action **updates** the store, and **AddToCartButton**
+      **dispatches** the action.
+    check:
+      all:
+        - hasRelation: { type: updates, from: { kind: react.action }, to: { kind: react.client-store } }
+        - hasRelation: { type: dispatches, from: { id: cmp.add-button }, to: { kind: react.action } }
+    hints:
+      - Both shapes are in the Full palette, Frontend group.
+      - Select the store and look at its guide in the inspector — "+" next to "Action / thunk → updates" adds and connects the action for you.
+    success: |
+      `dispatch(itemAdded(product))` on click, and the reducer pushes the item into the cart.
+      No component writes the store directly.
+    solution:
+      - op: addElement
+        element: { id: store-ui.cart, kind: react.client-store, name: Cart store, parentId: app.shop, status: planned, properties: { lib: redux-toolkit } }
+      - op: addElement
+        element: { id: act.item-added, kind: react.action, name: itemAdded, parentId: app.shop, status: planned, properties: { kind: redux-action } }
+      - op: addRelation
+        relation: { id: rel.item-added-updates-cart, type: updates, sourceId: act.item-added, targetId: store-ui.cart, status: planned }
+      - op: addRelation
+        relation: { id: rel.button-dispatches, type: dispatches, sourceId: cmp.add-button, targetId: act.item-added, status: planned }
+
+  - id: read-it
+    title: Read the store somewhere else
+    body: |
+      The **Header** shows the number of items in the cart. Let it **use state** from the Cart
+      store.
+    check:
+      hasRelation: { type: uses-state, from: { id: cmp.header }, to: { kind: react.client-store } }
+    success: |
+      With a selector (`useSelector(s => s.cart.items.length)`), the header re-renders only when
+      the count changes — not on every change in the store.
+    solution:
+      - op: addRelation
+        relation: { id: rel.header-uses-cart, type: uses-state, sourceId: cmp.header, targetId: store-ui.cart, status: planned }
+
+  - id: thunk-and-effect
+    title: Load data with a thunk and an effect
+    body: |
+      The order page must load order 42 when it opens.
+
+      1. Add an **Action / thunk** named "fetchOrder" that **fetches via** the API client, and
+         **updates** the Cart store (or an orders store) with the result.
+      2. Add an **Effect (useEffect)** named "Load order on open" that **dispatches**
+         fetchOrder.
+      3. The **Order page** **depends on** the effect: it runs it when the order ID changes.
+    check:
+      all:
+        - hasRelation: { type: fetches-via, from: { kind: react.action }, to: { id: apic.http } }
+        - hasRelation: { type: dispatches, from: { kind: react.effect }, to: { kind: react.action } }
+        - hasRelation: { type: depends-on, from: { id: route.order }, to: { kind: react.effect } }
+    hints:
+      - Effects and actions live inside the app (or inside a feature).
+    success: |
+      `useEffect(() => { dispatch(fetchOrder(id)) }, [id])` — and the cleanup cancels the request
+      if the user moves on. This works; the next lessons show when a server-state cache does
+      the same job with less code.
+    solution:
+      - op: addElement
+        element: { id: act.fetch-order, kind: react.action, name: fetchOrder, parentId: app.shop, status: planned, properties: { kind: redux-thunk, async: true } }
+      - op: addElement
+        element: { id: eff.load-order, kind: react.effect, name: Load order on open, parentId: app.shop, status: planned, properties: { dependencies: [orderId], cleanup: true } }
+      - op: addRelation
+        relation: { id: rel.fetch-order-fetches, type: fetches-via, sourceId: act.fetch-order, targetId: apic.http, status: planned }
+      - op: addRelation
+        relation: { id: rel.fetch-order-updates, type: updates, sourceId: act.fetch-order, targetId: store-ui.cart, status: planned }
+      - op: addRelation
+        relation: { id: rel.effect-dispatches, type: dispatches, sourceId: eff.load-order, targetId: act.fetch-order, status: planned }
+      - op: addRelation
+        relation: { id: rel.page-runs-effect, type: depends-on, sourceId: route.order, targetId: eff.load-order, status: planned }

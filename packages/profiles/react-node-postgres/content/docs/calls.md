@@ -31,7 +31,7 @@ the API, the API calls the payment provider. If B is slow or down, A is slow or 
 
 - Chains of synchronous calls multiply latency and failure probability; prefer one hop
   from the frontend (a BFF) and async messaging between services where possible.
-- This tool flags retried calls that are not idempotent (RNP-019) and frontends that call
+- This tool flags retried calls that are not idempotent (RNP-023) and frontends that call
   many services (RNP-011).
 
 ## Common mistakes

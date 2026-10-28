@@ -2,7 +2,7 @@
 id: authenticates-with
 kind: relation
 title: authenticates with
-summary: Uses an auth provider to sign users in or to verify their tokens. Set the method — OIDC with PKCE, passwords, passkeys, API keys.
+summary: Uses an auth provider to sign users in or to verify their tokens. Set the flow — OIDC with PKCE, passwords, passkeys, API keys — and the token type.
 level: intermediate
 tracks: [auth]
 tags: [oidc, oauth, login]
@@ -22,8 +22,9 @@ API checks that proof on each request.
 
 ## Intermediate
 
-- `method`: `oidc-code-pkce` for browser apps, `password`, `magic-link`, `passkey`,
+- `flow`: `oidc-code-pkce` for browser apps, `password`, `magic-link`, `passkey`,
   `oauth-client-credentials` for machine clients, `api-key`.
+- `tokenType`: `session`, `jwt` or `opaque`.
 - Authentication says who; authorization (roles, ownership) is still your code's job.
 
 ## Senior

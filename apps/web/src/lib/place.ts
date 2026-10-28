@@ -34,14 +34,44 @@ export function placeOps(p: Project, view: View): Op[] {
       .map((n) => n.x + nodeSize(p, temp(), n.elementId).w),
   );
 
+  // New children go in rows below the children a container already shows.
+  const cursors = new Map<Id, { x: number; y: number; row: number; count: number }>();
+  const cursorFor = (parentId: Id) => {
+    let c = cursors.get(parentId);
+    if (!c) {
+      const bottom = Math.max(
+        0,
+        ...nodes
+          .filter((n) => byId.get(n.elementId)?.parentId === parentId)
+          .map((n) => n.y + nodeSize(p, temp(), n.elementId).h),
+      );
+      c = {
+        x: CONTAINER_PADDING,
+        y: bottom === 0 ? CONTAINER_HEADER : bottom + GAP,
+        row: 0,
+        count: 0,
+      };
+      cursors.set(parentId, c);
+    }
+    return c;
+  };
+
   for (const el of missing) {
     const size = defaultSize(el.kind);
     let x: number;
     let y: number;
     if (el.parentId && shown.has(el.parentId)) {
-      const k = nodes.filter((n) => byId.get(n.elementId)?.parentId === el.parentId).length;
-      x = CONTAINER_PADDING + (k % COLUMNS) * (size.w + GAP);
-      y = CONTAINER_HEADER + Math.floor(k / COLUMNS) * (size.h + GAP);
+      const c = cursorFor(el.parentId);
+      if (c.count > 0 && c.count % COLUMNS === 0) {
+        c.x = CONTAINER_PADDING;
+        c.y += c.row + GAP;
+        c.row = 0;
+      }
+      x = c.x;
+      y = c.y;
+      c.x += size.w + GAP;
+      c.row = Math.max(c.row, size.h);
+      c.count += 1;
     } else {
       x = right === 0 ? 40 : right + GAP * 2;
       y = 40;

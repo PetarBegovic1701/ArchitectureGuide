@@ -1,0 +1,76 @@
+id: lesson.connection-budget
+title: "Exercise: the connection budget"
+summary: Six API instances and three workers each keep ten database connections. Deploys start failing with "too many clients". Add a pooler until the rules are happy.
+track: concurrency-and-parallelism
+level: intermediate
+minutes: 12
+profile: react-node-postgres
+conceptIds: [pg.pooler, connects-via, topic.event-loop-and-parallelism, pg.cluster]
+start:
+  ops:
+    - op: addElement
+      element: { id: svc.api, kind: node.service, name: API, status: existing, qualities: { scaling: horizontal }, properties: { instances: 6, poolSize: 10 } }
+    - op: addElement
+      element: { id: wrk.jobs, kind: node.worker, name: Job worker, status: existing, properties: { instances: 3, poolSize: 10 } }
+    - op: addElement
+      element: { id: db.shop, kind: pg.database, name: Shop DB, status: existing, properties: { maxConnections: 100 } }
+    - op: addElement
+      element: { id: schema.shop, kind: pg.schema, name: shop, parentId: db.shop, status: existing }
+    - op: addRelation
+      relation: { id: rel.api-writes, type: writes, sourceId: svc.api, targetId: schema.shop, status: existing }
+    - op: addRelation
+      relation: { id: rel.api-migrates, type: migrates, sourceId: svc.api, targetId: schema.shop, status: existing }
+    - op: addRelation
+      relation: { id: rel.worker-writes, type: writes, sourceId: wrk.jobs, targetId: schema.shop, status: existing }
+steps:
+  - id: count
+    title: Count the connections
+    body: |
+      Each instance keeps its own **pool** of open connections:
+
+      - API: 6 instances × 10 = **60**
+      - Worker: 3 instances × 10 = **30**
+
+      That is 90 of PostgreSQL's 100 — and during a deploy, old and new instances run at the
+      same time, so the real peak is higher. New connections fail with
+      `sorry, too many clients already`. The **Problems** panel shows it.
+
+  - id: pooler
+    title: Put a pooler in front
+    body: |
+      Add a **Connection pooler** named "PgBouncer". The **API** and the **Job worker**
+      **connect via** it, and the pooler **connects via** to the database.
+    check:
+      all:
+        - finding: { ruleId: RNP-020, present: false }
+          message: The services still open more connections than the database allows.
+        - finding: { ruleId: RNP-009, present: false }
+          message: The API scales out without a pooler.
+    hints:
+      - The pooler is in the Full palette (Infra group).
+    solution:
+      - op: addElement
+        element: { id: pool.pgbouncer, kind: pg.pooler, name: PgBouncer, status: planned, properties: { kind: pgbouncer } }
+      - op: addRelation
+        relation: { id: rel.api-via-pool, type: connects-via, sourceId: svc.api, targetId: pool.pgbouncer, status: planned }
+      - op: addRelation
+        relation: { id: rel.worker-via-pool, type: connects-via, sourceId: wrk.jobs, targetId: pool.pgbouncer, status: planned }
+      - op: addRelation
+        relation: { id: rel.pool-to-db, type: connects-via, sourceId: pool.pgbouncer, targetId: db.shop, status: planned }
+
+  - id: mode
+    title: Transaction mode
+    body: |
+      Set the pooler's **mode** to **transaction**: a real connection is lent to a client only
+      for the length of one transaction. A few dozen real connections can then serve hundreds
+      of app connections.
+    check:
+      hasElement: { kind: pg.pooler, where: { properties.mode: transaction } }
+    success: |
+      One catch: session features (session-level `SET`, `LISTEN`, advisory locks held across
+      transactions) do not work through a transaction-mode pooler. Give those a direct
+      connection.
+    solution:
+      - op: updateElement
+        id: pool.pgbouncer
+        patch: { properties: { kind: pgbouncer, mode: transaction } }

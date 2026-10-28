@@ -1,0 +1,81 @@
+id: lesson.organize-by-feature
+title: Organize state by feature
+summary: The cart's store, hook and button are spread over the app. Move them into a cart feature with a small public API, so the cart can change without touching the rest.
+track: state-management
+level: intermediate
+minutes: 12
+profile: react-node-postgres
+conceptIds: [react.feature, react.hook, react.client-store, pattern.feature-sliced]
+start:
+  ops:
+    - op: addElement
+      element: { id: app.shop, kind: react.app, name: Shop, status: existing }
+    - op: addElement
+      element: { id: route.checkout, kind: react.route, name: Checkout page, parentId: app.shop, status: existing }
+    - op: addElement
+      element: { id: store-ui.cart, kind: react.client-store, name: Cart store, parentId: app.shop, status: existing, properties: { lib: zustand } }
+    - op: addElement
+      element: { id: hook.cart, kind: react.hook, name: useCart, parentId: app.shop, status: existing }
+    - op: addElement
+      element: { id: cmp.cart-button, kind: react.component, name: CartButton, parentId: app.shop, status: existing }
+    - op: addRelation
+      relation: { id: rel.checkout-uses-store, type: uses-state, sourceId: route.checkout, targetId: store-ui.cart, status: existing }
+steps:
+  - id: why
+    title: Group by what it does
+    body: |
+      Today the cart is everywhere: the store in `stores/`, the hook in `hooks/`, the button in
+      `components/`. Changing the cart means touching three folders, and any page can reach
+      into the store.
+
+      A **feature module** keeps it together: `features/cart` with a public `index.ts`.
+
+  - id: move-in
+    title: Create the cart feature
+    body: |
+      Add a **Feature module** named "cart" inside the app, and move the **Cart store**,
+      **useCart** and **CartButton** into it (drag them onto the feature).
+    check:
+      all:
+        - hasElement: { id: store-ui.cart, parent: { kind: react.feature } }
+        - hasElement: { id: hook.cart, parent: { kind: react.feature } }
+        - hasElement: { id: cmp.cart-button, parent: { kind: react.feature } }
+    hints:
+      - Drop a shape on the feature's header strip or inside it to move it in.
+    solution:
+      - op: addElement
+        element: { id: feat.cart, kind: react.feature, name: cart, parentId: app.shop, status: planned, properties: { folder: src/features/cart } }
+      - op: moveElement
+        id: store-ui.cart
+        parentId: feat.cart
+      - op: moveElement
+        id: hook.cart
+        parentId: feat.cart
+      - op: moveElement
+        id: cmp.cart-button
+        parentId: feat.cart
+
+  - id: public-api
+    title: Use the feature through its public API
+    body: |
+      The checkout page should not read the store directly. Let **useCart** **use state** from
+      the store, let the checkout page **render** CartButton and **depend on** useCart — and
+      delete the arrow from the page straight to the store.
+    check:
+      all:
+        - hasRelation: { type: uses-state, from: { id: hook.cart }, to: { id: store-ui.cart } }
+        - hasRelation: { type: depends-on, from: { id: route.checkout }, to: { id: hook.cart } }
+        - not: { hasRelation: { type: uses-state, from: { id: route.checkout }, to: { id: store-ui.cart } } }
+          message: The checkout page still reads the cart store directly.
+    success: |
+      The store is now private to the feature. Switch it from Zustand to Redux tomorrow, and
+      only `features/cart` changes; `useCart()` stays the same for every page.
+    solution:
+      - op: addRelation
+        relation: { id: rel.hook-uses-store, type: uses-state, sourceId: hook.cart, targetId: store-ui.cart, status: planned }
+      - op: addRelation
+        relation: { id: rel.checkout-renders-button, type: renders, sourceId: route.checkout, targetId: cmp.cart-button, status: planned }
+      - op: addRelation
+        relation: { id: rel.checkout-uses-hook, type: depends-on, sourceId: route.checkout, targetId: hook.cart, status: planned }
+      - op: removeRelation
+        id: rel.checkout-uses-store

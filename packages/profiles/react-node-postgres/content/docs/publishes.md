@@ -26,7 +26,7 @@ handle it later. A does not wait, and does not know who the consumers are.
 ## Senior
 
 - Publishing and saving data must be atomic: use a transactional outbox, or a broker that
-  shares your database transaction (a Postgres queue). Otherwise RNP-004 (dual write)
+  shares your database transaction (a Postgres queue). Otherwise RNP-007 (dual write)
   applies.
 
 ## Common mistakes

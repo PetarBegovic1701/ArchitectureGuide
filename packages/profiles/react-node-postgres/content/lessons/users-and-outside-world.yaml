@@ -1,0 +1,92 @@
+id: lesson.users-and-outside-world
+title: Who uses the system, and what it depends on
+summary: Add the people who use a shop and the outside services it relies on — and learn why every call to someone else's system needs a timeout.
+track: foundations
+level: beginner
+minutes: 10
+profile: react-node-postgres
+conceptIds: [gen.actor, gen.external, calls, node.worker]
+start:
+  ops:
+    - op: addElement
+      element: { id: app.shop, kind: react.app, name: Shop, status: existing }
+    - op: addElement
+      element: { id: app.admin, kind: react.app, name: Admin, status: existing }
+    - op: addElement
+      element: { id: svc.api, kind: node.service, name: API, status: existing }
+    - op: addRelation
+      relation: { id: rel.shop-calls-api, type: calls, sourceId: app.shop, targetId: svc.api, protocol: http, status: existing, properties: { auth: session-cookie } }
+    - op: addRelation
+      relation: { id: rel.admin-calls-api, type: calls, sourceId: app.admin, targetId: svc.api, protocol: http, status: existing, properties: { auth: session-cookie } }
+steps:
+  - id: people
+    title: Start with the people
+    body: |
+      A diagram without people does not say who the system is for. Add a **User / actor**
+      named "Customer" who **calls** the *Shop* app, and one named "Support agent" who calls
+      the *Admin* app.
+    check:
+      all:
+        - hasRelation: { type: calls, from: { kind: gen.actor }, to: { id: app.shop } }
+        - hasRelation: { type: calls, from: { kind: gen.actor }, to: { id: app.admin } }
+    hints:
+      - The actor is the first shape in the Generic group.
+    success: |
+      Two kinds of users, two apps, and later two sets of permissions. Each actor's path through
+      the system is a story you can turn into a tour.
+    solution:
+      - op: addElement
+        element: { id: actor.customer, kind: gen.actor, name: Customer, status: planned }
+      - op: addElement
+        element: { id: actor.support, kind: gen.actor, name: Support agent, status: planned }
+      - op: addRelation
+        relation: { id: rel.customer-calls-shop, type: calls, sourceId: actor.customer, targetId: app.shop, status: planned }
+      - op: addRelation
+        relation: { id: rel.support-calls-admin, type: calls, sourceId: actor.support, targetId: app.admin, status: planned }
+
+  - id: payments
+    title: Add the payment provider
+    body: |
+      The shop takes payments through a provider like Stripe. Add an **External system**
+      named "Payments" and let the **API** call it.
+
+      Then select that arrow and set **Timeout (ms)** to 5000. A provider that hangs must not
+      make your customers wait forever.
+    check:
+      hasRelation:
+        type: calls
+        from: { id: svc.api }
+        to: { kind: gen.external }
+        where:
+          properties.timeoutMs: { exists: true }
+      message: Connect the API to an external system and give the call a timeout.
+    hints:
+      - The timeout is in the inspector when the arrow is selected.
+    success: |
+      The browser never calls the provider with your secret key — the API does, with a timeout.
+    solution:
+      - op: addElement
+        element: { id: ext.payments, kind: gen.external, name: Payments, status: planned, tech: Stripe }
+      - op: addRelation
+        relation: { id: rel.api-calls-payments, type: calls, sourceId: svc.api, targetId: ext.payments, protocol: http, status: planned, properties: { timeoutMs: 5000 } }
+
+  - id: email-in-background
+    title: Email in the background
+    body: |
+      Order emails go through an email provider. Sending one can take seconds, so the customer
+      should not wait for it. Add a **Background worker** named "Email worker" and an
+      **External system** named "Email"; the worker **calls** the email system.
+    check:
+      hasRelation: { type: calls, from: { kind: node.worker }, to: { kind: gen.external, nameIncludes: email } }
+    hints:
+      - In a later lesson, the API hands the work to the worker through a job queue.
+    success: |
+      Slow and unreliable outside services belong behind a worker: it can retry without
+      anyone waiting.
+    solution:
+      - op: addElement
+        element: { id: wrk.email, kind: node.worker, name: Email worker, status: planned }
+      - op: addElement
+        element: { id: ext.email, kind: gen.external, name: Email, status: planned, tech: SendGrid }
+      - op: addRelation
+        relation: { id: rel.worker-calls-email, type: calls, sourceId: wrk.email, targetId: ext.email, protocol: http, status: planned, properties: { timeoutMs: 10000 } }

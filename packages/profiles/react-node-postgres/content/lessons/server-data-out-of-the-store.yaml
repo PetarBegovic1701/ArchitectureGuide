@@ -1,0 +1,78 @@
+id: lesson.server-data-out-of-the-store
+title: "Exercise: take server data out of the Redux store"
+summary: The app already uses TanStack Query, but a thunk still copies orders into Redux. Two caches disagree and the list shows old data. Fix it until the rules are happy.
+track: state-management
+level: intermediate
+minutes: 12
+profile: react-node-postgres
+conceptIds: [react.server-state, react.client-store, react.action, updates]
+start:
+  ops:
+    - op: addElement
+      element: { id: app.shop, kind: react.app, name: Shop, status: existing }
+    - op: addElement
+      element: { id: route.orders, kind: react.route, name: Orders page, parentId: app.shop, status: existing }
+    - op: addElement
+      element: { id: qcache.query, kind: react.server-state, name: Query cache, parentId: app.shop, status: existing, properties: { lib: tanstack-query } }
+    - op: addElement
+      element: { id: store-ui.orders, kind: react.client-store, name: Orders store, parentId: app.shop, status: existing, properties: { lib: redux-toolkit } }
+    - op: addElement
+      element: { id: act.fetch-orders, kind: react.action, name: fetchOrders, parentId: app.shop, status: existing, properties: { kind: redux-thunk, async: true } }
+    - op: addElement
+      element: { id: apic.http, kind: react.api-client, name: API client, parentId: app.shop, status: existing }
+    - op: addRelation
+      relation: { id: rel.cache-fetches, type: fetches-via, sourceId: qcache.query, targetId: apic.http, status: existing }
+    - op: addRelation
+      relation: { id: rel.thunk-fetches, type: fetches-via, sourceId: act.fetch-orders, targetId: apic.http, status: existing }
+    - op: addRelation
+      relation: { id: rel.thunk-updates, type: updates, sourceId: act.fetch-orders, targetId: store-ui.orders, status: existing }
+    - op: addRelation
+      relation: { id: rel.page-uses-store, type: uses-state, sourceId: route.orders, targetId: store-ui.orders, status: existing }
+    - op: addRelation
+      relation: { id: rel.page-dispatches, type: dispatches, sourceId: route.orders, targetId: act.fetch-orders, status: existing }
+steps:
+  - id: two-caches
+    title: Two caches, two truths
+    body: |
+      Cancelling an order invalidates the TanStack Query cache, but the orders page reads the
+      **Redux** copy that `fetchOrders` filled ten minutes ago. The order still shows as open.
+
+      The **Problems** panel has a tip: *Server data in the client store*. The thunk
+      re-implements, by hand, what the query cache already does: loading, errors, caching and
+      refetching.
+
+  - id: read-from-cache
+    title: Read orders from the query cache
+    body: |
+      Let the **Orders page** **use state** from the **Query cache** instead of the Orders store.
+      Delete the arrow from the page to the Orders store.
+    check:
+      all:
+        - hasRelation: { type: uses-state, from: { id: route.orders }, to: { id: qcache.query } }
+        - not: { hasRelation: { type: uses-state, from: { id: route.orders }, to: { id: store-ui.orders } } }
+          message: The Orders page still reads the Orders store.
+    solution:
+      - op: addRelation
+        relation: { id: rel.page-uses-cache, type: uses-state, sourceId: route.orders, targetId: qcache.query, status: planned }
+      - op: removeRelation
+        id: rel.page-uses-store
+
+  - id: retire-thunk
+    title: Retire the thunk
+    body: |
+      Nobody needs the Redux copy now. Delete the **fetchOrders** thunk (its arrows go with it).
+      Keep the Redux store only for state the server does not own — or delete it, if nothing is
+      left.
+    check:
+      all:
+        - finding: { ruleId: RNP-012, present: false }
+          message: A thunk still loads server data into the client store.
+        - not: { hasRelation: { type: dispatches, from: { id: route.orders }, to: { kind: react.action } } }
+          message: The Orders page still dispatches the thunk.
+    success: |
+      One source of truth for server data. Invalidating `['orders']` after a cancel now updates
+      every screen that shows orders.
+    solution:
+      - op: removeElement
+        id: act.fetch-orders
+        cascade: true

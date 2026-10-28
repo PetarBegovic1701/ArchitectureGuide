@@ -1,0 +1,65 @@
+id: lesson.protect-what-changes-data
+title: "Exercise: protect what changes data"
+summary: DELETE /products/:id was left open "for the admin app". Anyone can call it. Require authentication, then restrict it to a role.
+track: auth
+level: intermediate
+minutes: 10
+profile: react-node-postgres
+conceptIds: [node.endpoint, topic.authentication, node.middleware]
+start:
+  ops:
+    - op: addElement
+      element: { id: app.admin, kind: react.app, name: Admin, status: existing }
+    - op: addElement
+      element: { id: svc.api, kind: node.service, name: Catalog API, status: existing }
+    - op: addElement
+      element: { id: ctl.products, kind: node.route-handler, name: Product routes, parentId: svc.api, status: existing, properties: { validation: zod } }
+    - op: addElement
+      element:
+        id: ep.list
+        kind: node.endpoint
+        name: GET /products
+        parentId: ctl.products
+        status: existing
+        properties: { method: GET, path: /products, auth: none, returnsList: true, pagination: cursor }
+    - op: addElement
+      element:
+        id: ep.delete
+        kind: node.endpoint
+        name: DELETE /products/:id
+        parentId: ctl.products
+        status: existing
+        properties: { method: DELETE, path: "/products/:id", auth: none }
+    - op: addRelation
+      relation: { id: rel.admin-calls-api, type: calls, sourceId: app.admin, targetId: svc.api, protocol: http, status: existing }
+steps:
+  - id: require-auth
+    title: Require authentication
+    body: |
+      Reading the catalog without signing in is fine: `GET /products` stays public. Deleting is
+      not. The **Problems** panel flags **DELETE /products/:id**. Set its **auth** to
+      **required**.
+    check:
+      finding: { ruleId: RNP-024, present: false }
+      message: DELETE /products/:id can still be called by anyone.
+    hints:
+      - The quick fix sets it for you.
+    solution:
+      - op: updateElement
+        id: ep.delete
+        patch: { properties: { method: DELETE, path: "/products/:id", auth: required } }
+
+  - id: roles
+    title: Only admins may delete
+    body: |
+      Signed in is not enough: a customer must not delete products. Set the endpoint's **auth**
+      to **roles** and its **roles** to **admin**.
+    check:
+      hasElement: { id: ep.delete, where: { properties.auth: roles, properties.roles: { exists: true } } }
+    success: |
+      The endpoint now documents both checks: *who are you* (a valid session) and *what may you
+      do* (the admin role). An agent implementing it, or a reviewer, sees both at a glance.
+    solution:
+      - op: updateElement
+        id: ep.delete
+        patch: { properties: { method: DELETE, path: "/products/:id", auth: roles, roles: [admin] } }

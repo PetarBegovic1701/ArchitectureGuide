@@ -1,0 +1,104 @@
+id: lesson.follow-a-request
+title: Follow a request from click to database
+summary: A product page shows data from the database. Trace every hop — page, cache, API client, API, repository, schema — and draw the ones that are missing.
+track: foundations
+level: beginner
+minutes: 12
+profile: react-node-postgres
+conceptIds: [react.route, react.api-client, react.server-state, node.route-handler, node.repository, calls]
+start:
+  ops:
+    - op: addElement
+      element: { id: app.shop, kind: react.app, name: Shop, status: existing }
+    - op: addElement
+      element: { id: svc.api, kind: node.service, name: API, status: existing, properties: { framework: fastify } }
+    - op: addElement
+      element: { id: db.shop, kind: pg.database, name: Shop DB, status: existing }
+    - op: addElement
+      element: { id: schema.catalog, kind: pg.schema, name: catalog, parentId: db.shop, status: existing }
+    - op: addRelation
+      relation: { id: rel.api-migrates-catalog, type: migrates, sourceId: svc.api, targetId: schema.catalog, status: existing }
+steps:
+  - id: the-journey
+    title: What happens when you open a product page
+    body: |
+      A customer opens `/products/42`. Before anything shows up, the request makes a trip:
+
+      1. The **page** (a route) asks for product 42.
+      2. A **server-state cache** checks whether it already has it.
+      3. If not, the **API client** sends `GET /api/products/42`.
+      4. The **API** checks the request and asks its **repository**.
+      5. The repository runs a query on the **catalog schema**.
+
+      The answer travels back the same way. Here, only the API and the database exist so far.
+      You will draw the rest.
+
+  - id: page-and-client
+    title: Add the page and the API client
+    body: |
+      Inside the **Shop** app, add a **Route / page** named "Product page" and an
+      **API client**. Then connect the API client to the **API** with **calls**.
+    check:
+      all:
+        - hasElement: { kind: react.route, parent: { kind: react.app } }
+        - hasRelation: { type: calls, from: { kind: react.api-client }, to: { id: svc.api } }
+    hints:
+      - Select the Shop app first, then click the palette items — they are added inside it.
+      - The API client is the plug icon in the Frontend group.
+    success: |
+      The page never talks HTTP itself. One API client holds the base URL, the cookies and the
+      error handling, so every page talks to the backend the same way.
+    solution:
+      - op: addElement
+        element: { id: route.product, kind: react.route, name: Product page, parentId: app.shop, status: planned, properties: { path: /products/:id } }
+      - op: addElement
+        element: { id: apic.http, kind: react.api-client, name: API client, parentId: app.shop, status: planned, properties: { kind: fetch } }
+      - op: addRelation
+        relation: { id: rel.apic-calls-api, type: calls, sourceId: apic.http, targetId: svc.api, protocol: http, status: planned }
+
+  - id: cache
+    title: Cache what the server owns
+    body: |
+      Products belong to the server. Add a **Server-state cache** inside the app, let the page
+      **use state** from it, and let the cache **fetch via** the API client.
+
+      Going back to a product you just saw is now instant, and the cache refetches when the
+      data may be stale.
+    check:
+      all:
+        - hasRelation: { type: uses-state, from: { kind: react.route }, to: { kind: react.server-state } }
+        - hasRelation: { type: fetches-via, from: { kind: react.server-state }, to: { kind: react.api-client } }
+    hints:
+      - Drag from the page to the cache; the tool offers "uses state".
+    solution:
+      - op: addElement
+        element: { id: qcache.query, kind: react.server-state, name: Query cache, parentId: app.shop, status: planned, properties: { lib: tanstack-query } }
+      - op: addRelation
+        relation: { id: rel.product-uses-cache, type: uses-state, sourceId: route.product, targetId: qcache.query, status: planned }
+      - op: addRelation
+        relation: { id: rel.cache-fetches-via-client, type: fetches-via, sourceId: qcache.query, targetId: apic.http, status: planned }
+
+  - id: backend-hops
+    title: Inside the API
+    body: |
+      Inside the **API**, add a **Controller / route handler** named "Product routes" and a
+      **Repository** named "ProductRepository". The handler **calls** the repository, and the
+      repository **reads** the catalog schema.
+    check:
+      all:
+        - hasRelation: { type: calls, from: { kind: node.route-handler }, to: { kind: node.repository } }
+        - hasRelation: { type: reads, from: { kind: node.repository }, to: { id: schema.catalog } }
+    hints:
+      - Handlers translate HTTP; repositories run queries. Keeping them apart makes both easy to test.
+    success: |
+      That is the whole trip. When a page is slow, you now know every place to look: the cache,
+      the network, the handler, the query.
+    solution:
+      - op: addElement
+        element: { id: ctl.products, kind: node.route-handler, name: Product routes, parentId: svc.api, status: planned, properties: { validation: zod } }
+      - op: addElement
+        element: { id: repo.products, kind: node.repository, name: ProductRepository, parentId: svc.api, status: planned, properties: { dataAccess: prisma } }
+      - op: addRelation
+        relation: { id: rel.products-calls-repo, type: calls, sourceId: ctl.products, targetId: repo.products, status: planned }
+      - op: addRelation
+        relation: { id: rel.repo-reads-catalog, type: reads, sourceId: repo.products, targetId: schema.catalog, via: prisma, status: planned }

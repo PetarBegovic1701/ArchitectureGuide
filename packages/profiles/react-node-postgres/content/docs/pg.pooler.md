@@ -34,7 +34,7 @@ shares a few real connections between them.
 ## Senior
 
 - Budget: sum of (instances × pool size) across services ≤ pooler client limit; pooler
-  server connections ≤ `max_connections` minus admin headroom. RNP-007 and RNP-020 check
+  server connections ≤ `max_connections` minus admin headroom. RNP-009 and RNP-020 check
   parts of this.
 - Prepared statements need care in transaction mode (supported in newer PgBouncer).
 - Serverless functions almost always need a pooler or a data API.

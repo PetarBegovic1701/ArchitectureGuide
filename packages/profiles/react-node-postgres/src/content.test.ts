@@ -3,6 +3,7 @@ import {
   adaptSolution,
   applySolution,
   checkStep,
+  allRules,
   contentCoverage,
   createCatalog,
   runRules,
@@ -53,6 +54,17 @@ describe('learning texts', () => {
       for (const example of doc.examples ?? [])
         expect(LANGUAGES.has(example.language), example.language).toBe(true);
       expect(doc.related).not.toContain(doc.id);
+    },
+  );
+});
+
+describe('rule references', () => {
+  const ruleIds = new Set(allRules(catalog).map((r) => r.id));
+  it.each([...DOCS, ...LESSONS].map((c) => [c.id, c] as const))(
+    '%s: every rule ID it mentions exists',
+    (_id, content) => {
+      const mentioned = JSON.stringify(content).match(/\b(?:AP|RNP)-\d{3}\b/g) ?? [];
+      for (const id of mentioned) expect(ruleIds.has(id), id).toBe(true);
     },
   );
 });
@@ -129,8 +141,15 @@ describe('lessons', () => {
               },
             };
           }
-          if (op.op === 'updateElement' || op.op === 'updateRelation')
+          if (
+            op.op === 'updateElement' ||
+            op.op === 'updateRelation' ||
+            op.op === 'removeElement' ||
+            op.op === 'removeRelation'
+          )
             return { ...op, id: own(op.id) };
+          if (op.op === 'moveElement')
+            return { ...op, id: own(op.id), parentId: op.parentId && own(op.parentId) };
           return op;
         });
       let project = startLesson(lesson, catalog, '2026-10-27T00:00:00.000Z');

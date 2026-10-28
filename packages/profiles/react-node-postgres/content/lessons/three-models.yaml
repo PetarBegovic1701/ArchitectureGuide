@@ -1,0 +1,116 @@
+id: lesson.three-models
+title: Domain, data shape, table — three models of one order
+summary: An order is a row in a table, a JSON body on the wire, and an object with rules in your code. Draw all three and see why they differ.
+track: data-and-models
+level: intermediate
+minutes: 15
+profile: react-node-postgres
+conceptIds: [topic.models, node.domain, node.dto, node.endpoint, node.use-case]
+start:
+  ops:
+    - op: addElement
+      element: { id: svc.api, kind: node.service, name: Orders API, status: existing }
+    - op: addElement
+      element: { id: ctl.orders, kind: node.route-handler, name: Order routes, parentId: svc.api, status: existing, properties: { validation: zod } }
+    - op: addElement
+      element: { id: ep.create-order, kind: node.endpoint, name: POST /orders, parentId: ctl.orders, status: existing, properties: { method: POST, path: /orders, auth: required } }
+    - op: addElement
+      element: { id: uc.place-order, kind: node.use-case, name: PlaceOrder, parentId: svc.api, status: existing }
+    - op: addElement
+      element: { id: repo.orders, kind: node.repository, name: OrderRepository, parentId: svc.api, status: existing }
+    - op: addRelation
+      relation: { id: rel.ctl-calls-uc, type: calls, sourceId: ctl.orders, targetId: uc.place-order, status: existing }
+    - op: addRelation
+      relation: { id: rel.uc-calls-repo, type: calls, sourceId: uc.place-order, targetId: repo.orders, status: existing }
+steps:
+  - id: three-shapes
+    title: Same order, three shapes
+    body: |
+      - The **table row** has `customer_id`, `created_at`, maybe a `deleted_at` — whatever
+        storage needs.
+      - The **data shape (DTO)** is what crosses the network: the request body for
+        `POST /orders`, the JSON in the response. It must never leak internal columns.
+      - The **domain model** holds the rules: an order cannot ship before it is paid.
+
+      Mixing them up is the most common source of leaks and of rules scattered everywhere.
+
+  - id: domain
+    title: Give the rules a home
+    body: |
+      Add a **Domain model** named "Order" inside the Orders API, and let **PlaceOrder**
+      **depend on** it. The use case loads data, then asks the Order to apply the rules.
+    check:
+      hasRelation: { type: depends-on, from: { id: uc.place-order }, to: { kind: node.domain } }
+    hints:
+      - The Domain model is the hexagon in the Backend group.
+    success: |
+      The rule "a paid order cannot be cancelled after shipping" now has one place to live,
+      and a test that needs no database.
+    solution:
+      - op: addElement
+        element: { id: dom.order, kind: node.domain, name: Order, parentId: svc.api, status: planned }
+      - op: addRelation
+        relation: { id: rel.uc-depends-on-order, type: depends-on, sourceId: uc.place-order, targetId: dom.order, status: planned }
+
+  - id: request-shape
+    title: Describe the request
+    body: |
+      Add a **Data shape (DTO)** named "CreateOrderRequest" inside the API, with role
+      **request**. Let the endpoint `POST /orders` **depend on** it.
+
+      The request holds only what the browser may choose: product IDs and quantities. Not the
+      price — the server looks that up.
+    check:
+      hasRelation:
+        type: depends-on
+        from: { id: ep.create-order }
+        to: { kind: node.dto, where: { properties.role: request } }
+      message: Let POST /orders depend on a data shape with the role "request".
+    success: |
+      If the price came from the browser, anyone could buy for one cent. The DTO makes the
+      boundary explicit, and validation enforces it.
+    solution:
+      - op: addElement
+        element:
+          id: dto.create-order
+          kind: node.dto
+          name: CreateOrderRequest
+          parentId: svc.api
+          status: planned
+          properties:
+            role: request
+            format: zod
+            fields:
+              - { name: items, type: "{ productId: string; quantity: number }[]", required: true }
+      - op: addRelation
+        relation: { id: rel.ep-depends-on-request, type: depends-on, sourceId: ep.create-order, targetId: dto.create-order, status: planned }
+
+  - id: response-shape
+    title: And the response
+    body: |
+      Add a second DTO, "OrderSummary", with role **response**, and let the endpoint depend on
+      it too: `id`, `status`, `total` — and nothing internal.
+    check:
+      hasRelation:
+        type: depends-on
+        from: { id: ep.create-order }
+        to: { kind: node.dto, where: { properties.role: response } }
+    success: |
+      Three models, three jobs. The table can gain columns, the domain can gain rules, and the
+      API stays the same for every client.
+    solution:
+      - op: addElement
+        element:
+          id: dto.order-summary
+          kind: node.dto
+          name: OrderSummary
+          parentId: svc.api
+          status: planned
+          properties:
+            role: response
+            fields:
+              - { name: id, type: string, required: true }
+              - { name: status, type: "'new' | 'paid' | 'shipped'", required: true }
+              - { name: total, type: number, required: true }
+      - op: addRelation
+        relation: { id: rel.ep-depends-on-summary, type: depends-on, sourceId: ep.create-order, targetId: dto.order-summary, status: planned }

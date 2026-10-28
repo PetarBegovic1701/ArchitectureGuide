@@ -1,0 +1,85 @@
+id: lesson.keep-the-event-loop-free
+title: "Exercise: keep the event loop free"
+summary: Building invoice PDFs inside the API makes every other request wait. Move the CPU work to a background worker until the rules are happy.
+track: concurrency-and-parallelism
+level: intermediate
+minutes: 15
+profile: react-node-postgres
+conceptIds: [topic.event-loop-and-parallelism, node.worker, pg.job-queue, enqueues, processes]
+start:
+  ops:
+    - op: addElement
+      element: { id: app.shop, kind: react.app, name: Shop, status: existing }
+    - op: addElement
+      element: { id: svc.api, kind: node.service, name: API, status: existing, properties: { instances: 2, processModel: single } }
+    - op: addElement
+      element: { id: mw.auth, kind: node.middleware, name: Auth check, parentId: svc.api, status: existing, properties: { kind: auth } }
+    - op: addElement
+      element: { id: uc.place-order, kind: node.use-case, name: PlaceOrder, parentId: svc.api, status: existing }
+    - op: addElement
+      element: { id: mod.invoice-pdf, kind: node.module, name: Invoice PDF builder, parentId: svc.api, status: existing }
+    - op: addElement
+      element: { id: db.shop, kind: pg.database, name: Shop DB, status: existing }
+    - op: addRelation
+      relation: { id: rel.shop-calls-api, type: calls, sourceId: app.shop, targetId: svc.api, protocol: http, status: existing, properties: { auth: session-cookie } }
+    - op: addRelation
+      relation: { id: rel.order-calls-pdf, type: calls, sourceId: uc.place-order, targetId: mod.invoice-pdf, status: existing }
+steps:
+  - id: one-thread
+    title: One thread for everyone
+    body: |
+      Node.js runs your JavaScript on **one thread** per process. While waiting for the
+      database or the network, that thread serves other requests — that is why Node handles
+      thousands of connections. But while it **computes** (renders a PDF, resizes an image,
+      hashes a password with too many rounds), nobody else is served.
+
+      Rendering an invoice takes 800 ms of CPU. During those 800 ms, every other customer of
+      this instance waits. More instances only spread the pain. The **Problems** panel flags
+      it: *CPU-heavy work on the event loop*.
+
+  - id: worker
+    title: Hand the work to a worker
+    body: |
+      1. Add a **Postgres job queue** named "invoices" and a **Background worker** named
+         "Invoice worker" that **processes** it.
+      2. Move the **Invoice PDF builder** into the worker.
+      3. Delete the arrow from **PlaceOrder** to the PDF builder; instead, PlaceOrder
+         **enqueues** a job, **in transaction**.
+    check:
+      all:
+        - finding: { ruleId: RNP-021, present: false }
+          message: The PDF builder still runs inside the API.
+        - hasRelation: { type: enqueues, from: { id: uc.place-order }, to: { kind: pg.job-queue }, where: { inTransaction: true } }
+          message: Let PlaceOrder enqueue the job in the same transaction as the order.
+        - hasRelation: { type: processes, from: { kind: node.worker }, to: { kind: pg.job-queue } }
+          message: Add a worker that processes the queue.
+    hints:
+      - To move a shape into the worker, drag it onto the worker.
+      - Put the queue inside the database — it is stored in Postgres tables.
+    success: |
+      The API answers in milliseconds again; the worker builds PDFs at its own pace, retries
+      failures, and can run on a machine with more CPU.
+    solution:
+      - op: addElement
+        element: { id: jobs.invoices, kind: pg.job-queue, name: invoices, parentId: db.shop, status: planned, properties: { lib: pg-boss, deadLetter: true } }
+      - op: addElement
+        element: { id: wrk.invoice, kind: node.worker, name: Invoice worker, status: planned, properties: { jobLib: pg-boss, concurrency: 2 } }
+      - op: moveElement
+        id: mod.invoice-pdf
+        parentId: wrk.invoice
+      - op: removeRelation
+        id: rel.order-calls-pdf
+      - op: addRelation
+        relation: { id: rel.order-enqueues-invoice, type: enqueues, sourceId: uc.place-order, targetId: jobs.invoices, inTransaction: true, status: planned }
+      - op: addRelation
+        relation: { id: rel.worker-processes-invoices, type: processes, sourceId: wrk.invoice, targetId: jobs.invoices, status: planned }
+
+  - id: threads
+    title: The other option — worker threads
+    body: |
+      When the result is needed **in the response** (a thumbnail preview), a queue is the
+      wrong tool. Node's `worker_threads` run CPU work on other cores inside the same process:
+      set the service's **process model** to **worker-threads** and use a pool such as
+      Piscina. The event loop stays free either way.
+
+      Rule of thumb: queue what can happen later, use threads for what must happen now.

@@ -1,0 +1,79 @@
+id: lesson.design-an-endpoint
+title: Design an endpoint
+summary: Describe POST /orders like a contract — method, path, status codes, who may call it — and validate what comes in.
+track: api-design
+level: beginner
+minutes: 12
+profile: react-node-postgres
+conceptIds: [node.endpoint, node.route-handler, node.dto, calls]
+start:
+  ops:
+    - op: addElement
+      element: { id: app.shop, kind: react.app, name: Shop, status: existing }
+    - op: addElement
+      element: { id: svc.api, kind: node.service, name: API, status: existing }
+    - op: addElement
+      element: { id: mw.auth, kind: node.middleware, name: Session check, parentId: svc.api, status: existing, properties: { kind: auth, authMethod: session } }
+    - op: addRelation
+      relation: { id: rel.shop-calls-api, type: calls, sourceId: app.shop, targetId: svc.api, protocol: http, status: existing, properties: { auth: session-cookie } }
+steps:
+  - id: what-is-an-endpoint
+    title: An endpoint is a promise
+    body: |
+      An **endpoint** is one operation of your API: a **method** (GET reads, POST creates, PUT
+      and PATCH change, DELETE removes) and a **path** (`/orders`). It promises what it accepts,
+      what it returns, and which **status codes** clients can expect:
+
+      - `201 Created` — the order exists now,
+      - `400 Bad Request` — the body is wrong,
+      - `401` / `403` — not signed in / not allowed,
+      - `409 Conflict` — for example out of stock.
+
+  - id: handler-and-endpoint
+    title: Add the handler and the endpoint
+    body: |
+      Inside the API, add a **Controller / route handler** named "Order routes", and inside it
+      an **API endpoint**. In the inspector set method **POST**, path **/orders**, status codes
+      **201, 400, 409** and auth **required**.
+    check:
+      hasElement:
+        kind: node.endpoint
+        parent: { kind: node.route-handler }
+        where:
+          properties.method: POST
+          properties.statusCodes: { exists: true }
+          properties.auth: required
+      message: Add a POST endpoint with status codes and auth "required" inside a route handler.
+    hints:
+      - Endpoints only fit inside a route handler or an API contract.
+    success: |
+      Anyone reading the diagram — a teammate or an AI agent — now knows exactly what this
+      endpoint does and how it can fail.
+    solution:
+      - op: addElement
+        element: { id: ctl.orders, kind: node.route-handler, name: Order routes, parentId: svc.api, status: planned }
+      - op: addElement
+        element:
+          id: ep.create-order
+          kind: node.endpoint
+          name: POST /orders
+          parentId: ctl.orders
+          status: planned
+          properties: { method: POST, path: /orders, statusCodes: [201, 400, 409], auth: required }
+
+  - id: validate
+    title: Validate at the door
+    body: |
+      The **Problems** panel says the handler does not validate requests. Anyone can send any
+      JSON to your API, not only your React app. Set **Validation** on "Order routes" to
+      **zod** (or use the quick fix).
+    check:
+      finding: { ruleId: RNP-015, present: false }
+      message: The route handler still does not say how it validates requests.
+    success: |
+      Invalid bodies now stop at the door with a 400 and a clear message, and the use case can
+      trust its input.
+    solution:
+      - op: updateElement
+        id: ctl.orders
+        patch: { properties: { validation: zod } }

@@ -87,7 +87,7 @@ A gateway in front of independent services. Each service has its own database on
 - **Postgres server** (`pg.cluster`): One running PostgreSQL server. It holds one or more databases and has limits that every app shares — connections, memory, CPU.
 - **Database** (`pg.database`): A PostgreSQL database — the place where data survives restarts. Only backend code connects to it; schemas inside it group tables by owner.
 - **Postgres job queue** (`pg.job-queue`): A durable job queue stored in Postgres tables (pg-boss, graphile-worker). Jobs can be added in the same transaction as your data, so neither is lost.
-- **authenticates with** (`authenticates-with`): Uses an auth provider to sign users in or to verify their tokens. Set the method — OIDC with PKCE, passwords, passkeys, API keys.
+- **authenticates with** (`authenticates-with`): Uses an auth provider to sign users in or to verify their tokens. Set the flow — OIDC with PKCE, passwords, passkeys, API keys — and the token type.
 - **calls** (`calls`): A synchronous request and response — the caller waits for the answer. Set the protocol, auth, timeout and whether it is safe to retry.
 - **enqueues** (`enqueues`): Adds a job to a Postgres job queue. Set inTransaction when the job is added in the same transaction as the data.
 - **migrates** (`migrates`): This element owns the schema's DDL — it runs the migrations that create and change tables. Exactly one owner per schema.

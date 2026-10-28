@@ -39,11 +39,11 @@ schema should write it; other services ask the owner.
 
 ## Senior
 
-- Read-modify-write on contended rows without control loses updates (RNP-014). Try the
+- Read-modify-write on contended rows without control loses updates (RNP-019). Try the
   concurrency lab: select a writes arrow and open it there.
 - Two services writing the same schema (RNP-001) or a dual write to Postgres and a broker
-  (RNP-004) are the most expensive mistakes to undo.
-- SERIALIZABLE needs retries on SQLSTATE 40001 (RNP-018).
+  (RNP-007) are the most expensive mistakes to undo.
+- SERIALIZABLE needs retries on SQLSTATE 40001 (RNP-022).
 
 ## Common mistakes
 

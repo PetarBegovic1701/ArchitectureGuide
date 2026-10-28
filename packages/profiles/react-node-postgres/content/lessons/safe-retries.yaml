@@ -1,0 +1,70 @@
+id: lesson.safe-retries
+title: "Exercise: pay once, even when the network fails"
+summary: The shop retries POST /payments when a response is lost — and sometimes charges twice. Make retries safe with idempotency keys.
+track: api-design
+level: intermediate
+minutes: 12
+profile: react-node-postgres
+conceptIds: [node.endpoint, calls, gen.external]
+start:
+  ops:
+    - op: addElement
+      element: { id: app.shop, kind: react.app, name: Shop, status: existing }
+    - op: addElement
+      element: { id: svc.api, kind: node.service, name: Payments API, status: existing }
+    - op: addElement
+      element: { id: ctl.payments, kind: node.route-handler, name: Payment routes, parentId: svc.api, status: existing, properties: { validation: zod } }
+    - op: addElement
+      element:
+        id: ep.pay
+        kind: node.endpoint
+        name: POST /payments
+        parentId: ctl.payments
+        status: existing
+        properties: { method: POST, path: /payments, auth: required, statusCodes: [201, 400, 402] }
+    - op: addRelation
+      relation: { id: rel.shop-pays, type: calls, sourceId: app.shop, targetId: ep.pay, protocol: http, status: existing, properties: { auth: session-cookie, retries: 3, timeoutMs: 8000 } }
+steps:
+  - id: double-charge
+    title: How one click pays twice
+    body: |
+      The customer taps **Pay**. The server charges the card, but the response is lost on a bad
+      mobile connection. After 8 seconds the app times out and **retries** — and the server
+      charges again.
+
+      GET requests are safe to retry: reading twice changes nothing. POST is not, unless you
+      make it so. The **Problems** panel flags the retried call.
+
+  - id: key
+    title: Send an idempotency key
+    body: |
+      Select the arrow from **Shop** to **POST /payments** and turn on **Idempotency key**.
+
+      The app creates one unique key per payment attempt (`Idempotency-Key: 7f3c…`) and sends
+      the same key with every retry. The server stores keys with a `UNIQUE` constraint; a
+      repeated key returns the first result instead of charging again.
+    check:
+      finding: { ruleId: RNP-023, present: false }
+      message: The retried call to POST /payments is still not idempotent.
+    success: |
+      Retries are safe now: the worst case is a second request that returns the stored result.
+    solution:
+      - op: updateRelation
+        id: rel.shop-pays
+        patch: { properties: { auth: session-cookie, retries: 3, timeoutMs: 8000, idempotencyKey: true } }
+
+  - id: server-side
+    title: Make the endpoint idempotent for every client
+    body: |
+      The mobile app and partners call this endpoint too. Mark **POST /payments** itself as
+      **idempotent**: the server requires the key and stores the result per key, so every
+      client is protected, not only the one you fixed.
+    check:
+      hasElement: { id: ep.pay, where: { properties.idempotent: true } }
+    success: |
+      Pass the same key to the payment provider (Stripe supports `Idempotency-Key` too), and a
+      retry can never become a second charge anywhere in the chain.
+    solution:
+      - op: updateElement
+        id: ep.pay
+        patch: { properties: { method: POST, path: /payments, auth: required, statusCodes: [201, 400, 402], idempotent: true } }

@@ -2031,6 +2031,50 @@ tables and schema design, stored functions, server vs client state, authenticati
 transactions and isolation, concurrency control, concurrency and parallelism in
 Node.js) and 2 lessons (`lesson.first-full-stack`, `lesson.prevent-lost-updates`).
 
+Done in Phase 6:
+
+- **Content:** 92 texts (every concept and relation type, plus topics and patterns)
+  and 24 lessons, four per track for `foundations`, `data-and-models`, `api-design`,
+  `state-management`, `auth` and `concurrency-and-parallelism`; 13 of them are
+  exercises graded by rule findings.
+- **Core:** `progress` (the progress file, `completeStep`, `markRead`, `answerQuiz`,
+  `mergeProgress`, `parseProgress`, `serializeProgress`, `trackSummaries`),
+  `library` (`TRACKS`, `docsInTrack`, `searchDocs`, `contentCoverage`,
+  `isExercise`), `concurrency` (`simulateConcurrency`, the lab model), and
+  `adaptSolution`.
+- **Web:**
+  - Pages `#/learn` (lessons by track), `#/library` (texts, search),
+    `#/library/<id>` (one text at the reader's level, its quiz, the concept guide,
+    the lessons that use it) and `#/lab`.
+  - The lesson player, and progress in IndexedDB (Dexie schema v3), with export and
+    import.
+
+Implementation notes (where the build differs from §17.5–§17.9):
+
+- **Lessons run in a project.** Starting a lesson creates (or continues) the browser
+  project `lesson-<name>`. The progress file links the lesson to it. The start model
+  is placed and laid out with ELK, because lesson ops only change the model.
+- **"Show me" adapts the solution.** Learners name shapes their own way, so their IDs
+  differ from the lesson's. `adaptSolution` maps the lesson's IDs to the learner's
+  shapes of the same kind, maps arrows by type and ends, and skips what already exists.
+  A content test proves it: for every lesson, every other step is done "by the
+  learner" with different IDs, and "Show me" must solve the steps in between.
+- **The player** is a column beside the canvas on desktop, a floating card on tablets
+  and a sheet on phones. After a check passes, the success text stays until the
+  learner presses Next.
+- **The concurrency lab** simulates one stock row and two or three requests per
+  `concurrencyControl` (none, optimistic version, row lock, advisory lock,
+  SERIALIZABLE with retry). From a `writes` arrow in the editor, "Use on this arrow"
+  sets that arrow's control.
+- **Not done in Phase 6:**
+  - Texts for rules: their rationale is shown instead (coverage 0/24).
+  - Glossary hover.
+  - Starting tours automatically for beginners.
+  - The usability test with a beginner (it needs real users).
+- **Content tests:**
+  - Coverage must stay at 100% for concepts and relation types.
+  - Every rule ID mentioned in a text or lesson must exist.
+
 ---
 
 ## 18. Exporters
@@ -2890,16 +2934,16 @@ Estimates assume one full-time developer. They are rough.
 - [x] Playwright projects for phone and tablet viewports with touch; the starter, findings and template scenarios run on them (in `mobile.spec.ts`; see the notes in §13.10)
 - **Done when:** on a 390 px wide phone, a user opens the starter, follows its tour, fixes a finding, connects two shapes and renames one, without horizontal scrolling and without a mouse or keyboard.
 
-### Phase 6: Learning mode (~3 weeks, plus a content stream)
+### Phase 6: Learning mode (~3 weeks, plus a content stream) — done, except the usability test
 
-- [ ] Library page (texts by track, search) and text pages at the chosen level
-- [ ] Tracks page with lessons, level, time and progress
-- [ ] Lesson player (§17.5): live checks after every op, hints, "Show me", success texts
-- [ ] Progress store (Dexie), export/import as JSON
-- [ ] Quizzes in texts
-- [ ] Exercises: lessons that start from a flawed model and pass when the rule findings are gone
-- [ ] Concurrency lab (§17.7): timeline lanes for two or more requests/workers, replay with each `concurrencyControl`
-- [ ] Content stream (parallel, continuous): a text for every concept, relation type and rule; about four lessons per track for `foundations`, `data-and-models`, `api-design`, `state-management`, `auth`, `concurrency-and-parallelism`
+- [x] Library page (texts by track, search) and text pages at the chosen level
+- [x] Tracks page with lessons, level, time and progress
+- [x] Lesson player (§17.5): live checks after every op, hints, "Show me", success texts
+- [x] Progress store (Dexie), export/import as JSON
+- [x] Quizzes in texts
+- [x] Exercises: lessons that start from a flawed model and pass when the rule findings are gone
+- [x] Concurrency lab (§17.7): timeline lanes for two or more requests/workers, replay with each `concurrencyControl`
+- [x] Content stream: a text for every concept and relation type (rule texts still open, §17.10); four lessons per track for `foundations`, `data-and-models`, `api-design`, `state-management`, `auth`, `concurrency-and-parallelism`
 - **Done when:** a beginner finishes `lesson.first-full-stack` without help in a usability test, every lesson in CI is solvable, and content coverage is 100% for concepts and relation types.
 
 ### Phase 7: Server, CLI, MCP, skill (~2 weeks)

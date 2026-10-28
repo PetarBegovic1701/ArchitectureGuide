@@ -1,0 +1,81 @@
+id: lesson.server-vs-client-state
+title: Server state vs client state
+summary: An orders page needs data from the server and a filter the user picked. Put each in the right place and see why mixing them makes screens stale.
+track: state-management
+level: beginner
+minutes: 12
+profile: react-node-postgres
+conceptIds: [react.server-state, react.client-store, uses-state, fetches-via]
+start:
+  ops:
+    - op: addElement
+      element: { id: app.shop, kind: react.app, name: Shop, status: existing }
+    - op: addElement
+      element: { id: route.orders, kind: react.route, name: Orders page, parentId: app.shop, status: existing, properties: { path: /orders } }
+    - op: addElement
+      element: { id: cmp.filters, kind: react.component, name: Filter bar, parentId: app.shop, status: existing }
+    - op: addElement
+      element: { id: apic.http, kind: react.api-client, name: API client, parentId: app.shop, status: existing }
+    - op: addElement
+      element: { id: svc.api, kind: node.service, name: API, status: existing }
+    - op: addElement
+      element: { id: mw.auth, kind: node.middleware, name: Session check, parentId: svc.api, status: existing, properties: { kind: auth } }
+    - op: addRelation
+      relation: { id: rel.client-calls-api, type: calls, sourceId: apic.http, targetId: svc.api, protocol: http, status: existing }
+    - op: addRelation
+      relation: { id: rel.orders-renders-filters, type: renders, sourceId: route.orders, targetId: cmp.filters, status: existing }
+steps:
+  - id: two-kinds
+    title: Two kinds of state
+    body: |
+      The orders page shows **the user's orders** and a **filter** ("only open orders").
+
+      - The orders live on the server. Your copy can go stale: the warehouse ships an order
+        while the page is open. That is **server state**.
+      - The filter exists only in this browser. Nobody else can change it. That is **client
+        state**.
+
+      They need different tools.
+
+  - id: server-state
+    title: Put the orders in a server-state cache
+    body: |
+      Add a **Server-state cache** inside the app. The orders page **uses state** from it, and
+      the cache **fetches via** the API client.
+    check:
+      all:
+        - hasRelation: { type: uses-state, from: { id: route.orders }, to: { kind: react.server-state } }
+        - hasRelation: { type: fetches-via, from: { kind: react.server-state }, to: { id: apic.http } }
+    success: |
+      The cache handles loading and error states, shares the data between components, and
+      refetches when the user comes back to the tab — none of it written by hand.
+    solution:
+      - op: addElement
+        element: { id: qcache.query, kind: react.server-state, name: Query cache, parentId: app.shop, status: planned, properties: { lib: tanstack-query, staleTimeMs: 30000 } }
+      - op: addRelation
+        relation: { id: rel.orders-uses-cache, type: uses-state, sourceId: route.orders, targetId: qcache.query, status: planned }
+      - op: addRelation
+        relation: { id: rel.cache-fetches, type: fetches-via, sourceId: qcache.query, targetId: apic.http, status: planned }
+
+  - id: client-state
+    title: Put the filter in a client store
+    body: |
+      Add a **Client state store** named "UI store" inside the app. The **Filter bar** and the
+      **Orders page** both **use state** from it: the bar changes the filter, the page reads it.
+    check:
+      all:
+        - hasRelation: { type: uses-state, from: { id: cmp.filters }, to: { kind: react.client-store } }
+        - hasRelation: { type: uses-state, from: { id: route.orders }, to: { kind: react.client-store } }
+    hints:
+      - The client store is in the Full palette (Frontend group), with the shop icon.
+    success: |
+      Two stores, two jobs. The query key includes the filter (`['orders', { status: 'open' }]`),
+      so changing the filter fetches the right page of data — and the server data is never
+      copied into the UI store.
+    solution:
+      - op: addElement
+        element: { id: store-ui.ui, kind: react.client-store, name: UI store, parentId: app.shop, status: planned, properties: { lib: zustand, persist: none } }
+      - op: addRelation
+        relation: { id: rel.filters-uses-ui, type: uses-state, sourceId: cmp.filters, targetId: store-ui.ui, status: planned }
+      - op: addRelation
+        relation: { id: rel.orders-uses-ui, type: uses-state, sourceId: route.orders, targetId: store-ui.ui, status: planned }

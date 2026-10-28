@@ -1,0 +1,66 @@
+id: lesson.tokens-out-of-storage
+title: "Exercise: tokens out of localStorage"
+summary: The shop keeps access tokens in localStorage and persists an auth store there too. One XSS bug would leak every session. Move them out until the rules are happy.
+track: auth
+level: intermediate
+minutes: 10
+profile: react-node-postgres
+conceptIds: [topic.authentication, react.app, react.client-store]
+start:
+  ops:
+    - op: addElement
+      element: { id: app.shop, kind: react.app, name: Shop, status: existing, properties: { tokenStorage: local-storage } }
+    - op: addElement
+      element: { id: store-ui.auth, kind: react.client-store, name: Auth store, parentId: app.shop, status: existing, properties: { lib: zustand, persist: local-storage } }
+    - op: addElement
+      element: { id: svc.api, kind: node.service, name: API, status: existing }
+    - op: addElement
+      element: { id: mw.auth, kind: node.middleware, name: Auth check, parentId: svc.api, status: existing, properties: { kind: auth } }
+    - op: addRelation
+      relation: { id: rel.shop-calls-api, type: calls, sourceId: app.shop, targetId: svc.api, protocol: http, status: existing, properties: { auth: bearer-token } }
+steps:
+  - id: the-risk
+    title: Why localStorage is risky
+    body: |
+      Any JavaScript on the page can read `localStorage`: your code, every npm package you
+      ship, and any script an attacker manages to inject (XSS). Tokens stored there can be
+      copied and used from anywhere until they expire.
+
+      An **HttpOnly** cookie cannot be read by JavaScript at all. The browser sends it with
+      each request, and `Secure` and `SameSite` limit where.
+
+  - id: cookie
+    title: Use an HttpOnly cookie
+    body: |
+      Select the **Shop** app and set **Token storage** to **http-only-cookie**. Then select the
+      arrow to the API and set its **auth** to **session-cookie**.
+    check:
+      all:
+        - hasElement: { id: app.shop, where: { properties.tokenStorage: http-only-cookie } }
+        - hasRelation: { type: calls, from: { id: app.shop }, to: { id: svc.api }, where: { properties.auth: session-cookie } }
+    hints:
+      - With cookies, add CSRF protection for state-changing requests (SameSite=Lax or Strict, plus a CSRF token or a custom header).
+    solution:
+      - op: updateElement
+        id: app.shop
+        patch: { properties: { tokenStorage: http-only-cookie } }
+      - op: updateRelation
+        id: rel.shop-calls-api
+        patch: { properties: { auth: session-cookie } }
+
+  - id: store
+    title: Do not persist the auth store
+    body: |
+      The **Auth store** still saves the user's session data to `localStorage`. Set its
+      **persist** to **none**. After a reload, the app asks the API "who am I?" (`GET /me`),
+      which answers from the cookie.
+    check:
+      finding: { ruleId: RNP-026, present: false }
+      message: Auth data is still kept in web storage.
+    success: |
+      Nothing secret is readable by scripts anymore. An XSS bug is still bad — but it can no
+      longer copy sessions to an attacker's machine.
+    solution:
+      - op: updateElement
+        id: store-ui.auth
+        patch: { properties: { lib: zustand, persist: none } }

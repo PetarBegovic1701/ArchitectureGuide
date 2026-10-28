@@ -55,7 +55,14 @@ The editor also works on tablets and phones: drawers on tablets, and on phones a
 canvas with a bottom toolbar, bottom sheets, tap-to-connect, a long-press menu and
 "select several" (Implementation.md §13.10).
 
-Next: Phase 6, learning mode (Implementation.md §17).
+**Learn** (`#/learn`): 24 lessons in six tracks run on the real canvas. Each step is
+checked as you build, with hints and "Show me". Exercises start from a flawed design and
+pass when the rules are happy. The **Library** (`#/library`) has a text for every shape and
+arrow at beginner, intermediate and senior level, with quizzes. The **Concurrency lab**
+(`#/lab`) replays a lost update, and its fixes, step by step. Progress stays in the browser
+and can be exported.
+
+Next: Phase 7, server, CLI and MCP (Implementation.md §20).
 
 ## Development
 

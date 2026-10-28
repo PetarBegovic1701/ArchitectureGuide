@@ -1,0 +1,70 @@
+id: lesson.paginate-the-list
+title: "Exercise: a list that fits in memory"
+summary: GET /products returns every product at once. It was fast with 50 test products; with 200,000 it times out. Add pagination until the rules are happy.
+track: api-design
+level: intermediate
+minutes: 10
+profile: react-node-postgres
+conceptIds: [node.endpoint, node.dto]
+start:
+  ops:
+    - op: addElement
+      element: { id: svc.api, kind: node.service, name: Catalog API, status: existing }
+    - op: addElement
+      element: { id: ctl.products, kind: node.route-handler, name: Product routes, parentId: svc.api, status: existing, properties: { validation: zod } }
+    - op: addElement
+      element:
+        id: ep.list-products
+        kind: node.endpoint
+        name: GET /products
+        parentId: ctl.products
+        status: existing
+        properties: { method: GET, path: /products, returnsList: true, auth: none }
+steps:
+  - id: cursor
+    title: Return one page at a time
+    body: |
+      Open the **Problems** panel: *Unpaginated list endpoint*. Select **GET /products** and set
+      **Pagination** to **cursor**.
+
+      With a cursor, the client asks `GET /products?after=<last id>&limit=50`. The query uses
+      the primary key index and stays fast on the millionth page, unlike `OFFSET 999950`.
+    check:
+      finding: { ruleId: RNP-025, present: false }
+      message: GET /products still returns the whole list.
+    hints:
+      - The quick fix in the Problems panel sets cursor pagination for you.
+    solution:
+      - op: updateElement
+        id: ep.list-products
+        patch: { properties: { method: GET, path: /products, returnsList: true, auth: none, pagination: cursor } }
+
+  - id: page-shape
+    title: Describe the page
+    body: |
+      Clients need to know where the next page starts. Add a **Data shape (DTO)** named
+      "ProductPage" with role **response** (fields `items` and `nextCursor`), and let the
+      endpoint **depend on** it.
+    check:
+      hasRelation:
+        type: depends-on
+        from: { id: ep.list-products }
+        to: { kind: node.dto, where: { properties.role: response } }
+    success: |
+      `nextCursor: null` means "no more pages". The client loops until then, and the server
+      never builds a response bigger than one page.
+    solution:
+      - op: addElement
+        element:
+          id: dto.product-page
+          kind: node.dto
+          name: ProductPage
+          parentId: svc.api
+          status: planned
+          properties:
+            role: response
+            fields:
+              - { name: items, type: "ProductSummary[]", required: true }
+              - { name: nextCursor, type: "string | null", required: true }
+      - op: addRelation
+        relation: { id: rel.list-depends-on-page, type: depends-on, sourceId: ep.list-products, targetId: dto.product-page, status: planned }

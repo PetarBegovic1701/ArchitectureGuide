@@ -1,0 +1,81 @@
+id: lesson.one-door-for-the-browser
+title: "Exercise: one door for the browser"
+summary: The shop's React app calls three services directly. Pages are slow on mobile and every service is exposed. Add a backend-for-frontend until the rules are happy.
+track: foundations
+level: intermediate
+minutes: 12
+profile: react-node-postgres
+conceptIds: [node.bff, pattern.bff, react.app, calls]
+start:
+  ops:
+    - op: addElement
+      element: { id: app.shop, kind: react.app, name: Shop, status: existing }
+    - op: addElement
+      element: { id: svc.catalog, kind: node.service, name: Catalog API, status: existing }
+    - op: addElement
+      element: { id: svc.orders, kind: node.service, name: Orders API, status: existing }
+    - op: addElement
+      element: { id: svc.reviews, kind: node.service, name: Reviews API, status: existing }
+    - op: addRelation
+      relation: { id: rel.shop-calls-catalog, type: calls, sourceId: app.shop, targetId: svc.catalog, protocol: http, status: existing, properties: { auth: session-cookie } }
+    - op: addRelation
+      relation: { id: rel.shop-calls-orders, type: calls, sourceId: app.shop, targetId: svc.orders, protocol: http, status: existing, properties: { auth: session-cookie } }
+    - op: addRelation
+      relation: { id: rel.shop-calls-reviews, type: calls, sourceId: app.shop, targetId: svc.reviews, protocol: http, status: existing, properties: { auth: session-cookie } }
+steps:
+  - id: the-problem
+    title: Three doors are too many
+    body: |
+      Open the **Problems** panel: *React app calls many services*. The product page makes
+      three requests to three services, one after another on a slow phone network. Each
+      service must handle browser concerns (CORS, cookies, rate limits), and any change to
+      their APIs breaks the app.
+
+  - id: add-bff
+    title: Add a backend-for-frontend
+    body: |
+      Add a **Backend-for-Frontend** named "Shop BFF". The Shop app **calls** the BFF, and the
+      BFF **calls** each of the three services.
+    check:
+      all:
+        - hasRelation: { type: calls, from: { id: app.shop }, to: { kind: node.bff } }
+        - hasRelation: { type: calls, from: { kind: node.bff }, to: { id: svc.catalog } }
+        - hasRelation: { type: calls, from: { kind: node.bff }, to: { id: svc.orders } }
+        - hasRelation: { type: calls, from: { kind: node.bff }, to: { id: svc.reviews } }
+    hints:
+      - The BFF is in the Backend group, with the split-arrow icon.
+    solution:
+      - op: addElement
+        element: { id: bff.shop, kind: node.bff, name: Shop BFF, status: planned, properties: { client: web } }
+      - op: addRelation
+        relation: { id: rel.shop-calls-bff, type: calls, sourceId: app.shop, targetId: bff.shop, protocol: http, status: planned, properties: { auth: session-cookie } }
+      - op: addRelation
+        relation: { id: rel.bff-calls-catalog, type: calls, sourceId: bff.shop, targetId: svc.catalog, protocol: http, status: planned }
+      - op: addRelation
+        relation: { id: rel.bff-calls-orders, type: calls, sourceId: bff.shop, targetId: svc.orders, protocol: http, status: planned }
+      - op: addRelation
+        relation: { id: rel.bff-calls-reviews, type: calls, sourceId: bff.shop, targetId: svc.reviews, protocol: http, status: planned }
+
+  - id: close-the-doors
+    title: Close the old doors
+    body: |
+      Delete the three arrows from the Shop app straight to the services. The browser now has
+      one door, and the services are free to change behind it.
+    check:
+      all:
+        - finding: { ruleId: RNP-011, present: false }
+          message: The Shop app still calls more than two services directly.
+        - not: { hasRelation: { type: calls, from: { id: app.shop }, to: { id: svc.orders } } }
+          message: Remove the direct call from the Shop app to the Orders API.
+    hints:
+      - Select an arrow and press Delete (or long-press it on a touch screen).
+    success: |
+      The BFF fetches the three services in parallel, close to them in the data center, and
+      returns one response shaped for the page. The rule is satisfied.
+    solution:
+      - op: removeRelation
+        id: rel.shop-calls-catalog
+      - op: removeRelation
+        id: rel.shop-calls-orders
+      - op: removeRelation
+        id: rel.shop-calls-reviews

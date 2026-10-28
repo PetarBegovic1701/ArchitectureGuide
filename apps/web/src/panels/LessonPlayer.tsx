@@ -11,7 +11,7 @@ import {
   Wand2,
 } from 'lucide-react';
 import { adaptSolution, applyOps, checkStep, completeStep } from '@archguide/core';
-import type { Lesson, LessonStep, Project } from '@archguide/core';
+import type { Lesson, LessonStep, ModelOp, Project } from '@archguide/core';
 import { canvasApi, dispatch } from '../actions';
 import { catalog, lessons } from '../lib/catalog';
 import { findingsOf } from '../lib/findings';
@@ -39,10 +39,15 @@ export function useActiveLesson(projectId: string): Lesson | undefined {
  */
 function showMe(project: Project, lesson: Lesson, step: LessonStep): boolean {
   const ops = adaptSolution(project, lesson, step);
-  const trial = applyOps(project, ops, catalog);
+  const viewId = activeView(project, useProject.getState().viewId).id;
+  // Moved shapes are placed again inside their new container.
+  const unplace: ModelOp[] = ops.flatMap((op) =>
+    op.op === 'moveElement' ? [{ op: 'removeViewNode', viewId, elementId: op.id }] : [],
+  );
+  const trial = applyOps(project, [...ops, ...unplace], catalog);
   if (!trial.ok) return false;
-  const view = activeView(trial.project, useProject.getState().viewId);
-  if (!dispatch([...ops, ...placeOps(trial.project, view)], { label: 'Show me' })) return false;
+  const place = placeOps(trial.project, activeView(trial.project, viewId));
+  if (!dispatch([...ops, ...unplace, ...place], { label: 'Show me' })) return false;
   setTimeout(() => canvasApi.focus?.(trial.project.model.elements.map((e) => e.id)), 80);
   return true;
 }

@@ -28,7 +28,7 @@ them; this tool applies only its generic rules to it.
 
 ## Senior
 
-- Writing to two stores (Postgres and a search index) is a dual write (RNP-004): use an
+- Writing to two stores (Postgres and a search index) is a dual write (RNP-007): use an
   outbox or change data capture to keep them consistent.
 - Prefer Postgres features (JSONB, full-text search, `pg_trgm`) until a separate store is
   clearly needed.

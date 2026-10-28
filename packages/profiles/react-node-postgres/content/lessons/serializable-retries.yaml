@@ -1,0 +1,67 @@
+id: lesson.serializable-retries
+title: "Exercise: SERIALIZABLE needs retries"
+summary: A transfer runs in SERIALIZABLE transactions — the safest isolation level — but nobody retries when PostgreSQL aborts one. Fix every write path until the rules are happy.
+track: concurrency-and-parallelism
+level: senior
+minutes: 10
+profile: react-node-postgres
+conceptIds: [topic.transactions-and-isolation, topic.concurrency-control, writes]
+start:
+  ops:
+    - op: addElement
+      element: { id: svc.api, kind: node.service, name: Accounts API, status: existing }
+    - op: addElement
+      element: { id: repo.accounts, kind: node.repository, name: AccountRepository, parentId: svc.api, status: existing }
+    - op: addElement
+      element: { id: wrk.interest, kind: node.worker, name: Interest job, status: existing }
+    - op: addElement
+      element: { id: db.bank, kind: pg.database, name: Bank DB, status: existing }
+    - op: addElement
+      element: { id: schema.accounts, kind: pg.schema, name: accounts, parentId: db.bank, status: existing }
+    - op: addRelation
+      relation: { id: rel.api-migrates, type: migrates, sourceId: svc.api, targetId: schema.accounts, status: existing }
+    - op: addRelation
+      relation: { id: rel.repo-writes, type: writes, sourceId: repo.accounts, targetId: schema.accounts, status: existing, properties: { isolation: serializable } }
+    - op: addRelation
+      relation: { id: rel.interest-writes, type: writes, sourceId: wrk.interest, targetId: schema.accounts, status: existing, properties: { isolation: serializable } }
+steps:
+  - id: aborts
+    title: SERIALIZABLE says no
+    body: |
+      Under `SERIALIZABLE`, PostgreSQL guarantees the result is as if transactions ran one after
+      another. When two transfers would interleave badly, it **aborts** one of them at commit
+      with `SQLSTATE 40001` (*could not serialize access*). That is the feature — but only if
+      your code **retries** the aborted transaction.
+
+      Without a retry, the user sees a 500 error for a perfectly valid transfer. Try
+      "SERIALIZABLE with retry" in the **concurrency lab** to watch it happen.
+
+  - id: api-retries
+    title: Retry in the API
+    body: |
+      Select the **writes** arrow from **AccountRepository** and set **Concurrency control**
+      to **serializable-retry**: the transaction is retried a few times on 40001, with a short
+      random backoff.
+    check:
+      hasRelation: { type: writes, from: { id: repo.accounts }, where: { properties.concurrencyControl: serializable-retry } }
+    solution:
+      - op: updateRelation
+        id: rel.repo-writes
+        patch: { properties: { isolation: serializable, concurrencyControl: serializable-retry } }
+
+  - id: every-path
+    title: Every write path retries
+    body: |
+      The nightly **Interest job** writes the same accounts, also under SERIALIZABLE. When it
+      collides with a transfer, it can be the one that is aborted. Give its writes arrow the
+      same setting.
+    check:
+      finding: { ruleId: RNP-022, present: false }
+      message: A serializable write path still does not retry.
+    success: |
+      Wrap the retry in one helper (`withSerializableRetry(tx => …)`) and use it everywhere.
+      Keep transactions short and make the work inside them idempotent: a retry runs it again.
+    solution:
+      - op: updateRelation
+        id: rel.interest-writes
+        patch: { properties: { isolation: serializable, concurrencyControl: serializable-retry } }

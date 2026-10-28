@@ -1,0 +1,67 @@
+id: lesson.add-authentication
+title: "Exercise: who is calling?"
+summary: The API answers anyone who can reach it. Add sign-in with an auth provider and an auth check in the API until the rules are happy — then learn the difference between "who" and "what".
+track: auth
+level: beginner
+minutes: 12
+profile: react-node-postgres
+conceptIds: [topic.authentication, gen.auth-provider, node.middleware, authenticates-with]
+start:
+  ops:
+    - op: addElement
+      element: { id: actor.customer, kind: gen.actor, name: Customer, status: existing }
+    - op: addElement
+      element: { id: app.shop, kind: react.app, name: Shop, status: existing }
+    - op: addElement
+      element: { id: svc.api, kind: node.service, name: API, status: existing }
+    - op: addRelation
+      relation: { id: rel.customer-uses-shop, type: calls, sourceId: actor.customer, targetId: app.shop, status: existing }
+    - op: addRelation
+      relation: { id: rel.shop-calls-api, type: calls, sourceId: app.shop, targetId: svc.api, protocol: http, status: existing }
+steps:
+  - id: anyone
+    title: Anyone can call your API
+    body: |
+      The Shop app calls the API — but so can anyone with `curl`. The browser is not a gate:
+      whatever the browser can reach, the internet can reach. The **Problems** panel says so:
+      *Public service without authentication*.
+
+  - id: sign-in
+    title: Sign users in, check every request
+    body: |
+      1. Add an **Auth provider** named "Auth" (Auth0, Clerk, Keycloak …).
+      2. The **Shop** app **authenticates with** it, flow **oidc-code-pkce**.
+      3. Inside the **API**, add a **Middleware** named "Auth check" with kind **auth**, and
+         let it **authenticate with** the provider: it verifies the session or token on every
+         request.
+    check:
+      all:
+        - finding: { ruleId: RNP-016, present: false }
+          message: The API still shows no authentication.
+        - hasRelation: { type: authenticates-with, from: { id: app.shop }, to: { kind: gen.auth-provider } }
+          message: Let the Shop app sign users in through the auth provider.
+    hints:
+      - The quick fix in the Problems panel adds the middleware for you; the provider and the arrows are yours.
+    success: |
+      Now every request answers the question **who is calling?** A request without a valid
+      session gets `401 Unauthorized` before it reaches any business code.
+    solution:
+      - op: addElement
+        element: { id: auth.provider, kind: gen.auth-provider, name: Auth, status: planned, tech: Auth0 }
+      - op: addElement
+        element: { id: mw.auth, kind: node.middleware, name: Auth check, parentId: svc.api, status: planned, properties: { kind: auth, authMethod: session } }
+      - op: addRelation
+        relation: { id: rel.shop-signs-in, type: authenticates-with, sourceId: app.shop, targetId: auth.provider, status: planned, properties: { flow: oidc-code-pkce } }
+      - op: addRelation
+        relation: { id: rel.mw-verifies, type: authenticates-with, sourceId: mw.auth, targetId: auth.provider, status: planned, properties: { tokenType: session } }
+
+  - id: who-vs-what
+    title: Who you are is not what you may do
+    body: |
+      Authentication answers **who**. Authorization answers **what**: may *this* customer see
+      *this* order? A signed-in customer who changes the URL from `/orders/41` to `/orders/42`
+      must get `404`, not someone else's order.
+
+      That check needs the data ("is the order's `customer_id` the caller?"), so it belongs in
+      the use case or the query (`WHERE customer_id = $user`), not only in middleware. It is the
+      most common API security bug (OWASP API1: broken object level authorization).

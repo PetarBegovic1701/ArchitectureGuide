@@ -1,0 +1,78 @@
+id: lesson.bff-for-sign-in
+title: Keep tokens on the server with a BFF
+summary: Let a backend-for-frontend run the OpenID Connect flow and hold the tokens, so the browser only ever sees an HttpOnly session cookie.
+track: auth
+level: senior
+minutes: 15
+profile: react-node-postgres
+conceptIds: [node.bff, gen.auth-provider, topic.authentication, authenticates-with]
+start:
+  ops:
+    - op: addElement
+      element: { id: app.shop, kind: react.app, name: Shop, status: existing, properties: { tokenStorage: memory } }
+    - op: addElement
+      element: { id: auth.provider, kind: gen.auth-provider, name: Auth, status: existing }
+    - op: addElement
+      element: { id: svc.api, kind: node.service, name: Orders API, status: existing }
+    - op: addElement
+      element: { id: mw.jwt, kind: node.middleware, name: JWT check, parentId: svc.api, status: existing, properties: { kind: auth, authMethod: jwt } }
+    - op: addRelation
+      relation: { id: rel.shop-signs-in, type: authenticates-with, sourceId: app.shop, targetId: auth.provider, status: existing, properties: { flow: oidc-code-pkce, tokenType: jwt } }
+    - op: addRelation
+      relation: { id: rel.shop-calls-api, type: calls, sourceId: app.shop, targetId: svc.api, protocol: http, status: existing, properties: { auth: bearer-token } }
+    - op: addRelation
+      relation: { id: rel.jwt-verifies, type: authenticates-with, sourceId: mw.jwt, targetId: auth.provider, status: existing, properties: { tokenType: jwt } }
+steps:
+  - id: why
+    title: Tokens in memory are still in the browser
+    body: |
+      The app keeps its access token in memory: better than `localStorage`, but any injected
+      script can still use it while the tab is open, and refresh tokens are hard to keep safe in
+      a browser at all. The current IETF advice for browser apps: let a **backend-for-frontend**
+      run the sign-in and keep the tokens server-side.
+
+  - id: bff
+    title: The BFF signs users in
+    body: |
+      Add a **Backend-for-Frontend** named "Shop BFF". It **authenticates with** the auth
+      provider (flow **oidc-code-pkce**). The Shop app **calls** the BFF with auth
+      **session-cookie**, and the BFF **calls** the Orders API with auth **bearer-token**.
+    check:
+      all:
+        - hasRelation: { type: authenticates-with, from: { kind: node.bff }, to: { id: auth.provider }, where: { properties.flow: oidc-code-pkce } }
+        - hasRelation: { type: calls, from: { id: app.shop }, to: { kind: node.bff }, where: { properties.auth: session-cookie } }
+        - hasRelation: { type: calls, from: { kind: node.bff }, to: { id: svc.api }, where: { properties.auth: bearer-token } }
+    solution:
+      - op: addElement
+        element: { id: bff.shop, kind: node.bff, name: Shop BFF, status: planned, properties: { client: web } }
+      - op: addRelation
+        relation: { id: rel.bff-signs-in, type: authenticates-with, sourceId: bff.shop, targetId: auth.provider, status: planned, properties: { flow: oidc-code-pkce, tokenType: opaque } }
+      - op: addRelation
+        relation: { id: rel.shop-calls-bff, type: calls, sourceId: app.shop, targetId: bff.shop, protocol: http, status: planned, properties: { auth: session-cookie } }
+      - op: addRelation
+        relation: { id: rel.bff-calls-api, type: calls, sourceId: bff.shop, targetId: svc.api, protocol: http, status: planned, properties: { auth: bearer-token } }
+
+  - id: browser-out
+    title: Take tokens out of the browser
+    body: |
+      Delete the Shop app's own **authenticates with** arrow and its direct call to the Orders
+      API, and set the app's **Token storage** to **http-only-cookie**.
+    check:
+      all:
+        - not: { hasRelation: { type: authenticates-with, from: { id: app.shop } } }
+          message: The Shop app still runs the sign-in itself.
+        - not: { hasRelation: { type: calls, from: { id: app.shop }, to: { id: svc.api } } }
+          message: The Shop app still calls the Orders API directly.
+        - hasElement: { id: app.shop, where: { properties.tokenStorage: http-only-cookie } }
+    success: |
+      The browser holds one HttpOnly, Secure, SameSite cookie — nothing a script can read or
+      replay elsewhere. The BFF refreshes tokens, adds them to API calls, and can revoke a
+      session on its own.
+    solution:
+      - op: removeRelation
+        id: rel.shop-signs-in
+      - op: removeRelation
+        id: rel.shop-calls-api
+      - op: updateElement
+        id: app.shop
+        patch: { properties: { tokenStorage: http-only-cookie } }

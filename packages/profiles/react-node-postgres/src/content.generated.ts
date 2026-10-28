@@ -6,7 +6,7 @@ export const DOCS: LearningDoc[] = [
     "id": "authenticates-with",
     "kind": "relation",
     "title": "authenticates with",
-    "summary": "Uses an auth provider to sign users in or to verify their tokens. Set the method — OIDC with PKCE, passwords, passkeys, API keys.",
+    "summary": "Uses an auth provider to sign users in or to verify their tokens. Set the flow — OIDC with PKCE, passwords, passkeys, API keys — and the token type.",
     "level": "intermediate",
     "tracks": [
       "auth"
@@ -18,7 +18,7 @@ export const DOCS: LearningDoc[] = [
     ],
     "explain": {
       "beginner": "`App authenticates with Auth provider` means the app sends users to the provider to sign\nin, and gets back proof of who they are. `API authenticates with Auth provider` means the\nAPI checks that proof on each request.",
-      "intermediate": "- `method`: `oidc-code-pkce` for browser apps, `password`, `magic-link`, `passkey`,\n  `oauth-client-credentials` for machine clients, `api-key`.\n- Authentication says who; authorization (roles, ownership) is still your code's job.",
+      "intermediate": "- `flow`: `oidc-code-pkce` for browser apps, `password`, `magic-link`, `passkey`,\n  `oauth-client-credentials` for machine clients, `api-key`.\n- `tokenType`: `session`, `jwt` or `opaque`.\n- Authentication says who; authorization (roles, ownership) is still your code's job.",
       "senior": "- Prefer a BFF or HttpOnly session cookies over tokens in the browser.\n- Machine-to-machine calls use client credentials or mTLS, with narrow scopes."
     },
     "mistakes": [
@@ -67,7 +67,7 @@ export const DOCS: LearningDoc[] = [
     "explain": {
       "beginner": "`A calls B` means A sends B a request and **waits** for the answer: the React app calls\nthe API, the API calls the payment provider. If B is slow or down, A is slow or fails too.",
       "intermediate": "- Properties on the arrow document the decisions: `protocol` (http, graphql, trpc),\n  `auth` (session cookie, bearer token, API key), `timeoutMs`, `idempotent`,\n  `idempotencyKey`.\n- Every call needs a timeout.\n- Retry only idempotent calls, or send an idempotency key.",
-      "senior": "- Chains of synchronous calls multiply latency and failure probability; prefer one hop\n  from the frontend (a BFF) and async messaging between services where possible.\n- This tool flags retried calls that are not idempotent (RNP-019) and frontends that call\n  many services (RNP-011)."
+      "senior": "- Chains of synchronous calls multiply latency and failure probability; prefer one hop\n  from the frontend (a BFF) and async messaging between services where possible.\n- This tool flags retried calls that are not idempotent (RNP-023) and frontends that call\n  many services (RNP-011)."
     },
     "mistakes": [
       "No timeout.",
@@ -797,7 +797,7 @@ export const DOCS: LearningDoc[] = [
     "explain": {
       "beginner": "Not everything belongs in PostgreSQL. **Redis** keeps sessions and caches in memory,\n**S3** stores files like product images, a search engine indexes text. Use this shape for\nthem; this tool applies only its generic rules to it.",
       "intermediate": "- A cache is a copy: decide how it is invalidated and what happens when it is empty.\n- Files go to object storage; the database keeps the key and metadata.\n- Every extra store is another thing to back up, secure and monitor.",
-      "senior": "- Writing to two stores (Postgres and a search index) is a dual write (RNP-004): use an\n  outbox or change data capture to keep them consistent.\n- Prefer Postgres features (JSONB, full-text search, `pg_trgm`) until a separate store is\n  clearly needed."
+      "senior": "- Writing to two stores (Postgres and a search index) is a dual write (RNP-007): use an\n  outbox or change data capture to keep them consistent.\n- Prefer Postgres features (JSONB, full-text search, `pg_trgm`) until a separate store is\n  clearly needed."
     },
     "mistakes": [
       "Using a cache as the source of truth.",
@@ -3154,7 +3154,7 @@ export const DOCS: LearningDoc[] = [
     "explain": {
       "beginner": "Each database connection costs memory on the PostgreSQL server, and the server allows\nonly a limited number. If 20 API instances each keep 20 connections, that is 400 — more\nthan many servers allow.\n\nA **pooler** (PgBouncer, RDS Proxy, Supavisor) sits in between: apps connect to it, and it\nshares a few real connections between them.",
       "intermediate": "- **Transaction mode** gives a real connection to a client only for one transaction. It\n  is the most efficient, but session features (session-level `SET`, advisory locks held\n  across transactions, `LISTEN`) do not work through it.\n- **Session mode** keeps the connection for the whole client session.\n- Keep each app's own pool small when a pooler is in front.",
-      "senior": "- Budget: sum of (instances × pool size) across services ≤ pooler client limit; pooler\n  server connections ≤ `max_connections` minus admin headroom. RNP-007 and RNP-020 check\n  parts of this.\n- Prepared statements need care in transaction mode (supported in newer PgBouncer).\n- Serverless functions almost always need a pooler or a data API."
+      "senior": "- Budget: sum of (instances × pool size) across services ≤ pooler client limit; pooler\n  server connections ≤ `max_connections` minus admin headroom. RNP-009 and RNP-020 check\n  parts of this.\n- Prepared statements need care in transaction mode (supported in newer PgBouncer).\n- Serverless functions almost always need a pooler or a data API."
     },
     "mistakes": [
       "Using session features through a transaction-mode pooler.",
@@ -3524,7 +3524,7 @@ export const DOCS: LearningDoc[] = [
     "explain": {
       "beginner": "`A publishes to Q` means A drops a message into Q and carries on. Whoever consumes Q will\nhandle it later. A does not wait, and does not know who the consumers are.",
       "intermediate": "- For a Postgres job queue use the more specific `enqueues`; for LISTEN/NOTIFY use\n  `notifies`.\n- Messages need a stable, versioned shape.",
-      "senior": "- Publishing and saving data must be atomic: use a transactional outbox, or a broker that\n  shares your database transaction (a Postgres queue). Otherwise RNP-004 (dual write)\n  applies."
+      "senior": "- Publishing and saving data must be atomic: use a transactional outbox, or a broker that\n  shares your database transaction (a Postgres queue). Otherwise RNP-007 (dual write)\n  applies."
     },
     "mistakes": [
       "Publishing before the transaction commits, or after it without an outbox."
@@ -5013,7 +5013,7 @@ export const DOCS: LearningDoc[] = [
     "explain": {
       "beginner": "`A writes B` means A changes data in B: inserts, updates, deletes. Only the **owner** of a\nschema should write it; other services ask the owner.",
       "intermediate": "- `concurrencyControl` documents how concurrent writers are kept apart: `none`,\n  `optimistic-version`, `row-lock`, `advisory-lock`, `serializable-retry`.\n- `isolation` documents the transaction isolation level.\n- Writes that belong together go in one transaction.",
-      "senior": "- Read-modify-write on contended rows without control loses updates (RNP-014). Try the\n  concurrency lab: select a writes arrow and open it there.\n- Two services writing the same schema (RNP-001) or a dual write to Postgres and a broker\n  (RNP-004) are the most expensive mistakes to undo.\n- SERIALIZABLE needs retries on SQLSTATE 40001 (RNP-018)."
+      "senior": "- Read-modify-write on contended rows without control loses updates (RNP-019). Try the\n  concurrency lab: select a writes arrow and open it there.\n- Two services writing the same schema (RNP-001) or a dual write to Postgres and a broker\n  (RNP-007) are the most expensive mistakes to undo.\n- SERIALIZABLE needs retries on SQLSTATE 40001 (RNP-022)."
     },
     "mistakes": [
       "Read-modify-write without concurrency control.",
@@ -5062,6 +5062,809 @@ export const DOCS: LearningDoc[] = [
 ];
 
 export const LESSONS: Lesson[] = [
+  {
+    "id": "lesson.add-authentication",
+    "title": "Exercise: who is calling?",
+    "summary": "The API answers anyone who can reach it. Add sign-in with an auth provider and an auth check in the API until the rules are happy — then learn the difference between \"who\" and \"what\".",
+    "track": "auth",
+    "level": "beginner",
+    "minutes": 12,
+    "profile": "react-node-postgres",
+    "conceptIds": [
+      "topic.authentication",
+      "gen.auth-provider",
+      "node.middleware",
+      "authenticates-with"
+    ],
+    "start": {
+      "ops": [
+        {
+          "op": "addElement",
+          "element": {
+            "id": "actor.customer",
+            "kind": "gen.actor",
+            "name": "Customer",
+            "status": "existing"
+          }
+        },
+        {
+          "op": "addElement",
+          "element": {
+            "id": "app.shop",
+            "kind": "react.app",
+            "name": "Shop",
+            "status": "existing"
+          }
+        },
+        {
+          "op": "addElement",
+          "element": {
+            "id": "svc.api",
+            "kind": "node.service",
+            "name": "API",
+            "status": "existing"
+          }
+        },
+        {
+          "op": "addRelation",
+          "relation": {
+            "id": "rel.customer-uses-shop",
+            "type": "calls",
+            "sourceId": "actor.customer",
+            "targetId": "app.shop",
+            "status": "existing"
+          }
+        },
+        {
+          "op": "addRelation",
+          "relation": {
+            "id": "rel.shop-calls-api",
+            "type": "calls",
+            "sourceId": "app.shop",
+            "targetId": "svc.api",
+            "protocol": "http",
+            "status": "existing"
+          }
+        }
+      ]
+    },
+    "steps": [
+      {
+        "id": "anyone",
+        "title": "Anyone can call your API",
+        "body": "The Shop app calls the API — but so can anyone with `curl`. The browser is not a gate:\nwhatever the browser can reach, the internet can reach. The **Problems** panel says so:\n*Public service without authentication*.\n"
+      },
+      {
+        "id": "sign-in",
+        "title": "Sign users in, check every request",
+        "body": "1. Add an **Auth provider** named \"Auth\" (Auth0, Clerk, Keycloak …).\n2. The **Shop** app **authenticates with** it, flow **oidc-code-pkce**.\n3. Inside the **API**, add a **Middleware** named \"Auth check\" with kind **auth**, and\n   let it **authenticate with** the provider: it verifies the session or token on every\n   request.\n",
+        "check": {
+          "all": [
+            {
+              "finding": {
+                "ruleId": "RNP-016",
+                "present": false
+              },
+              "message": "The API still shows no authentication."
+            },
+            {
+              "hasRelation": {
+                "type": "authenticates-with",
+                "from": {
+                  "id": "app.shop"
+                },
+                "to": {
+                  "kind": "gen.auth-provider"
+                }
+              },
+              "message": "Let the Shop app sign users in through the auth provider."
+            }
+          ]
+        },
+        "hints": [
+          "The quick fix in the Problems panel adds the middleware for you; the provider and the arrows are yours."
+        ],
+        "success": "Now every request answers the question **who is calling?** A request without a valid\nsession gets `401 Unauthorized` before it reaches any business code.\n",
+        "solution": [
+          {
+            "op": "addElement",
+            "element": {
+              "id": "auth.provider",
+              "kind": "gen.auth-provider",
+              "name": "Auth",
+              "tech": "Auth0",
+              "status": "planned"
+            }
+          },
+          {
+            "op": "addElement",
+            "element": {
+              "id": "mw.auth",
+              "kind": "node.middleware",
+              "name": "Auth check",
+              "parentId": "svc.api",
+              "status": "planned",
+              "properties": {
+                "kind": "auth",
+                "authMethod": "session"
+              }
+            }
+          },
+          {
+            "op": "addRelation",
+            "relation": {
+              "id": "rel.shop-signs-in",
+              "type": "authenticates-with",
+              "sourceId": "app.shop",
+              "targetId": "auth.provider",
+              "properties": {
+                "flow": "oidc-code-pkce"
+              },
+              "status": "planned"
+            }
+          },
+          {
+            "op": "addRelation",
+            "relation": {
+              "id": "rel.mw-verifies",
+              "type": "authenticates-with",
+              "sourceId": "mw.auth",
+              "targetId": "auth.provider",
+              "properties": {
+                "tokenType": "session"
+              },
+              "status": "planned"
+            }
+          }
+        ]
+      },
+      {
+        "id": "who-vs-what",
+        "title": "Who you are is not what you may do",
+        "body": "Authentication answers **who**. Authorization answers **what**: may *this* customer see\n*this* order? A signed-in customer who changes the URL from `/orders/41` to `/orders/42`\nmust get `404`, not someone else's order.\n\nThat check needs the data (\"is the order's `customer_id` the caller?\"), so it belongs in\nthe use case or the query (`WHERE customer_id = $user`), not only in middleware. It is the\nmost common API security bug (OWASP API1: broken object level authorization).\n"
+      }
+    ],
+    "source": "content/lessons/add-authentication.yaml"
+  },
+  {
+    "id": "lesson.bff-for-sign-in",
+    "title": "Keep tokens on the server with a BFF",
+    "summary": "Let a backend-for-frontend run the OpenID Connect flow and hold the tokens, so the browser only ever sees an HttpOnly session cookie.",
+    "track": "auth",
+    "level": "senior",
+    "minutes": 15,
+    "profile": "react-node-postgres",
+    "conceptIds": [
+      "node.bff",
+      "gen.auth-provider",
+      "topic.authentication",
+      "authenticates-with"
+    ],
+    "start": {
+      "ops": [
+        {
+          "op": "addElement",
+          "element": {
+            "id": "app.shop",
+            "kind": "react.app",
+            "name": "Shop",
+            "status": "existing",
+            "properties": {
+              "tokenStorage": "memory"
+            }
+          }
+        },
+        {
+          "op": "addElement",
+          "element": {
+            "id": "auth.provider",
+            "kind": "gen.auth-provider",
+            "name": "Auth",
+            "status": "existing"
+          }
+        },
+        {
+          "op": "addElement",
+          "element": {
+            "id": "svc.api",
+            "kind": "node.service",
+            "name": "Orders API",
+            "status": "existing"
+          }
+        },
+        {
+          "op": "addElement",
+          "element": {
+            "id": "mw.jwt",
+            "kind": "node.middleware",
+            "name": "JWT check",
+            "parentId": "svc.api",
+            "status": "existing",
+            "properties": {
+              "kind": "auth",
+              "authMethod": "jwt"
+            }
+          }
+        },
+        {
+          "op": "addRelation",
+          "relation": {
+            "id": "rel.shop-signs-in",
+            "type": "authenticates-with",
+            "sourceId": "app.shop",
+            "targetId": "auth.provider",
+            "properties": {
+              "flow": "oidc-code-pkce",
+              "tokenType": "jwt"
+            },
+            "status": "existing"
+          }
+        },
+        {
+          "op": "addRelation",
+          "relation": {
+            "id": "rel.shop-calls-api",
+            "type": "calls",
+            "sourceId": "app.shop",
+            "targetId": "svc.api",
+            "protocol": "http",
+            "properties": {
+              "auth": "bearer-token"
+            },
+            "status": "existing"
+          }
+        },
+        {
+          "op": "addRelation",
+          "relation": {
+            "id": "rel.jwt-verifies",
+            "type": "authenticates-with",
+            "sourceId": "mw.jwt",
+            "targetId": "auth.provider",
+            "properties": {
+              "tokenType": "jwt"
+            },
+            "status": "existing"
+          }
+        }
+      ]
+    },
+    "steps": [
+      {
+        "id": "why",
+        "title": "Tokens in memory are still in the browser",
+        "body": "The app keeps its access token in memory: better than `localStorage`, but any injected\nscript can still use it while the tab is open, and refresh tokens are hard to keep safe in\na browser at all. The current IETF advice for browser apps: let a **backend-for-frontend**\nrun the sign-in and keep the tokens server-side.\n"
+      },
+      {
+        "id": "bff",
+        "title": "The BFF signs users in",
+        "body": "Add a **Backend-for-Frontend** named \"Shop BFF\". It **authenticates with** the auth\nprovider (flow **oidc-code-pkce**). The Shop app **calls** the BFF with auth\n**session-cookie**, and the BFF **calls** the Orders API with auth **bearer-token**.\n",
+        "check": {
+          "all": [
+            {
+              "hasRelation": {
+                "type": "authenticates-with",
+                "from": {
+                  "kind": "node.bff"
+                },
+                "to": {
+                  "id": "auth.provider"
+                },
+                "where": {
+                  "properties.flow": "oidc-code-pkce"
+                }
+              }
+            },
+            {
+              "hasRelation": {
+                "type": "calls",
+                "from": {
+                  "id": "app.shop"
+                },
+                "to": {
+                  "kind": "node.bff"
+                },
+                "where": {
+                  "properties.auth": "session-cookie"
+                }
+              }
+            },
+            {
+              "hasRelation": {
+                "type": "calls",
+                "from": {
+                  "kind": "node.bff"
+                },
+                "to": {
+                  "id": "svc.api"
+                },
+                "where": {
+                  "properties.auth": "bearer-token"
+                }
+              }
+            }
+          ]
+        },
+        "solution": [
+          {
+            "op": "addElement",
+            "element": {
+              "id": "bff.shop",
+              "kind": "node.bff",
+              "name": "Shop BFF",
+              "status": "planned",
+              "properties": {
+                "client": "web"
+              }
+            }
+          },
+          {
+            "op": "addRelation",
+            "relation": {
+              "id": "rel.bff-signs-in",
+              "type": "authenticates-with",
+              "sourceId": "bff.shop",
+              "targetId": "auth.provider",
+              "properties": {
+                "flow": "oidc-code-pkce",
+                "tokenType": "opaque"
+              },
+              "status": "planned"
+            }
+          },
+          {
+            "op": "addRelation",
+            "relation": {
+              "id": "rel.shop-calls-bff",
+              "type": "calls",
+              "sourceId": "app.shop",
+              "targetId": "bff.shop",
+              "protocol": "http",
+              "properties": {
+                "auth": "session-cookie"
+              },
+              "status": "planned"
+            }
+          },
+          {
+            "op": "addRelation",
+            "relation": {
+              "id": "rel.bff-calls-api",
+              "type": "calls",
+              "sourceId": "bff.shop",
+              "targetId": "svc.api",
+              "protocol": "http",
+              "properties": {
+                "auth": "bearer-token"
+              },
+              "status": "planned"
+            }
+          }
+        ]
+      },
+      {
+        "id": "browser-out",
+        "title": "Take tokens out of the browser",
+        "body": "Delete the Shop app's own **authenticates with** arrow and its direct call to the Orders\nAPI, and set the app's **Token storage** to **http-only-cookie**.\n",
+        "check": {
+          "all": [
+            {
+              "not": {
+                "hasRelation": {
+                  "type": "authenticates-with",
+                  "from": {
+                    "id": "app.shop"
+                  }
+                }
+              },
+              "message": "The Shop app still runs the sign-in itself."
+            },
+            {
+              "not": {
+                "hasRelation": {
+                  "type": "calls",
+                  "from": {
+                    "id": "app.shop"
+                  },
+                  "to": {
+                    "id": "svc.api"
+                  }
+                }
+              },
+              "message": "The Shop app still calls the Orders API directly."
+            },
+            {
+              "hasElement": {
+                "id": "app.shop",
+                "where": {
+                  "properties.tokenStorage": "http-only-cookie"
+                }
+              }
+            }
+          ]
+        },
+        "success": "The browser holds one HttpOnly, Secure, SameSite cookie — nothing a script can read or\nreplay elsewhere. The BFF refreshes tokens, adds them to API calls, and can revoke a\nsession on its own.\n",
+        "solution": [
+          {
+            "op": "removeRelation",
+            "id": "rel.shop-signs-in"
+          },
+          {
+            "op": "removeRelation",
+            "id": "rel.shop-calls-api"
+          },
+          {
+            "op": "updateElement",
+            "id": "app.shop",
+            "patch": {
+              "properties": {
+                "tokenStorage": "http-only-cookie"
+              }
+            }
+          }
+        ]
+      }
+    ],
+    "source": "content/lessons/bff-for-sign-in.yaml"
+  },
+  {
+    "id": "lesson.connection-budget",
+    "title": "Exercise: the connection budget",
+    "summary": "Six API instances and three workers each keep ten database connections. Deploys start failing with \"too many clients\". Add a pooler until the rules are happy.",
+    "track": "concurrency-and-parallelism",
+    "level": "intermediate",
+    "minutes": 12,
+    "profile": "react-node-postgres",
+    "conceptIds": [
+      "pg.pooler",
+      "connects-via",
+      "topic.event-loop-and-parallelism",
+      "pg.cluster"
+    ],
+    "start": {
+      "ops": [
+        {
+          "op": "addElement",
+          "element": {
+            "id": "svc.api",
+            "kind": "node.service",
+            "name": "API",
+            "status": "existing",
+            "qualities": {
+              "scaling": "horizontal"
+            },
+            "properties": {
+              "instances": 6,
+              "poolSize": 10
+            }
+          }
+        },
+        {
+          "op": "addElement",
+          "element": {
+            "id": "wrk.jobs",
+            "kind": "node.worker",
+            "name": "Job worker",
+            "status": "existing",
+            "properties": {
+              "instances": 3,
+              "poolSize": 10
+            }
+          }
+        },
+        {
+          "op": "addElement",
+          "element": {
+            "id": "db.shop",
+            "kind": "pg.database",
+            "name": "Shop DB",
+            "status": "existing",
+            "properties": {
+              "maxConnections": 100
+            }
+          }
+        },
+        {
+          "op": "addElement",
+          "element": {
+            "id": "schema.shop",
+            "kind": "pg.schema",
+            "name": "shop",
+            "parentId": "db.shop",
+            "status": "existing"
+          }
+        },
+        {
+          "op": "addRelation",
+          "relation": {
+            "id": "rel.api-writes",
+            "type": "writes",
+            "sourceId": "svc.api",
+            "targetId": "schema.shop",
+            "status": "existing"
+          }
+        },
+        {
+          "op": "addRelation",
+          "relation": {
+            "id": "rel.api-migrates",
+            "type": "migrates",
+            "sourceId": "svc.api",
+            "targetId": "schema.shop",
+            "status": "existing"
+          }
+        },
+        {
+          "op": "addRelation",
+          "relation": {
+            "id": "rel.worker-writes",
+            "type": "writes",
+            "sourceId": "wrk.jobs",
+            "targetId": "schema.shop",
+            "status": "existing"
+          }
+        }
+      ]
+    },
+    "steps": [
+      {
+        "id": "count",
+        "title": "Count the connections",
+        "body": "Each instance keeps its own **pool** of open connections:\n\n- API: 6 instances × 10 = **60**\n- Worker: 3 instances × 10 = **30**\n\nThat is 90 of PostgreSQL's 100 — and during a deploy, old and new instances run at the\nsame time, so the real peak is higher. New connections fail with\n`sorry, too many clients already`. The **Problems** panel shows it.\n"
+      },
+      {
+        "id": "pooler",
+        "title": "Put a pooler in front",
+        "body": "Add a **Connection pooler** named \"PgBouncer\". The **API** and the **Job worker**\n**connect via** it, and the pooler **connects via** to the database.\n",
+        "check": {
+          "all": [
+            {
+              "finding": {
+                "ruleId": "RNP-020",
+                "present": false
+              },
+              "message": "The services still open more connections than the database allows."
+            },
+            {
+              "finding": {
+                "ruleId": "RNP-009",
+                "present": false
+              },
+              "message": "The API scales out without a pooler."
+            }
+          ]
+        },
+        "hints": [
+          "The pooler is in the Full palette (Infra group)."
+        ],
+        "solution": [
+          {
+            "op": "addElement",
+            "element": {
+              "id": "pool.pgbouncer",
+              "kind": "pg.pooler",
+              "name": "PgBouncer",
+              "status": "planned",
+              "properties": {
+                "kind": "pgbouncer"
+              }
+            }
+          },
+          {
+            "op": "addRelation",
+            "relation": {
+              "id": "rel.api-via-pool",
+              "type": "connects-via",
+              "sourceId": "svc.api",
+              "targetId": "pool.pgbouncer",
+              "status": "planned"
+            }
+          },
+          {
+            "op": "addRelation",
+            "relation": {
+              "id": "rel.worker-via-pool",
+              "type": "connects-via",
+              "sourceId": "wrk.jobs",
+              "targetId": "pool.pgbouncer",
+              "status": "planned"
+            }
+          },
+          {
+            "op": "addRelation",
+            "relation": {
+              "id": "rel.pool-to-db",
+              "type": "connects-via",
+              "sourceId": "pool.pgbouncer",
+              "targetId": "db.shop",
+              "status": "planned"
+            }
+          }
+        ]
+      },
+      {
+        "id": "mode",
+        "title": "Transaction mode",
+        "body": "Set the pooler's **mode** to **transaction**: a real connection is lent to a client only\nfor the length of one transaction. A few dozen real connections can then serve hundreds\nof app connections.\n",
+        "check": {
+          "hasElement": {
+            "kind": "pg.pooler",
+            "where": {
+              "properties.mode": "transaction"
+            }
+          }
+        },
+        "success": "One catch: session features (session-level `SET`, `LISTEN`, advisory locks held across\ntransactions) do not work through a transaction-mode pooler. Give those a direct\nconnection.\n",
+        "solution": [
+          {
+            "op": "updateElement",
+            "id": "pool.pgbouncer",
+            "patch": {
+              "properties": {
+                "kind": "pgbouncer",
+                "mode": "transaction"
+              }
+            }
+          }
+        ]
+      }
+    ],
+    "source": "content/lessons/connection-budget.yaml"
+  },
+  {
+    "id": "lesson.design-an-endpoint",
+    "title": "Design an endpoint",
+    "summary": "Describe POST /orders like a contract — method, path, status codes, who may call it — and validate what comes in.",
+    "track": "api-design",
+    "level": "beginner",
+    "minutes": 12,
+    "profile": "react-node-postgres",
+    "conceptIds": [
+      "node.endpoint",
+      "node.route-handler",
+      "node.dto",
+      "calls"
+    ],
+    "start": {
+      "ops": [
+        {
+          "op": "addElement",
+          "element": {
+            "id": "app.shop",
+            "kind": "react.app",
+            "name": "Shop",
+            "status": "existing"
+          }
+        },
+        {
+          "op": "addElement",
+          "element": {
+            "id": "svc.api",
+            "kind": "node.service",
+            "name": "API",
+            "status": "existing"
+          }
+        },
+        {
+          "op": "addElement",
+          "element": {
+            "id": "mw.auth",
+            "kind": "node.middleware",
+            "name": "Session check",
+            "parentId": "svc.api",
+            "status": "existing",
+            "properties": {
+              "kind": "auth",
+              "authMethod": "session"
+            }
+          }
+        },
+        {
+          "op": "addRelation",
+          "relation": {
+            "id": "rel.shop-calls-api",
+            "type": "calls",
+            "sourceId": "app.shop",
+            "targetId": "svc.api",
+            "protocol": "http",
+            "properties": {
+              "auth": "session-cookie"
+            },
+            "status": "existing"
+          }
+        }
+      ]
+    },
+    "steps": [
+      {
+        "id": "what-is-an-endpoint",
+        "title": "An endpoint is a promise",
+        "body": "An **endpoint** is one operation of your API: a **method** (GET reads, POST creates, PUT\nand PATCH change, DELETE removes) and a **path** (`/orders`). It promises what it accepts,\nwhat it returns, and which **status codes** clients can expect:\n\n- `201 Created` — the order exists now,\n- `400 Bad Request` — the body is wrong,\n- `401` / `403` — not signed in / not allowed,\n- `409 Conflict` — for example out of stock.\n"
+      },
+      {
+        "id": "handler-and-endpoint",
+        "title": "Add the handler and the endpoint",
+        "body": "Inside the API, add a **Controller / route handler** named \"Order routes\", and inside it\nan **API endpoint**. In the inspector set method **POST**, path **/orders**, status codes\n**201, 400, 409** and auth **required**.\n",
+        "check": {
+          "hasElement": {
+            "kind": "node.endpoint",
+            "parent": {
+              "kind": "node.route-handler"
+            },
+            "where": {
+              "properties.method": "POST",
+              "properties.statusCodes": {
+                "exists": true
+              },
+              "properties.auth": "required"
+            }
+          },
+          "message": "Add a POST endpoint with status codes and auth \"required\" inside a route handler."
+        },
+        "hints": [
+          "Endpoints only fit inside a route handler or an API contract."
+        ],
+        "success": "Anyone reading the diagram — a teammate or an AI agent — now knows exactly what this\nendpoint does and how it can fail.\n",
+        "solution": [
+          {
+            "op": "addElement",
+            "element": {
+              "id": "ctl.orders",
+              "kind": "node.route-handler",
+              "name": "Order routes",
+              "parentId": "svc.api",
+              "status": "planned"
+            }
+          },
+          {
+            "op": "addElement",
+            "element": {
+              "id": "ep.create-order",
+              "kind": "node.endpoint",
+              "name": "POST /orders",
+              "parentId": "ctl.orders",
+              "status": "planned",
+              "properties": {
+                "method": "POST",
+                "path": "/orders",
+                "statusCodes": [
+                  201,
+                  400,
+                  409
+                ],
+                "auth": "required"
+              }
+            }
+          }
+        ]
+      },
+      {
+        "id": "validate",
+        "title": "Validate at the door",
+        "body": "The **Problems** panel says the handler does not validate requests. Anyone can send any\nJSON to your API, not only your React app. Set **Validation** on \"Order routes\" to\n**zod** (or use the quick fix).\n",
+        "check": {
+          "finding": {
+            "ruleId": "RNP-015",
+            "present": false
+          },
+          "message": "The route handler still does not say how it validates requests."
+        },
+        "success": "Invalid bodies now stop at the door with a 400 and a clear message, and the use case can\ntrust its input.\n",
+        "solution": [
+          {
+            "op": "updateElement",
+            "id": "ctl.orders",
+            "patch": {
+              "properties": {
+                "validation": "zod"
+              }
+            }
+          }
+        ]
+      }
+    ],
+    "source": "content/lessons/design-an-endpoint.yaml"
+  },
   {
     "id": "lesson.first-full-stack",
     "title": "Your first full-stack architecture",
@@ -5296,6 +6099,1874 @@ export const LESSONS: Lesson[] = [
       }
     ],
     "source": "content/lessons/first-full-stack.yaml"
+  },
+  {
+    "id": "lesson.follow-a-request",
+    "title": "Follow a request from click to database",
+    "summary": "A product page shows data from the database. Trace every hop — page, cache, API client, API, repository, schema — and draw the ones that are missing.",
+    "track": "foundations",
+    "level": "beginner",
+    "minutes": 12,
+    "profile": "react-node-postgres",
+    "conceptIds": [
+      "react.route",
+      "react.api-client",
+      "react.server-state",
+      "node.route-handler",
+      "node.repository",
+      "calls"
+    ],
+    "start": {
+      "ops": [
+        {
+          "op": "addElement",
+          "element": {
+            "id": "app.shop",
+            "kind": "react.app",
+            "name": "Shop",
+            "status": "existing"
+          }
+        },
+        {
+          "op": "addElement",
+          "element": {
+            "id": "svc.api",
+            "kind": "node.service",
+            "name": "API",
+            "status": "existing",
+            "properties": {
+              "framework": "fastify"
+            }
+          }
+        },
+        {
+          "op": "addElement",
+          "element": {
+            "id": "db.shop",
+            "kind": "pg.database",
+            "name": "Shop DB",
+            "status": "existing"
+          }
+        },
+        {
+          "op": "addElement",
+          "element": {
+            "id": "schema.catalog",
+            "kind": "pg.schema",
+            "name": "catalog",
+            "parentId": "db.shop",
+            "status": "existing"
+          }
+        },
+        {
+          "op": "addRelation",
+          "relation": {
+            "id": "rel.api-migrates-catalog",
+            "type": "migrates",
+            "sourceId": "svc.api",
+            "targetId": "schema.catalog",
+            "status": "existing"
+          }
+        }
+      ]
+    },
+    "steps": [
+      {
+        "id": "the-journey",
+        "title": "What happens when you open a product page",
+        "body": "A customer opens `/products/42`. Before anything shows up, the request makes a trip:\n\n1. The **page** (a route) asks for product 42.\n2. A **server-state cache** checks whether it already has it.\n3. If not, the **API client** sends `GET /api/products/42`.\n4. The **API** checks the request and asks its **repository**.\n5. The repository runs a query on the **catalog schema**.\n\nThe answer travels back the same way. Here, only the API and the database exist so far.\nYou will draw the rest.\n"
+      },
+      {
+        "id": "page-and-client",
+        "title": "Add the page and the API client",
+        "body": "Inside the **Shop** app, add a **Route / page** named \"Product page\" and an\n**API client**. Then connect the API client to the **API** with **calls**.\n",
+        "check": {
+          "all": [
+            {
+              "hasElement": {
+                "kind": "react.route",
+                "parent": {
+                  "kind": "react.app"
+                }
+              }
+            },
+            {
+              "hasRelation": {
+                "type": "calls",
+                "from": {
+                  "kind": "react.api-client"
+                },
+                "to": {
+                  "id": "svc.api"
+                }
+              }
+            }
+          ]
+        },
+        "hints": [
+          "Select the Shop app first, then click the palette items — they are added inside it.",
+          "The API client is the plug icon in the Frontend group."
+        ],
+        "success": "The page never talks HTTP itself. One API client holds the base URL, the cookies and the\nerror handling, so every page talks to the backend the same way.\n",
+        "solution": [
+          {
+            "op": "addElement",
+            "element": {
+              "id": "route.product",
+              "kind": "react.route",
+              "name": "Product page",
+              "parentId": "app.shop",
+              "status": "planned",
+              "properties": {
+                "path": "/products/:id"
+              }
+            }
+          },
+          {
+            "op": "addElement",
+            "element": {
+              "id": "apic.http",
+              "kind": "react.api-client",
+              "name": "API client",
+              "parentId": "app.shop",
+              "status": "planned",
+              "properties": {
+                "kind": "fetch"
+              }
+            }
+          },
+          {
+            "op": "addRelation",
+            "relation": {
+              "id": "rel.apic-calls-api",
+              "type": "calls",
+              "sourceId": "apic.http",
+              "targetId": "svc.api",
+              "protocol": "http",
+              "status": "planned"
+            }
+          }
+        ]
+      },
+      {
+        "id": "cache",
+        "title": "Cache what the server owns",
+        "body": "Products belong to the server. Add a **Server-state cache** inside the app, let the page\n**use state** from it, and let the cache **fetch via** the API client.\n\nGoing back to a product you just saw is now instant, and the cache refetches when the\ndata may be stale.\n",
+        "check": {
+          "all": [
+            {
+              "hasRelation": {
+                "type": "uses-state",
+                "from": {
+                  "kind": "react.route"
+                },
+                "to": {
+                  "kind": "react.server-state"
+                }
+              }
+            },
+            {
+              "hasRelation": {
+                "type": "fetches-via",
+                "from": {
+                  "kind": "react.server-state"
+                },
+                "to": {
+                  "kind": "react.api-client"
+                }
+              }
+            }
+          ]
+        },
+        "hints": [
+          "Drag from the page to the cache; the tool offers \"uses state\"."
+        ],
+        "solution": [
+          {
+            "op": "addElement",
+            "element": {
+              "id": "qcache.query",
+              "kind": "react.server-state",
+              "name": "Query cache",
+              "parentId": "app.shop",
+              "status": "planned",
+              "properties": {
+                "lib": "tanstack-query"
+              }
+            }
+          },
+          {
+            "op": "addRelation",
+            "relation": {
+              "id": "rel.product-uses-cache",
+              "type": "uses-state",
+              "sourceId": "route.product",
+              "targetId": "qcache.query",
+              "status": "planned"
+            }
+          },
+          {
+            "op": "addRelation",
+            "relation": {
+              "id": "rel.cache-fetches-via-client",
+              "type": "fetches-via",
+              "sourceId": "qcache.query",
+              "targetId": "apic.http",
+              "status": "planned"
+            }
+          }
+        ]
+      },
+      {
+        "id": "backend-hops",
+        "title": "Inside the API",
+        "body": "Inside the **API**, add a **Controller / route handler** named \"Product routes\" and a\n**Repository** named \"ProductRepository\". The handler **calls** the repository, and the\nrepository **reads** the catalog schema.\n",
+        "check": {
+          "all": [
+            {
+              "hasRelation": {
+                "type": "calls",
+                "from": {
+                  "kind": "node.route-handler"
+                },
+                "to": {
+                  "kind": "node.repository"
+                }
+              }
+            },
+            {
+              "hasRelation": {
+                "type": "reads",
+                "from": {
+                  "kind": "node.repository"
+                },
+                "to": {
+                  "id": "schema.catalog"
+                }
+              }
+            }
+          ]
+        },
+        "hints": [
+          "Handlers translate HTTP; repositories run queries. Keeping them apart makes both easy to test."
+        ],
+        "success": "That is the whole trip. When a page is slow, you now know every place to look: the cache,\nthe network, the handler, the query.\n",
+        "solution": [
+          {
+            "op": "addElement",
+            "element": {
+              "id": "ctl.products",
+              "kind": "node.route-handler",
+              "name": "Product routes",
+              "parentId": "svc.api",
+              "status": "planned",
+              "properties": {
+                "validation": "zod"
+              }
+            }
+          },
+          {
+            "op": "addElement",
+            "element": {
+              "id": "repo.products",
+              "kind": "node.repository",
+              "name": "ProductRepository",
+              "parentId": "svc.api",
+              "status": "planned",
+              "properties": {
+                "dataAccess": "prisma"
+              }
+            }
+          },
+          {
+            "op": "addRelation",
+            "relation": {
+              "id": "rel.products-calls-repo",
+              "type": "calls",
+              "sourceId": "ctl.products",
+              "targetId": "repo.products",
+              "status": "planned"
+            }
+          },
+          {
+            "op": "addRelation",
+            "relation": {
+              "id": "rel.repo-reads-catalog",
+              "type": "reads",
+              "sourceId": "repo.products",
+              "targetId": "schema.catalog",
+              "via": "prisma",
+              "status": "planned"
+            }
+          }
+        ]
+      }
+    ],
+    "source": "content/lessons/follow-a-request.yaml"
+  },
+  {
+    "id": "lesson.functions-and-triggers",
+    "title": "Stored functions and triggers",
+    "summary": "Move a stock check into PostgreSQL as a function, and let a trigger keep an audit log — and learn when logic in the database is a good idea.",
+    "track": "data-and-models",
+    "level": "intermediate",
+    "minutes": 15,
+    "profile": "react-node-postgres",
+    "conceptIds": [
+      "pg.function",
+      "pg.trigger",
+      "invokes",
+      "fires-on"
+    ],
+    "start": {
+      "ops": [
+        {
+          "op": "addElement",
+          "element": {
+            "id": "svc.api",
+            "kind": "node.service",
+            "name": "API",
+            "status": "existing"
+          }
+        },
+        {
+          "op": "addElement",
+          "element": {
+            "id": "repo.stock",
+            "kind": "node.repository",
+            "name": "StockRepository",
+            "parentId": "svc.api",
+            "status": "existing"
+          }
+        },
+        {
+          "op": "addElement",
+          "element": {
+            "id": "db.shop",
+            "kind": "pg.database",
+            "name": "Shop DB",
+            "status": "existing"
+          }
+        },
+        {
+          "op": "addElement",
+          "element": {
+            "id": "schema.shop",
+            "kind": "pg.schema",
+            "name": "shop",
+            "parentId": "db.shop",
+            "status": "existing"
+          }
+        },
+        {
+          "op": "addElement",
+          "element": {
+            "id": "tbl.products",
+            "kind": "pg.table",
+            "name": "products",
+            "parentId": "schema.shop",
+            "status": "existing"
+          }
+        },
+        {
+          "op": "addElement",
+          "element": {
+            "id": "tbl.price-audit",
+            "kind": "pg.table",
+            "name": "price_audit",
+            "parentId": "schema.shop",
+            "status": "existing"
+          }
+        },
+        {
+          "op": "addRelation",
+          "relation": {
+            "id": "rel.api-migrates-shop",
+            "type": "migrates",
+            "sourceId": "svc.api",
+            "targetId": "schema.shop",
+            "status": "existing"
+          }
+        }
+      ]
+    },
+    "steps": [
+      {
+        "id": "function",
+        "title": "A function next to the data",
+        "body": "Reserving stock needs a check and an update that must not interleave with other requests.\nAdd a **Function / stored procedure** named \"reserve_stock\" inside the **shop** schema, and\nlet **StockRepository** **invoke** it.\n\n```sql\nCREATE FUNCTION reserve_stock(p_id uuid, qty int) RETURNS boolean AS $$\n  UPDATE products SET stock = stock - qty WHERE id = p_id AND stock >= qty\n  RETURNING true;\n$$ LANGUAGE sql;\n```\n",
+        "check": {
+          "hasRelation": {
+            "type": "invokes",
+            "from": {
+              "id": "repo.stock"
+            },
+            "to": {
+              "kind": "pg.function"
+            }
+          }
+        },
+        "hints": [
+          "Code does not \"call\" database functions in this tool — it **invokes** them."
+        ],
+        "success": "One atomic statement, one round trip. The function also changes rows, so draw that too in\nthe next step.\n",
+        "solution": [
+          {
+            "op": "addElement",
+            "element": {
+              "id": "fn.reserve-stock",
+              "kind": "pg.function",
+              "name": "reserve_stock",
+              "parentId": "schema.shop",
+              "status": "planned",
+              "properties": {
+                "kind": "function",
+                "language": "sql",
+                "volatility": "volatile"
+              }
+            }
+          },
+          {
+            "op": "addRelation",
+            "relation": {
+              "id": "rel.repo-invokes-reserve",
+              "type": "invokes",
+              "sourceId": "repo.stock",
+              "targetId": "fn.reserve-stock",
+              "status": "planned"
+            }
+          }
+        ]
+      },
+      {
+        "id": "function-writes",
+        "title": "Show what the function changes",
+        "body": "Connect **reserve_stock** to the **products** table with **writes**. Hidden writes are\nthe main risk of database logic; drawing them keeps them visible.\n",
+        "check": {
+          "hasRelation": {
+            "type": "writes",
+            "from": {
+              "kind": "pg.function"
+            },
+            "to": {
+              "id": "tbl.products"
+            }
+          }
+        },
+        "solution": [
+          {
+            "op": "addRelation",
+            "relation": {
+              "id": "rel.reserve-writes-products",
+              "type": "writes",
+              "sourceId": "fn.reserve-stock",
+              "targetId": "tbl.products",
+              "status": "planned"
+            }
+          }
+        ]
+      },
+      {
+        "id": "audit-trigger",
+        "title": "An audit log that nobody can forget",
+        "body": "Every price change must be logged, whichever app makes it. Add a **Trigger** named\n\"price_audit\" in the schema that **fires on** the products table, a second function\n\"write_price_audit\" that the trigger **invokes**, and let that function **write** the\nprice_audit table.\n",
+        "check": {
+          "all": [
+            {
+              "hasRelation": {
+                "type": "fires-on",
+                "from": {
+                  "kind": "pg.trigger"
+                },
+                "to": {
+                  "id": "tbl.products"
+                }
+              }
+            },
+            {
+              "hasRelation": {
+                "type": "invokes",
+                "from": {
+                  "kind": "pg.trigger"
+                },
+                "to": {
+                  "kind": "pg.function"
+                }
+              }
+            },
+            {
+              "hasRelation": {
+                "type": "writes",
+                "from": {
+                  "kind": "pg.function"
+                },
+                "to": {
+                  "id": "tbl.price-audit"
+                }
+              }
+            }
+          ]
+        },
+        "success": "Triggers are great for audit logs and `updated_at` columns. Keep business decisions in\none place, though: when a rule lives half in SQL and half in a service, the next person\nwill look in the wrong one.\n",
+        "solution": [
+          {
+            "op": "addElement",
+            "element": {
+              "id": "trg.price-audit",
+              "kind": "pg.trigger",
+              "name": "price_audit",
+              "parentId": "schema.shop",
+              "status": "planned",
+              "properties": {
+                "timing": "after",
+                "events": [
+                  "update"
+                ],
+                "level": "row"
+              }
+            }
+          },
+          {
+            "op": "addElement",
+            "element": {
+              "id": "fn.write-price-audit",
+              "kind": "pg.function",
+              "name": "write_price_audit",
+              "parentId": "schema.shop",
+              "status": "planned",
+              "properties": {
+                "kind": "function",
+                "language": "plpgsql"
+              }
+            }
+          },
+          {
+            "op": "addRelation",
+            "relation": {
+              "id": "rel.audit-fires-on-products",
+              "type": "fires-on",
+              "sourceId": "trg.price-audit",
+              "targetId": "tbl.products",
+              "status": "planned"
+            }
+          },
+          {
+            "op": "addRelation",
+            "relation": {
+              "id": "rel.audit-invokes-fn",
+              "type": "invokes",
+              "sourceId": "trg.price-audit",
+              "targetId": "fn.write-price-audit",
+              "status": "planned"
+            }
+          },
+          {
+            "op": "addRelation",
+            "relation": {
+              "id": "rel.audit-fn-writes",
+              "type": "writes",
+              "sourceId": "fn.write-price-audit",
+              "targetId": "tbl.price-audit",
+              "status": "planned"
+            }
+          }
+        ]
+      }
+    ],
+    "source": "content/lessons/functions-and-triggers.yaml"
+  },
+  {
+    "id": "lesson.keep-the-event-loop-free",
+    "title": "Exercise: keep the event loop free",
+    "summary": "Building invoice PDFs inside the API makes every other request wait. Move the CPU work to a background worker until the rules are happy.",
+    "track": "concurrency-and-parallelism",
+    "level": "intermediate",
+    "minutes": 15,
+    "profile": "react-node-postgres",
+    "conceptIds": [
+      "topic.event-loop-and-parallelism",
+      "node.worker",
+      "pg.job-queue",
+      "enqueues",
+      "processes"
+    ],
+    "start": {
+      "ops": [
+        {
+          "op": "addElement",
+          "element": {
+            "id": "app.shop",
+            "kind": "react.app",
+            "name": "Shop",
+            "status": "existing"
+          }
+        },
+        {
+          "op": "addElement",
+          "element": {
+            "id": "svc.api",
+            "kind": "node.service",
+            "name": "API",
+            "status": "existing",
+            "properties": {
+              "instances": 2,
+              "processModel": "single"
+            }
+          }
+        },
+        {
+          "op": "addElement",
+          "element": {
+            "id": "mw.auth",
+            "kind": "node.middleware",
+            "name": "Auth check",
+            "parentId": "svc.api",
+            "status": "existing",
+            "properties": {
+              "kind": "auth"
+            }
+          }
+        },
+        {
+          "op": "addElement",
+          "element": {
+            "id": "uc.place-order",
+            "kind": "node.use-case",
+            "name": "PlaceOrder",
+            "parentId": "svc.api",
+            "status": "existing"
+          }
+        },
+        {
+          "op": "addElement",
+          "element": {
+            "id": "mod.invoice-pdf",
+            "kind": "node.module",
+            "name": "Invoice PDF builder",
+            "parentId": "svc.api",
+            "status": "existing"
+          }
+        },
+        {
+          "op": "addElement",
+          "element": {
+            "id": "db.shop",
+            "kind": "pg.database",
+            "name": "Shop DB",
+            "status": "existing"
+          }
+        },
+        {
+          "op": "addRelation",
+          "relation": {
+            "id": "rel.shop-calls-api",
+            "type": "calls",
+            "sourceId": "app.shop",
+            "targetId": "svc.api",
+            "protocol": "http",
+            "properties": {
+              "auth": "session-cookie"
+            },
+            "status": "existing"
+          }
+        },
+        {
+          "op": "addRelation",
+          "relation": {
+            "id": "rel.order-calls-pdf",
+            "type": "calls",
+            "sourceId": "uc.place-order",
+            "targetId": "mod.invoice-pdf",
+            "status": "existing"
+          }
+        }
+      ]
+    },
+    "steps": [
+      {
+        "id": "one-thread",
+        "title": "One thread for everyone",
+        "body": "Node.js runs your JavaScript on **one thread** per process. While waiting for the\ndatabase or the network, that thread serves other requests — that is why Node handles\nthousands of connections. But while it **computes** (renders a PDF, resizes an image,\nhashes a password with too many rounds), nobody else is served.\n\nRendering an invoice takes 800 ms of CPU. During those 800 ms, every other customer of\nthis instance waits. More instances only spread the pain. The **Problems** panel flags\nit: *CPU-heavy work on the event loop*.\n"
+      },
+      {
+        "id": "worker",
+        "title": "Hand the work to a worker",
+        "body": "1. Add a **Postgres job queue** named \"invoices\" and a **Background worker** named\n   \"Invoice worker\" that **processes** it.\n2. Move the **Invoice PDF builder** into the worker.\n3. Delete the arrow from **PlaceOrder** to the PDF builder; instead, PlaceOrder\n   **enqueues** a job, **in transaction**.\n",
+        "check": {
+          "all": [
+            {
+              "finding": {
+                "ruleId": "RNP-021",
+                "present": false
+              },
+              "message": "The PDF builder still runs inside the API."
+            },
+            {
+              "hasRelation": {
+                "type": "enqueues",
+                "from": {
+                  "id": "uc.place-order"
+                },
+                "to": {
+                  "kind": "pg.job-queue"
+                },
+                "where": {
+                  "inTransaction": true
+                }
+              },
+              "message": "Let PlaceOrder enqueue the job in the same transaction as the order."
+            },
+            {
+              "hasRelation": {
+                "type": "processes",
+                "from": {
+                  "kind": "node.worker"
+                },
+                "to": {
+                  "kind": "pg.job-queue"
+                }
+              },
+              "message": "Add a worker that processes the queue."
+            }
+          ]
+        },
+        "hints": [
+          "To move a shape into the worker, drag it onto the worker.",
+          "Put the queue inside the database — it is stored in Postgres tables."
+        ],
+        "success": "The API answers in milliseconds again; the worker builds PDFs at its own pace, retries\nfailures, and can run on a machine with more CPU.\n",
+        "solution": [
+          {
+            "op": "addElement",
+            "element": {
+              "id": "jobs.invoices",
+              "kind": "pg.job-queue",
+              "name": "invoices",
+              "parentId": "db.shop",
+              "status": "planned",
+              "properties": {
+                "lib": "pg-boss",
+                "deadLetter": true
+              }
+            }
+          },
+          {
+            "op": "addElement",
+            "element": {
+              "id": "wrk.invoice",
+              "kind": "node.worker",
+              "name": "Invoice worker",
+              "status": "planned",
+              "properties": {
+                "jobLib": "pg-boss",
+                "concurrency": 2
+              }
+            }
+          },
+          {
+            "op": "moveElement",
+            "id": "mod.invoice-pdf",
+            "parentId": "wrk.invoice"
+          },
+          {
+            "op": "removeRelation",
+            "id": "rel.order-calls-pdf"
+          },
+          {
+            "op": "addRelation",
+            "relation": {
+              "id": "rel.order-enqueues-invoice",
+              "type": "enqueues",
+              "sourceId": "uc.place-order",
+              "targetId": "jobs.invoices",
+              "inTransaction": true,
+              "status": "planned"
+            }
+          },
+          {
+            "op": "addRelation",
+            "relation": {
+              "id": "rel.worker-processes-invoices",
+              "type": "processes",
+              "sourceId": "wrk.invoice",
+              "targetId": "jobs.invoices",
+              "status": "planned"
+            }
+          }
+        ]
+      },
+      {
+        "id": "threads",
+        "title": "The other option — worker threads",
+        "body": "When the result is needed **in the response** (a thumbnail preview), a queue is the\nwrong tool. Node's `worker_threads` run CPU work on other cores inside the same process:\nset the service's **process model** to **worker-threads** and use a pool such as\nPiscina. The event loop stays free either way.\n\nRule of thumb: queue what can happen later, use threads for what must happen now.\n"
+      }
+    ],
+    "source": "content/lessons/keep-the-event-loop-free.yaml"
+  },
+  {
+    "id": "lesson.model-a-table",
+    "title": "Model your first tables",
+    "summary": "Design the tables for orders — columns, a primary key, a foreign key — and connect the code that writes them.",
+    "track": "data-and-models",
+    "level": "beginner",
+    "minutes": 12,
+    "profile": "react-node-postgres",
+    "conceptIds": [
+      "pg.table",
+      "pg.schema",
+      "node.repository",
+      "writes"
+    ],
+    "start": {
+      "ops": [
+        {
+          "op": "addElement",
+          "element": {
+            "id": "svc.api",
+            "kind": "node.service",
+            "name": "API",
+            "status": "existing"
+          }
+        },
+        {
+          "op": "addElement",
+          "element": {
+            "id": "repo.orders",
+            "kind": "node.repository",
+            "name": "OrderRepository",
+            "parentId": "svc.api",
+            "status": "existing",
+            "properties": {
+              "dataAccess": "prisma"
+            }
+          }
+        },
+        {
+          "op": "addElement",
+          "element": {
+            "id": "db.shop",
+            "kind": "pg.database",
+            "name": "Shop DB",
+            "status": "existing"
+          }
+        },
+        {
+          "op": "addElement",
+          "element": {
+            "id": "schema.shop",
+            "kind": "pg.schema",
+            "name": "shop",
+            "parentId": "db.shop",
+            "status": "existing"
+          }
+        },
+        {
+          "op": "addRelation",
+          "relation": {
+            "id": "rel.api-migrates-shop",
+            "type": "migrates",
+            "sourceId": "svc.api",
+            "targetId": "schema.shop",
+            "status": "existing"
+          }
+        }
+      ]
+    },
+    "steps": [
+      {
+        "id": "rows-and-columns",
+        "title": "Rows, columns and keys",
+        "body": "A **table** is like a spreadsheet with strict rules: every **column** has a type, every\n**row** is one thing (one order), and the **primary key** is the column that identifies a\nrow — no two rows share it.\n\nA **foreign key** points from one table to another: an order item belongs to an order.\nPostgreSQL then refuses items for orders that do not exist.\n"
+      },
+      {
+        "id": "orders-table",
+        "title": "Add the orders table",
+        "body": "Inside the **shop** schema, add a **Table** named \"orders\". In the inspector, give it the\ncolumns `id` (uuid), `customer_id` (uuid), `status` (text) and `total` (numeric), and the\nprimary key `id`.\n",
+        "check": {
+          "hasElement": {
+            "kind": "pg.table",
+            "nameIncludes": "orders",
+            "parent": {
+              "kind": "pg.schema"
+            },
+            "where": {
+              "properties.primaryKey": {
+                "exists": true
+              }
+            }
+          },
+          "message": "Add an \"orders\" table inside the schema, with a primary key."
+        },
+        "hints": [
+          "Tables only fit inside a schema; drop it on the shop schema.",
+          "The Table shape is in the Full palette (Data group)."
+        ],
+        "success": "Every order now has an identity that never changes, even when its status does.\n",
+        "solution": [
+          {
+            "op": "addElement",
+            "element": {
+              "id": "tbl.orders",
+              "kind": "pg.table",
+              "name": "orders",
+              "parentId": "schema.shop",
+              "status": "planned",
+              "properties": {
+                "columns": [
+                  {
+                    "name": "id",
+                    "type": "uuid"
+                  },
+                  {
+                    "name": "customer_id",
+                    "type": "uuid"
+                  },
+                  {
+                    "name": "status",
+                    "type": "text"
+                  },
+                  {
+                    "name": "total",
+                    "type": "numeric"
+                  }
+                ],
+                "primaryKey": [
+                  "id"
+                ]
+              }
+            }
+          }
+        ]
+      },
+      {
+        "id": "items-table",
+        "title": "Order items and a foreign key",
+        "body": "One order has many items. Add a table \"order_items\" with `id`, `order_id`, `product_id`\nand `quantity`, and a **foreign key** from `order_id` to `orders.id`.\n",
+        "check": {
+          "hasElement": {
+            "kind": "pg.table",
+            "nameIncludes": "items",
+            "where": {
+              "properties.foreignKeys": {
+                "exists": true
+              }
+            }
+          },
+          "message": "Add an \"order_items\" table with a foreign key to orders."
+        },
+        "success": "The database itself now guards the link between orders and their items. A bug in the API\ncannot create items for a missing order.\n",
+        "solution": [
+          {
+            "op": "addElement",
+            "element": {
+              "id": "tbl.order-items",
+              "kind": "pg.table",
+              "name": "order_items",
+              "parentId": "schema.shop",
+              "status": "planned",
+              "properties": {
+                "columns": [
+                  {
+                    "name": "id",
+                    "type": "uuid"
+                  },
+                  {
+                    "name": "order_id",
+                    "type": "uuid"
+                  },
+                  {
+                    "name": "product_id",
+                    "type": "uuid"
+                  },
+                  {
+                    "name": "quantity",
+                    "type": "integer"
+                  }
+                ],
+                "primaryKey": [
+                  "id"
+                ],
+                "foreignKeys": [
+                  {
+                    "columns": [
+                      "order_id"
+                    ],
+                    "references": "orders",
+                    "refColumns": [
+                      "id"
+                    ]
+                  }
+                ],
+                "indexes": [
+                  {
+                    "columns": [
+                      "order_id"
+                    ]
+                  }
+                ]
+              }
+            }
+          }
+        ]
+      },
+      {
+        "id": "write-it",
+        "title": "Who writes the orders?",
+        "body": "Connect **OrderRepository** to the orders table with **writes**. The repository is the\nonly code that knows the table names; the rest of the API asks it for orders.\n",
+        "check": {
+          "hasRelation": {
+            "type": "writes",
+            "from": {
+              "id": "repo.orders"
+            },
+            "to": {
+              "kind": "pg.table",
+              "nameIncludes": "orders"
+            }
+          }
+        },
+        "success": "Notice the index on `order_items.order_id`: PostgreSQL does not create indexes for foreign\nkeys by itself, and \"all items of this order\" is the query you will run most.\n",
+        "solution": [
+          {
+            "op": "addRelation",
+            "relation": {
+              "id": "rel.repo-writes-orders",
+              "type": "writes",
+              "sourceId": "repo.orders",
+              "targetId": "tbl.orders",
+              "via": "prisma",
+              "status": "planned"
+            }
+          }
+        ]
+      }
+    ],
+    "source": "content/lessons/model-a-table.yaml"
+  },
+  {
+    "id": "lesson.one-door-for-the-browser",
+    "title": "Exercise: one door for the browser",
+    "summary": "The shop's React app calls three services directly. Pages are slow on mobile and every service is exposed. Add a backend-for-frontend until the rules are happy.",
+    "track": "foundations",
+    "level": "intermediate",
+    "minutes": 12,
+    "profile": "react-node-postgres",
+    "conceptIds": [
+      "node.bff",
+      "pattern.bff",
+      "react.app",
+      "calls"
+    ],
+    "start": {
+      "ops": [
+        {
+          "op": "addElement",
+          "element": {
+            "id": "app.shop",
+            "kind": "react.app",
+            "name": "Shop",
+            "status": "existing"
+          }
+        },
+        {
+          "op": "addElement",
+          "element": {
+            "id": "svc.catalog",
+            "kind": "node.service",
+            "name": "Catalog API",
+            "status": "existing"
+          }
+        },
+        {
+          "op": "addElement",
+          "element": {
+            "id": "svc.orders",
+            "kind": "node.service",
+            "name": "Orders API",
+            "status": "existing"
+          }
+        },
+        {
+          "op": "addElement",
+          "element": {
+            "id": "svc.reviews",
+            "kind": "node.service",
+            "name": "Reviews API",
+            "status": "existing"
+          }
+        },
+        {
+          "op": "addRelation",
+          "relation": {
+            "id": "rel.shop-calls-catalog",
+            "type": "calls",
+            "sourceId": "app.shop",
+            "targetId": "svc.catalog",
+            "protocol": "http",
+            "properties": {
+              "auth": "session-cookie"
+            },
+            "status": "existing"
+          }
+        },
+        {
+          "op": "addRelation",
+          "relation": {
+            "id": "rel.shop-calls-orders",
+            "type": "calls",
+            "sourceId": "app.shop",
+            "targetId": "svc.orders",
+            "protocol": "http",
+            "properties": {
+              "auth": "session-cookie"
+            },
+            "status": "existing"
+          }
+        },
+        {
+          "op": "addRelation",
+          "relation": {
+            "id": "rel.shop-calls-reviews",
+            "type": "calls",
+            "sourceId": "app.shop",
+            "targetId": "svc.reviews",
+            "protocol": "http",
+            "properties": {
+              "auth": "session-cookie"
+            },
+            "status": "existing"
+          }
+        }
+      ]
+    },
+    "steps": [
+      {
+        "id": "the-problem",
+        "title": "Three doors are too many",
+        "body": "Open the **Problems** panel: *React app calls many services*. The product page makes\nthree requests to three services, one after another on a slow phone network. Each\nservice must handle browser concerns (CORS, cookies, rate limits), and any change to\ntheir APIs breaks the app.\n"
+      },
+      {
+        "id": "add-bff",
+        "title": "Add a backend-for-frontend",
+        "body": "Add a **Backend-for-Frontend** named \"Shop BFF\". The Shop app **calls** the BFF, and the\nBFF **calls** each of the three services.\n",
+        "check": {
+          "all": [
+            {
+              "hasRelation": {
+                "type": "calls",
+                "from": {
+                  "id": "app.shop"
+                },
+                "to": {
+                  "kind": "node.bff"
+                }
+              }
+            },
+            {
+              "hasRelation": {
+                "type": "calls",
+                "from": {
+                  "kind": "node.bff"
+                },
+                "to": {
+                  "id": "svc.catalog"
+                }
+              }
+            },
+            {
+              "hasRelation": {
+                "type": "calls",
+                "from": {
+                  "kind": "node.bff"
+                },
+                "to": {
+                  "id": "svc.orders"
+                }
+              }
+            },
+            {
+              "hasRelation": {
+                "type": "calls",
+                "from": {
+                  "kind": "node.bff"
+                },
+                "to": {
+                  "id": "svc.reviews"
+                }
+              }
+            }
+          ]
+        },
+        "hints": [
+          "The BFF is in the Backend group, with the split-arrow icon."
+        ],
+        "solution": [
+          {
+            "op": "addElement",
+            "element": {
+              "id": "bff.shop",
+              "kind": "node.bff",
+              "name": "Shop BFF",
+              "status": "planned",
+              "properties": {
+                "client": "web"
+              }
+            }
+          },
+          {
+            "op": "addRelation",
+            "relation": {
+              "id": "rel.shop-calls-bff",
+              "type": "calls",
+              "sourceId": "app.shop",
+              "targetId": "bff.shop",
+              "protocol": "http",
+              "properties": {
+                "auth": "session-cookie"
+              },
+              "status": "planned"
+            }
+          },
+          {
+            "op": "addRelation",
+            "relation": {
+              "id": "rel.bff-calls-catalog",
+              "type": "calls",
+              "sourceId": "bff.shop",
+              "targetId": "svc.catalog",
+              "protocol": "http",
+              "status": "planned"
+            }
+          },
+          {
+            "op": "addRelation",
+            "relation": {
+              "id": "rel.bff-calls-orders",
+              "type": "calls",
+              "sourceId": "bff.shop",
+              "targetId": "svc.orders",
+              "protocol": "http",
+              "status": "planned"
+            }
+          },
+          {
+            "op": "addRelation",
+            "relation": {
+              "id": "rel.bff-calls-reviews",
+              "type": "calls",
+              "sourceId": "bff.shop",
+              "targetId": "svc.reviews",
+              "protocol": "http",
+              "status": "planned"
+            }
+          }
+        ]
+      },
+      {
+        "id": "close-the-doors",
+        "title": "Close the old doors",
+        "body": "Delete the three arrows from the Shop app straight to the services. The browser now has\none door, and the services are free to change behind it.\n",
+        "check": {
+          "all": [
+            {
+              "finding": {
+                "ruleId": "RNP-011",
+                "present": false
+              },
+              "message": "The Shop app still calls more than two services directly."
+            },
+            {
+              "not": {
+                "hasRelation": {
+                  "type": "calls",
+                  "from": {
+                    "id": "app.shop"
+                  },
+                  "to": {
+                    "id": "svc.orders"
+                  }
+                }
+              },
+              "message": "Remove the direct call from the Shop app to the Orders API."
+            }
+          ]
+        },
+        "hints": [
+          "Select an arrow and press Delete (or long-press it on a touch screen)."
+        ],
+        "success": "The BFF fetches the three services in parallel, close to them in the data center, and\nreturns one response shaped for the page. The rule is satisfied.\n",
+        "solution": [
+          {
+            "op": "removeRelation",
+            "id": "rel.shop-calls-catalog"
+          },
+          {
+            "op": "removeRelation",
+            "id": "rel.shop-calls-orders"
+          },
+          {
+            "op": "removeRelation",
+            "id": "rel.shop-calls-reviews"
+          }
+        ]
+      }
+    ],
+    "source": "content/lessons/one-door-for-the-browser.yaml"
+  },
+  {
+    "id": "lesson.one-schema-one-owner",
+    "title": "Exercise: one schema, one owner",
+    "summary": "Two services write and migrate the same schema. Deploys break each other and nobody knows who may change a column. Fix it until the rules are happy.",
+    "track": "data-and-models",
+    "level": "intermediate",
+    "minutes": 12,
+    "profile": "react-node-postgres",
+    "conceptIds": [
+      "pg.schema",
+      "migrates",
+      "writes",
+      "pattern.database-per-service"
+    ],
+    "start": {
+      "ops": [
+        {
+          "op": "addElement",
+          "element": {
+            "id": "svc.orders",
+            "kind": "node.service",
+            "name": "Orders API",
+            "status": "existing"
+          }
+        },
+        {
+          "op": "addElement",
+          "element": {
+            "id": "svc.billing",
+            "kind": "node.service",
+            "name": "Billing API",
+            "status": "existing"
+          }
+        },
+        {
+          "op": "addElement",
+          "element": {
+            "id": "db.shop",
+            "kind": "pg.database",
+            "name": "Shop DB",
+            "status": "existing"
+          }
+        },
+        {
+          "op": "addElement",
+          "element": {
+            "id": "schema.orders",
+            "kind": "pg.schema",
+            "name": "orders",
+            "parentId": "db.shop",
+            "status": "existing"
+          }
+        },
+        {
+          "op": "addRelation",
+          "relation": {
+            "id": "rel.orders-writes",
+            "type": "writes",
+            "sourceId": "svc.orders",
+            "targetId": "schema.orders",
+            "status": "existing"
+          }
+        },
+        {
+          "op": "addRelation",
+          "relation": {
+            "id": "rel.orders-migrates",
+            "type": "migrates",
+            "sourceId": "svc.orders",
+            "targetId": "schema.orders",
+            "status": "existing"
+          }
+        },
+        {
+          "op": "addRelation",
+          "relation": {
+            "id": "rel.billing-writes",
+            "type": "writes",
+            "sourceId": "svc.billing",
+            "targetId": "schema.orders",
+            "status": "existing"
+          }
+        },
+        {
+          "op": "addRelation",
+          "relation": {
+            "id": "rel.billing-migrates",
+            "type": "migrates",
+            "sourceId": "svc.billing",
+            "targetId": "schema.orders",
+            "status": "existing"
+          }
+        }
+      ]
+    },
+    "steps": [
+      {
+        "id": "what-goes-wrong",
+        "title": "What goes wrong",
+        "body": "Billing added a column `invoice_id` with its own migration. A week later, Orders renamed\n`total` to `total_amount`. Billing's next deploy failed, and its migration history no\nlonger matches the database.\n\nThe **Problems** panel shows two findings: *Several migration owners* and *Shared tables\nbetween services*.\n"
+      },
+      {
+        "id": "one-migrator",
+        "title": "One migration owner",
+        "body": "The orders schema belongs to the **Orders API**. Delete the **migrates** arrow from the\nBilling API.\n",
+        "check": {
+          "finding": {
+            "ruleId": "RNP-002",
+            "present": false
+          },
+          "message": "The orders schema still has two migration owners."
+        },
+        "success": "Billing still needs an invoice ID on orders — it now asks the Orders team, who add it in\ntheir migration.\n",
+        "solution": [
+          {
+            "op": "removeRelation",
+            "id": "rel.billing-migrates"
+          }
+        ]
+      },
+      {
+        "id": "one-writer",
+        "title": "One writer",
+        "body": "Billing also writes the orders tables directly. Delete that **writes** arrow and let the\nBilling API **call** the Orders API instead (\"mark order 42 as invoiced\").\n",
+        "check": {
+          "all": [
+            {
+              "finding": {
+                "ruleId": "RNP-001",
+                "present": false
+              },
+              "message": "The orders schema is still written by two services."
+            },
+            {
+              "hasRelation": {
+                "type": "calls",
+                "from": {
+                  "id": "svc.billing"
+                },
+                "to": {
+                  "id": "svc.orders"
+                }
+              },
+              "message": "Let the Billing API call the Orders API."
+            }
+          ]
+        },
+        "hints": [
+          "Events work too (\"OrderInvoiced\"), but a call is simpler to start with."
+        ],
+        "success": "The Orders team can now change its tables freely, as long as its API keeps its promises.\nThat is what makes two services independently deployable.\n",
+        "solution": [
+          {
+            "op": "removeRelation",
+            "id": "rel.billing-writes"
+          },
+          {
+            "op": "addRelation",
+            "relation": {
+              "id": "rel.billing-calls-orders",
+              "type": "calls",
+              "sourceId": "svc.billing",
+              "targetId": "svc.orders",
+              "label": "POST /orders/:id/invoice",
+              "protocol": "http",
+              "status": "planned"
+            }
+          }
+        ]
+      }
+    ],
+    "source": "content/lessons/one-schema-one-owner.yaml"
+  },
+  {
+    "id": "lesson.organize-by-feature",
+    "title": "Organize state by feature",
+    "summary": "The cart's store, hook and button are spread over the app. Move them into a cart feature with a small public API, so the cart can change without touching the rest.",
+    "track": "state-management",
+    "level": "intermediate",
+    "minutes": 12,
+    "profile": "react-node-postgres",
+    "conceptIds": [
+      "react.feature",
+      "react.hook",
+      "react.client-store",
+      "pattern.feature-sliced"
+    ],
+    "start": {
+      "ops": [
+        {
+          "op": "addElement",
+          "element": {
+            "id": "app.shop",
+            "kind": "react.app",
+            "name": "Shop",
+            "status": "existing"
+          }
+        },
+        {
+          "op": "addElement",
+          "element": {
+            "id": "route.checkout",
+            "kind": "react.route",
+            "name": "Checkout page",
+            "parentId": "app.shop",
+            "status": "existing"
+          }
+        },
+        {
+          "op": "addElement",
+          "element": {
+            "id": "store-ui.cart",
+            "kind": "react.client-store",
+            "name": "Cart store",
+            "parentId": "app.shop",
+            "status": "existing",
+            "properties": {
+              "lib": "zustand"
+            }
+          }
+        },
+        {
+          "op": "addElement",
+          "element": {
+            "id": "hook.cart",
+            "kind": "react.hook",
+            "name": "useCart",
+            "parentId": "app.shop",
+            "status": "existing"
+          }
+        },
+        {
+          "op": "addElement",
+          "element": {
+            "id": "cmp.cart-button",
+            "kind": "react.component",
+            "name": "CartButton",
+            "parentId": "app.shop",
+            "status": "existing"
+          }
+        },
+        {
+          "op": "addRelation",
+          "relation": {
+            "id": "rel.checkout-uses-store",
+            "type": "uses-state",
+            "sourceId": "route.checkout",
+            "targetId": "store-ui.cart",
+            "status": "existing"
+          }
+        }
+      ]
+    },
+    "steps": [
+      {
+        "id": "why",
+        "title": "Group by what it does",
+        "body": "Today the cart is everywhere: the store in `stores/`, the hook in `hooks/`, the button in\n`components/`. Changing the cart means touching three folders, and any page can reach\ninto the store.\n\nA **feature module** keeps it together: `features/cart` with a public `index.ts`.\n"
+      },
+      {
+        "id": "move-in",
+        "title": "Create the cart feature",
+        "body": "Add a **Feature module** named \"cart\" inside the app, and move the **Cart store**,\n**useCart** and **CartButton** into it (drag them onto the feature).\n",
+        "check": {
+          "all": [
+            {
+              "hasElement": {
+                "id": "store-ui.cart",
+                "parent": {
+                  "kind": "react.feature"
+                }
+              }
+            },
+            {
+              "hasElement": {
+                "id": "hook.cart",
+                "parent": {
+                  "kind": "react.feature"
+                }
+              }
+            },
+            {
+              "hasElement": {
+                "id": "cmp.cart-button",
+                "parent": {
+                  "kind": "react.feature"
+                }
+              }
+            }
+          ]
+        },
+        "hints": [
+          "Drop a shape on the feature's header strip or inside it to move it in."
+        ],
+        "solution": [
+          {
+            "op": "addElement",
+            "element": {
+              "id": "feat.cart",
+              "kind": "react.feature",
+              "name": "cart",
+              "parentId": "app.shop",
+              "status": "planned",
+              "properties": {
+                "folder": "src/features/cart"
+              }
+            }
+          },
+          {
+            "op": "moveElement",
+            "id": "store-ui.cart",
+            "parentId": "feat.cart"
+          },
+          {
+            "op": "moveElement",
+            "id": "hook.cart",
+            "parentId": "feat.cart"
+          },
+          {
+            "op": "moveElement",
+            "id": "cmp.cart-button",
+            "parentId": "feat.cart"
+          }
+        ]
+      },
+      {
+        "id": "public-api",
+        "title": "Use the feature through its public API",
+        "body": "The checkout page should not read the store directly. Let **useCart** **use state** from\nthe store, let the checkout page **render** CartButton and **depend on** useCart — and\ndelete the arrow from the page straight to the store.\n",
+        "check": {
+          "all": [
+            {
+              "hasRelation": {
+                "type": "uses-state",
+                "from": {
+                  "id": "hook.cart"
+                },
+                "to": {
+                  "id": "store-ui.cart"
+                }
+              }
+            },
+            {
+              "hasRelation": {
+                "type": "depends-on",
+                "from": {
+                  "id": "route.checkout"
+                },
+                "to": {
+                  "id": "hook.cart"
+                }
+              }
+            },
+            {
+              "not": {
+                "hasRelation": {
+                  "type": "uses-state",
+                  "from": {
+                    "id": "route.checkout"
+                  },
+                  "to": {
+                    "id": "store-ui.cart"
+                  }
+                }
+              },
+              "message": "The checkout page still reads the cart store directly."
+            }
+          ]
+        },
+        "success": "The store is now private to the feature. Switch it from Zustand to Redux tomorrow, and\nonly `features/cart` changes; `useCart()` stays the same for every page.\n",
+        "solution": [
+          {
+            "op": "addRelation",
+            "relation": {
+              "id": "rel.hook-uses-store",
+              "type": "uses-state",
+              "sourceId": "hook.cart",
+              "targetId": "store-ui.cart",
+              "status": "planned"
+            }
+          },
+          {
+            "op": "addRelation",
+            "relation": {
+              "id": "rel.checkout-renders-button",
+              "type": "renders",
+              "sourceId": "route.checkout",
+              "targetId": "cmp.cart-button",
+              "status": "planned"
+            }
+          },
+          {
+            "op": "addRelation",
+            "relation": {
+              "id": "rel.checkout-uses-hook",
+              "type": "depends-on",
+              "sourceId": "route.checkout",
+              "targetId": "hook.cart",
+              "status": "planned"
+            }
+          },
+          {
+            "op": "removeRelation",
+            "id": "rel.checkout-uses-store"
+          }
+        ]
+      }
+    ],
+    "source": "content/lessons/organize-by-feature.yaml"
+  },
+  {
+    "id": "lesson.paginate-the-list",
+    "title": "Exercise: a list that fits in memory",
+    "summary": "GET /products returns every product at once. It was fast with 50 test products; with 200,000 it times out. Add pagination until the rules are happy.",
+    "track": "api-design",
+    "level": "intermediate",
+    "minutes": 10,
+    "profile": "react-node-postgres",
+    "conceptIds": [
+      "node.endpoint",
+      "node.dto"
+    ],
+    "start": {
+      "ops": [
+        {
+          "op": "addElement",
+          "element": {
+            "id": "svc.api",
+            "kind": "node.service",
+            "name": "Catalog API",
+            "status": "existing"
+          }
+        },
+        {
+          "op": "addElement",
+          "element": {
+            "id": "ctl.products",
+            "kind": "node.route-handler",
+            "name": "Product routes",
+            "parentId": "svc.api",
+            "status": "existing",
+            "properties": {
+              "validation": "zod"
+            }
+          }
+        },
+        {
+          "op": "addElement",
+          "element": {
+            "id": "ep.list-products",
+            "kind": "node.endpoint",
+            "name": "GET /products",
+            "parentId": "ctl.products",
+            "status": "existing",
+            "properties": {
+              "method": "GET",
+              "path": "/products",
+              "returnsList": true,
+              "auth": "none"
+            }
+          }
+        }
+      ]
+    },
+    "steps": [
+      {
+        "id": "cursor",
+        "title": "Return one page at a time",
+        "body": "Open the **Problems** panel: *Unpaginated list endpoint*. Select **GET /products** and set\n**Pagination** to **cursor**.\n\nWith a cursor, the client asks `GET /products?after=<last id>&limit=50`. The query uses\nthe primary key index and stays fast on the millionth page, unlike `OFFSET 999950`.\n",
+        "check": {
+          "finding": {
+            "ruleId": "RNP-025",
+            "present": false
+          },
+          "message": "GET /products still returns the whole list."
+        },
+        "hints": [
+          "The quick fix in the Problems panel sets cursor pagination for you."
+        ],
+        "solution": [
+          {
+            "op": "updateElement",
+            "id": "ep.list-products",
+            "patch": {
+              "properties": {
+                "method": "GET",
+                "path": "/products",
+                "returnsList": true,
+                "auth": "none",
+                "pagination": "cursor"
+              }
+            }
+          }
+        ]
+      },
+      {
+        "id": "page-shape",
+        "title": "Describe the page",
+        "body": "Clients need to know where the next page starts. Add a **Data shape (DTO)** named\n\"ProductPage\" with role **response** (fields `items` and `nextCursor`), and let the\nendpoint **depend on** it.\n",
+        "check": {
+          "hasRelation": {
+            "type": "depends-on",
+            "from": {
+              "id": "ep.list-products"
+            },
+            "to": {
+              "kind": "node.dto",
+              "where": {
+                "properties.role": "response"
+              }
+            }
+          }
+        },
+        "success": "`nextCursor: null` means \"no more pages\". The client loops until then, and the server\nnever builds a response bigger than one page.\n",
+        "solution": [
+          {
+            "op": "addElement",
+            "element": {
+              "id": "dto.product-page",
+              "kind": "node.dto",
+              "name": "ProductPage",
+              "parentId": "svc.api",
+              "status": "planned",
+              "properties": {
+                "role": "response",
+                "fields": [
+                  {
+                    "name": "items",
+                    "type": "ProductSummary[]",
+                    "required": true
+                  },
+                  {
+                    "name": "nextCursor",
+                    "type": "string | null",
+                    "required": true
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "op": "addRelation",
+            "relation": {
+              "id": "rel.list-depends-on-page",
+              "type": "depends-on",
+              "sourceId": "ep.list-products",
+              "targetId": "dto.product-page",
+              "status": "planned"
+            }
+          }
+        ]
+      }
+    ],
+    "source": "content/lessons/paginate-the-list.yaml"
   },
   {
     "id": "lesson.prevent-lost-updates",
@@ -5664,5 +8335,2199 @@ export const LESSONS: Lesson[] = [
       }
     ],
     "source": "content/lessons/prevent-lost-updates.yaml"
+  },
+  {
+    "id": "lesson.protect-what-changes-data",
+    "title": "Exercise: protect what changes data",
+    "summary": "DELETE /products/:id was left open \"for the admin app\". Anyone can call it. Require authentication, then restrict it to a role.",
+    "track": "auth",
+    "level": "intermediate",
+    "minutes": 10,
+    "profile": "react-node-postgres",
+    "conceptIds": [
+      "node.endpoint",
+      "topic.authentication",
+      "node.middleware"
+    ],
+    "start": {
+      "ops": [
+        {
+          "op": "addElement",
+          "element": {
+            "id": "app.admin",
+            "kind": "react.app",
+            "name": "Admin",
+            "status": "existing"
+          }
+        },
+        {
+          "op": "addElement",
+          "element": {
+            "id": "svc.api",
+            "kind": "node.service",
+            "name": "Catalog API",
+            "status": "existing"
+          }
+        },
+        {
+          "op": "addElement",
+          "element": {
+            "id": "ctl.products",
+            "kind": "node.route-handler",
+            "name": "Product routes",
+            "parentId": "svc.api",
+            "status": "existing",
+            "properties": {
+              "validation": "zod"
+            }
+          }
+        },
+        {
+          "op": "addElement",
+          "element": {
+            "id": "ep.list",
+            "kind": "node.endpoint",
+            "name": "GET /products",
+            "parentId": "ctl.products",
+            "status": "existing",
+            "properties": {
+              "method": "GET",
+              "path": "/products",
+              "auth": "none",
+              "returnsList": true,
+              "pagination": "cursor"
+            }
+          }
+        },
+        {
+          "op": "addElement",
+          "element": {
+            "id": "ep.delete",
+            "kind": "node.endpoint",
+            "name": "DELETE /products/:id",
+            "parentId": "ctl.products",
+            "status": "existing",
+            "properties": {
+              "method": "DELETE",
+              "path": "/products/:id",
+              "auth": "none"
+            }
+          }
+        },
+        {
+          "op": "addRelation",
+          "relation": {
+            "id": "rel.admin-calls-api",
+            "type": "calls",
+            "sourceId": "app.admin",
+            "targetId": "svc.api",
+            "protocol": "http",
+            "status": "existing"
+          }
+        }
+      ]
+    },
+    "steps": [
+      {
+        "id": "require-auth",
+        "title": "Require authentication",
+        "body": "Reading the catalog without signing in is fine: `GET /products` stays public. Deleting is\nnot. The **Problems** panel flags **DELETE /products/:id**. Set its **auth** to\n**required**.\n",
+        "check": {
+          "finding": {
+            "ruleId": "RNP-024",
+            "present": false
+          },
+          "message": "DELETE /products/:id can still be called by anyone."
+        },
+        "hints": [
+          "The quick fix sets it for you."
+        ],
+        "solution": [
+          {
+            "op": "updateElement",
+            "id": "ep.delete",
+            "patch": {
+              "properties": {
+                "method": "DELETE",
+                "path": "/products/:id",
+                "auth": "required"
+              }
+            }
+          }
+        ]
+      },
+      {
+        "id": "roles",
+        "title": "Only admins may delete",
+        "body": "Signed in is not enough: a customer must not delete products. Set the endpoint's **auth**\nto **roles** and its **roles** to **admin**.\n",
+        "check": {
+          "hasElement": {
+            "id": "ep.delete",
+            "where": {
+              "properties.auth": "roles",
+              "properties.roles": {
+                "exists": true
+              }
+            }
+          }
+        },
+        "success": "The endpoint now documents both checks: *who are you* (a valid session) and *what may you\ndo* (the admin role). An agent implementing it, or a reviewer, sees both at a glance.\n",
+        "solution": [
+          {
+            "op": "updateElement",
+            "id": "ep.delete",
+            "patch": {
+              "properties": {
+                "method": "DELETE",
+                "path": "/products/:id",
+                "auth": "roles",
+                "roles": [
+                  "admin"
+                ]
+              }
+            }
+          }
+        ]
+      }
+    ],
+    "source": "content/lessons/protect-what-changes-data.yaml"
+  },
+  {
+    "id": "lesson.redux-flow",
+    "title": "A Redux flow: store, actions, effects",
+    "summary": "Build the classic Redux loop for a cart and an order page — a store, actions that update it, a button and an effect that dispatch, and a thunk that calls the API.",
+    "track": "state-management",
+    "level": "beginner",
+    "minutes": 15,
+    "profile": "react-node-postgres",
+    "conceptIds": [
+      "react.client-store",
+      "react.action",
+      "react.effect",
+      "dispatches",
+      "updates",
+      "uses-state"
+    ],
+    "start": {
+      "ops": [
+        {
+          "op": "addElement",
+          "element": {
+            "id": "app.shop",
+            "kind": "react.app",
+            "name": "Shop",
+            "status": "existing"
+          }
+        },
+        {
+          "op": "addElement",
+          "element": {
+            "id": "route.order",
+            "kind": "react.route",
+            "name": "Order page",
+            "parentId": "app.shop",
+            "status": "existing",
+            "properties": {
+              "path": "/orders/:id"
+            }
+          }
+        },
+        {
+          "op": "addElement",
+          "element": {
+            "id": "cmp.add-button",
+            "kind": "react.component",
+            "name": "AddToCartButton",
+            "parentId": "app.shop",
+            "status": "existing"
+          }
+        },
+        {
+          "op": "addElement",
+          "element": {
+            "id": "cmp.header",
+            "kind": "react.component",
+            "name": "Header",
+            "parentId": "app.shop",
+            "status": "existing"
+          }
+        },
+        {
+          "op": "addElement",
+          "element": {
+            "id": "apic.http",
+            "kind": "react.api-client",
+            "name": "API client",
+            "parentId": "app.shop",
+            "status": "existing"
+          }
+        },
+        {
+          "op": "addElement",
+          "element": {
+            "id": "svc.api",
+            "kind": "node.service",
+            "name": "API",
+            "status": "existing"
+          }
+        },
+        {
+          "op": "addElement",
+          "element": {
+            "id": "mw.auth",
+            "kind": "node.middleware",
+            "name": "Session check",
+            "parentId": "svc.api",
+            "status": "existing",
+            "properties": {
+              "kind": "auth"
+            }
+          }
+        },
+        {
+          "op": "addRelation",
+          "relation": {
+            "id": "rel.client-calls-api",
+            "type": "calls",
+            "sourceId": "apic.http",
+            "targetId": "svc.api",
+            "protocol": "http",
+            "status": "existing"
+          }
+        }
+      ]
+    },
+    "steps": [
+      {
+        "id": "the-loop",
+        "title": "The loop",
+        "body": "Redux keeps shared state in one **store** and changes it in one way:\n\n1. UI code **dispatches** an **action** — \"item added\".\n2. The action **updates** the store (a reducer applies it).\n3. Components that **use** that state re-render.\n\nEvery change has a name, so the Redux DevTools show exactly what happened and when.\n"
+      },
+      {
+        "id": "store-and-action",
+        "title": "A store and its first action",
+        "body": "Inside the app, add a **Client state store** named \"Cart store\" and an **Action / thunk**\nnamed \"itemAdded\". The action **updates** the store, and **AddToCartButton**\n**dispatches** the action.\n",
+        "check": {
+          "all": [
+            {
+              "hasRelation": {
+                "type": "updates",
+                "from": {
+                  "kind": "react.action"
+                },
+                "to": {
+                  "kind": "react.client-store"
+                }
+              }
+            },
+            {
+              "hasRelation": {
+                "type": "dispatches",
+                "from": {
+                  "id": "cmp.add-button"
+                },
+                "to": {
+                  "kind": "react.action"
+                }
+              }
+            }
+          ]
+        },
+        "hints": [
+          "Both shapes are in the Full palette, Frontend group.",
+          "Select the store and look at its guide in the inspector — \"+\" next to \"Action / thunk → updates\" adds and connects the action for you."
+        ],
+        "success": "`dispatch(itemAdded(product))` on click, and the reducer pushes the item into the cart.\nNo component writes the store directly.\n",
+        "solution": [
+          {
+            "op": "addElement",
+            "element": {
+              "id": "store-ui.cart",
+              "kind": "react.client-store",
+              "name": "Cart store",
+              "parentId": "app.shop",
+              "status": "planned",
+              "properties": {
+                "lib": "redux-toolkit"
+              }
+            }
+          },
+          {
+            "op": "addElement",
+            "element": {
+              "id": "act.item-added",
+              "kind": "react.action",
+              "name": "itemAdded",
+              "parentId": "app.shop",
+              "status": "planned",
+              "properties": {
+                "kind": "redux-action"
+              }
+            }
+          },
+          {
+            "op": "addRelation",
+            "relation": {
+              "id": "rel.item-added-updates-cart",
+              "type": "updates",
+              "sourceId": "act.item-added",
+              "targetId": "store-ui.cart",
+              "status": "planned"
+            }
+          },
+          {
+            "op": "addRelation",
+            "relation": {
+              "id": "rel.button-dispatches",
+              "type": "dispatches",
+              "sourceId": "cmp.add-button",
+              "targetId": "act.item-added",
+              "status": "planned"
+            }
+          }
+        ]
+      },
+      {
+        "id": "read-it",
+        "title": "Read the store somewhere else",
+        "body": "The **Header** shows the number of items in the cart. Let it **use state** from the Cart\nstore.\n",
+        "check": {
+          "hasRelation": {
+            "type": "uses-state",
+            "from": {
+              "id": "cmp.header"
+            },
+            "to": {
+              "kind": "react.client-store"
+            }
+          }
+        },
+        "success": "With a selector (`useSelector(s => s.cart.items.length)`), the header re-renders only when\nthe count changes — not on every change in the store.\n",
+        "solution": [
+          {
+            "op": "addRelation",
+            "relation": {
+              "id": "rel.header-uses-cart",
+              "type": "uses-state",
+              "sourceId": "cmp.header",
+              "targetId": "store-ui.cart",
+              "status": "planned"
+            }
+          }
+        ]
+      },
+      {
+        "id": "thunk-and-effect",
+        "title": "Load data with a thunk and an effect",
+        "body": "The order page must load order 42 when it opens.\n\n1. Add an **Action / thunk** named \"fetchOrder\" that **fetches via** the API client, and\n   **updates** the Cart store (or an orders store) with the result.\n2. Add an **Effect (useEffect)** named \"Load order on open\" that **dispatches**\n   fetchOrder.\n3. The **Order page** **depends on** the effect: it runs it when the order ID changes.\n",
+        "check": {
+          "all": [
+            {
+              "hasRelation": {
+                "type": "fetches-via",
+                "from": {
+                  "kind": "react.action"
+                },
+                "to": {
+                  "id": "apic.http"
+                }
+              }
+            },
+            {
+              "hasRelation": {
+                "type": "dispatches",
+                "from": {
+                  "kind": "react.effect"
+                },
+                "to": {
+                  "kind": "react.action"
+                }
+              }
+            },
+            {
+              "hasRelation": {
+                "type": "depends-on",
+                "from": {
+                  "id": "route.order"
+                },
+                "to": {
+                  "kind": "react.effect"
+                }
+              }
+            }
+          ]
+        },
+        "hints": [
+          "Effects and actions live inside the app (or inside a feature)."
+        ],
+        "success": "`useEffect(() => { dispatch(fetchOrder(id)) }, [id])` — and the cleanup cancels the request\nif the user moves on. This works; the next lessons show when a server-state cache does\nthe same job with less code.\n",
+        "solution": [
+          {
+            "op": "addElement",
+            "element": {
+              "id": "act.fetch-order",
+              "kind": "react.action",
+              "name": "fetchOrder",
+              "parentId": "app.shop",
+              "status": "planned",
+              "properties": {
+                "kind": "redux-thunk",
+                "async": true
+              }
+            }
+          },
+          {
+            "op": "addElement",
+            "element": {
+              "id": "eff.load-order",
+              "kind": "react.effect",
+              "name": "Load order on open",
+              "parentId": "app.shop",
+              "status": "planned",
+              "properties": {
+                "dependencies": [
+                  "orderId"
+                ],
+                "cleanup": true
+              }
+            }
+          },
+          {
+            "op": "addRelation",
+            "relation": {
+              "id": "rel.fetch-order-fetches",
+              "type": "fetches-via",
+              "sourceId": "act.fetch-order",
+              "targetId": "apic.http",
+              "status": "planned"
+            }
+          },
+          {
+            "op": "addRelation",
+            "relation": {
+              "id": "rel.fetch-order-updates",
+              "type": "updates",
+              "sourceId": "act.fetch-order",
+              "targetId": "store-ui.cart",
+              "status": "planned"
+            }
+          },
+          {
+            "op": "addRelation",
+            "relation": {
+              "id": "rel.effect-dispatches",
+              "type": "dispatches",
+              "sourceId": "eff.load-order",
+              "targetId": "act.fetch-order",
+              "status": "planned"
+            }
+          },
+          {
+            "op": "addRelation",
+            "relation": {
+              "id": "rel.page-runs-effect",
+              "type": "depends-on",
+              "sourceId": "route.order",
+              "targetId": "eff.load-order",
+              "status": "planned"
+            }
+          }
+        ]
+      }
+    ],
+    "source": "content/lessons/redux-flow.yaml"
+  },
+  {
+    "id": "lesson.safe-retries",
+    "title": "Exercise: pay once, even when the network fails",
+    "summary": "The shop retries POST /payments when a response is lost — and sometimes charges twice. Make retries safe with idempotency keys.",
+    "track": "api-design",
+    "level": "intermediate",
+    "minutes": 12,
+    "profile": "react-node-postgres",
+    "conceptIds": [
+      "node.endpoint",
+      "calls",
+      "gen.external"
+    ],
+    "start": {
+      "ops": [
+        {
+          "op": "addElement",
+          "element": {
+            "id": "app.shop",
+            "kind": "react.app",
+            "name": "Shop",
+            "status": "existing"
+          }
+        },
+        {
+          "op": "addElement",
+          "element": {
+            "id": "svc.api",
+            "kind": "node.service",
+            "name": "Payments API",
+            "status": "existing"
+          }
+        },
+        {
+          "op": "addElement",
+          "element": {
+            "id": "ctl.payments",
+            "kind": "node.route-handler",
+            "name": "Payment routes",
+            "parentId": "svc.api",
+            "status": "existing",
+            "properties": {
+              "validation": "zod"
+            }
+          }
+        },
+        {
+          "op": "addElement",
+          "element": {
+            "id": "ep.pay",
+            "kind": "node.endpoint",
+            "name": "POST /payments",
+            "parentId": "ctl.payments",
+            "status": "existing",
+            "properties": {
+              "method": "POST",
+              "path": "/payments",
+              "auth": "required",
+              "statusCodes": [
+                201,
+                400,
+                402
+              ]
+            }
+          }
+        },
+        {
+          "op": "addRelation",
+          "relation": {
+            "id": "rel.shop-pays",
+            "type": "calls",
+            "sourceId": "app.shop",
+            "targetId": "ep.pay",
+            "protocol": "http",
+            "properties": {
+              "auth": "session-cookie",
+              "retries": 3,
+              "timeoutMs": 8000
+            },
+            "status": "existing"
+          }
+        }
+      ]
+    },
+    "steps": [
+      {
+        "id": "double-charge",
+        "title": "How one click pays twice",
+        "body": "The customer taps **Pay**. The server charges the card, but the response is lost on a bad\nmobile connection. After 8 seconds the app times out and **retries** — and the server\ncharges again.\n\nGET requests are safe to retry: reading twice changes nothing. POST is not, unless you\nmake it so. The **Problems** panel flags the retried call.\n"
+      },
+      {
+        "id": "key",
+        "title": "Send an idempotency key",
+        "body": "Select the arrow from **Shop** to **POST /payments** and turn on **Idempotency key**.\n\nThe app creates one unique key per payment attempt (`Idempotency-Key: 7f3c…`) and sends\nthe same key with every retry. The server stores keys with a `UNIQUE` constraint; a\nrepeated key returns the first result instead of charging again.\n",
+        "check": {
+          "finding": {
+            "ruleId": "RNP-023",
+            "present": false
+          },
+          "message": "The retried call to POST /payments is still not idempotent."
+        },
+        "success": "Retries are safe now: the worst case is a second request that returns the stored result.\n",
+        "solution": [
+          {
+            "op": "updateRelation",
+            "id": "rel.shop-pays",
+            "patch": {
+              "properties": {
+                "auth": "session-cookie",
+                "retries": 3,
+                "timeoutMs": 8000,
+                "idempotencyKey": true
+              }
+            }
+          }
+        ]
+      },
+      {
+        "id": "server-side",
+        "title": "Make the endpoint idempotent for every client",
+        "body": "The mobile app and partners call this endpoint too. Mark **POST /payments** itself as\n**idempotent**: the server requires the key and stores the result per key, so every\nclient is protected, not only the one you fixed.\n",
+        "check": {
+          "hasElement": {
+            "id": "ep.pay",
+            "where": {
+              "properties.idempotent": true
+            }
+          }
+        },
+        "success": "Pass the same key to the payment provider (Stripe supports `Idempotency-Key` too), and a\nretry can never become a second charge anywhere in the chain.\n",
+        "solution": [
+          {
+            "op": "updateElement",
+            "id": "ep.pay",
+            "patch": {
+              "properties": {
+                "method": "POST",
+                "path": "/payments",
+                "auth": "required",
+                "statusCodes": [
+                  201,
+                  400,
+                  402
+                ],
+                "idempotent": true
+              }
+            }
+          }
+        ]
+      }
+    ],
+    "source": "content/lessons/safe-retries.yaml"
+  },
+  {
+    "id": "lesson.serializable-retries",
+    "title": "Exercise: SERIALIZABLE needs retries",
+    "summary": "A transfer runs in SERIALIZABLE transactions — the safest isolation level — but nobody retries when PostgreSQL aborts one. Fix every write path until the rules are happy.",
+    "track": "concurrency-and-parallelism",
+    "level": "senior",
+    "minutes": 10,
+    "profile": "react-node-postgres",
+    "conceptIds": [
+      "topic.transactions-and-isolation",
+      "topic.concurrency-control",
+      "writes"
+    ],
+    "start": {
+      "ops": [
+        {
+          "op": "addElement",
+          "element": {
+            "id": "svc.api",
+            "kind": "node.service",
+            "name": "Accounts API",
+            "status": "existing"
+          }
+        },
+        {
+          "op": "addElement",
+          "element": {
+            "id": "repo.accounts",
+            "kind": "node.repository",
+            "name": "AccountRepository",
+            "parentId": "svc.api",
+            "status": "existing"
+          }
+        },
+        {
+          "op": "addElement",
+          "element": {
+            "id": "wrk.interest",
+            "kind": "node.worker",
+            "name": "Interest job",
+            "status": "existing"
+          }
+        },
+        {
+          "op": "addElement",
+          "element": {
+            "id": "db.bank",
+            "kind": "pg.database",
+            "name": "Bank DB",
+            "status": "existing"
+          }
+        },
+        {
+          "op": "addElement",
+          "element": {
+            "id": "schema.accounts",
+            "kind": "pg.schema",
+            "name": "accounts",
+            "parentId": "db.bank",
+            "status": "existing"
+          }
+        },
+        {
+          "op": "addRelation",
+          "relation": {
+            "id": "rel.api-migrates",
+            "type": "migrates",
+            "sourceId": "svc.api",
+            "targetId": "schema.accounts",
+            "status": "existing"
+          }
+        },
+        {
+          "op": "addRelation",
+          "relation": {
+            "id": "rel.repo-writes",
+            "type": "writes",
+            "sourceId": "repo.accounts",
+            "targetId": "schema.accounts",
+            "properties": {
+              "isolation": "serializable"
+            },
+            "status": "existing"
+          }
+        },
+        {
+          "op": "addRelation",
+          "relation": {
+            "id": "rel.interest-writes",
+            "type": "writes",
+            "sourceId": "wrk.interest",
+            "targetId": "schema.accounts",
+            "properties": {
+              "isolation": "serializable"
+            },
+            "status": "existing"
+          }
+        }
+      ]
+    },
+    "steps": [
+      {
+        "id": "aborts",
+        "title": "SERIALIZABLE says no",
+        "body": "Under `SERIALIZABLE`, PostgreSQL guarantees the result is as if transactions ran one after\nanother. When two transfers would interleave badly, it **aborts** one of them at commit\nwith `SQLSTATE 40001` (*could not serialize access*). That is the feature — but only if\nyour code **retries** the aborted transaction.\n\nWithout a retry, the user sees a 500 error for a perfectly valid transfer. Try\n\"SERIALIZABLE with retry\" in the **concurrency lab** to watch it happen.\n"
+      },
+      {
+        "id": "api-retries",
+        "title": "Retry in the API",
+        "body": "Select the **writes** arrow from **AccountRepository** and set **Concurrency control**\nto **serializable-retry**: the transaction is retried a few times on 40001, with a short\nrandom backoff.\n",
+        "check": {
+          "hasRelation": {
+            "type": "writes",
+            "from": {
+              "id": "repo.accounts"
+            },
+            "where": {
+              "properties.concurrencyControl": "serializable-retry"
+            }
+          }
+        },
+        "solution": [
+          {
+            "op": "updateRelation",
+            "id": "rel.repo-writes",
+            "patch": {
+              "properties": {
+                "isolation": "serializable",
+                "concurrencyControl": "serializable-retry"
+              }
+            }
+          }
+        ]
+      },
+      {
+        "id": "every-path",
+        "title": "Every write path retries",
+        "body": "The nightly **Interest job** writes the same accounts, also under SERIALIZABLE. When it\ncollides with a transfer, it can be the one that is aborted. Give its writes arrow the\nsame setting.\n",
+        "check": {
+          "finding": {
+            "ruleId": "RNP-022",
+            "present": false
+          },
+          "message": "A serializable write path still does not retry."
+        },
+        "success": "Wrap the retry in one helper (`withSerializableRetry(tx => …)`) and use it everywhere.\nKeep transactions short and make the work inside them idempotent: a retry runs it again.\n",
+        "solution": [
+          {
+            "op": "updateRelation",
+            "id": "rel.interest-writes",
+            "patch": {
+              "properties": {
+                "isolation": "serializable",
+                "concurrencyControl": "serializable-retry"
+              }
+            }
+          }
+        ]
+      }
+    ],
+    "source": "content/lessons/serializable-retries.yaml"
+  },
+  {
+    "id": "lesson.server-data-out-of-the-store",
+    "title": "Exercise: take server data out of the Redux store",
+    "summary": "The app already uses TanStack Query, but a thunk still copies orders into Redux. Two caches disagree and the list shows old data. Fix it until the rules are happy.",
+    "track": "state-management",
+    "level": "intermediate",
+    "minutes": 12,
+    "profile": "react-node-postgres",
+    "conceptIds": [
+      "react.server-state",
+      "react.client-store",
+      "react.action",
+      "updates"
+    ],
+    "start": {
+      "ops": [
+        {
+          "op": "addElement",
+          "element": {
+            "id": "app.shop",
+            "kind": "react.app",
+            "name": "Shop",
+            "status": "existing"
+          }
+        },
+        {
+          "op": "addElement",
+          "element": {
+            "id": "route.orders",
+            "kind": "react.route",
+            "name": "Orders page",
+            "parentId": "app.shop",
+            "status": "existing"
+          }
+        },
+        {
+          "op": "addElement",
+          "element": {
+            "id": "qcache.query",
+            "kind": "react.server-state",
+            "name": "Query cache",
+            "parentId": "app.shop",
+            "status": "existing",
+            "properties": {
+              "lib": "tanstack-query"
+            }
+          }
+        },
+        {
+          "op": "addElement",
+          "element": {
+            "id": "store-ui.orders",
+            "kind": "react.client-store",
+            "name": "Orders store",
+            "parentId": "app.shop",
+            "status": "existing",
+            "properties": {
+              "lib": "redux-toolkit"
+            }
+          }
+        },
+        {
+          "op": "addElement",
+          "element": {
+            "id": "act.fetch-orders",
+            "kind": "react.action",
+            "name": "fetchOrders",
+            "parentId": "app.shop",
+            "status": "existing",
+            "properties": {
+              "kind": "redux-thunk",
+              "async": true
+            }
+          }
+        },
+        {
+          "op": "addElement",
+          "element": {
+            "id": "apic.http",
+            "kind": "react.api-client",
+            "name": "API client",
+            "parentId": "app.shop",
+            "status": "existing"
+          }
+        },
+        {
+          "op": "addRelation",
+          "relation": {
+            "id": "rel.cache-fetches",
+            "type": "fetches-via",
+            "sourceId": "qcache.query",
+            "targetId": "apic.http",
+            "status": "existing"
+          }
+        },
+        {
+          "op": "addRelation",
+          "relation": {
+            "id": "rel.thunk-fetches",
+            "type": "fetches-via",
+            "sourceId": "act.fetch-orders",
+            "targetId": "apic.http",
+            "status": "existing"
+          }
+        },
+        {
+          "op": "addRelation",
+          "relation": {
+            "id": "rel.thunk-updates",
+            "type": "updates",
+            "sourceId": "act.fetch-orders",
+            "targetId": "store-ui.orders",
+            "status": "existing"
+          }
+        },
+        {
+          "op": "addRelation",
+          "relation": {
+            "id": "rel.page-uses-store",
+            "type": "uses-state",
+            "sourceId": "route.orders",
+            "targetId": "store-ui.orders",
+            "status": "existing"
+          }
+        },
+        {
+          "op": "addRelation",
+          "relation": {
+            "id": "rel.page-dispatches",
+            "type": "dispatches",
+            "sourceId": "route.orders",
+            "targetId": "act.fetch-orders",
+            "status": "existing"
+          }
+        }
+      ]
+    },
+    "steps": [
+      {
+        "id": "two-caches",
+        "title": "Two caches, two truths",
+        "body": "Cancelling an order invalidates the TanStack Query cache, but the orders page reads the\n**Redux** copy that `fetchOrders` filled ten minutes ago. The order still shows as open.\n\nThe **Problems** panel has a tip: *Server data in the client store*. The thunk\nre-implements, by hand, what the query cache already does: loading, errors, caching and\nrefetching.\n"
+      },
+      {
+        "id": "read-from-cache",
+        "title": "Read orders from the query cache",
+        "body": "Let the **Orders page** **use state** from the **Query cache** instead of the Orders store.\nDelete the arrow from the page to the Orders store.\n",
+        "check": {
+          "all": [
+            {
+              "hasRelation": {
+                "type": "uses-state",
+                "from": {
+                  "id": "route.orders"
+                },
+                "to": {
+                  "id": "qcache.query"
+                }
+              }
+            },
+            {
+              "not": {
+                "hasRelation": {
+                  "type": "uses-state",
+                  "from": {
+                    "id": "route.orders"
+                  },
+                  "to": {
+                    "id": "store-ui.orders"
+                  }
+                }
+              },
+              "message": "The Orders page still reads the Orders store."
+            }
+          ]
+        },
+        "solution": [
+          {
+            "op": "addRelation",
+            "relation": {
+              "id": "rel.page-uses-cache",
+              "type": "uses-state",
+              "sourceId": "route.orders",
+              "targetId": "qcache.query",
+              "status": "planned"
+            }
+          },
+          {
+            "op": "removeRelation",
+            "id": "rel.page-uses-store"
+          }
+        ]
+      },
+      {
+        "id": "retire-thunk",
+        "title": "Retire the thunk",
+        "body": "Nobody needs the Redux copy now. Delete the **fetchOrders** thunk (its arrows go with it).\nKeep the Redux store only for state the server does not own — or delete it, if nothing is\nleft.\n",
+        "check": {
+          "all": [
+            {
+              "finding": {
+                "ruleId": "RNP-012",
+                "present": false
+              },
+              "message": "A thunk still loads server data into the client store."
+            },
+            {
+              "not": {
+                "hasRelation": {
+                  "type": "dispatches",
+                  "from": {
+                    "id": "route.orders"
+                  },
+                  "to": {
+                    "kind": "react.action"
+                  }
+                }
+              },
+              "message": "The Orders page still dispatches the thunk."
+            }
+          ]
+        },
+        "success": "One source of truth for server data. Invalidating `['orders']` after a cancel now updates\nevery screen that shows orders.\n",
+        "solution": [
+          {
+            "op": "removeElement",
+            "id": "act.fetch-orders",
+            "cascade": true
+          }
+        ]
+      }
+    ],
+    "source": "content/lessons/server-data-out-of-the-store.yaml"
+  },
+  {
+    "id": "lesson.server-vs-client-state",
+    "title": "Server state vs client state",
+    "summary": "An orders page needs data from the server and a filter the user picked. Put each in the right place and see why mixing them makes screens stale.",
+    "track": "state-management",
+    "level": "beginner",
+    "minutes": 12,
+    "profile": "react-node-postgres",
+    "conceptIds": [
+      "react.server-state",
+      "react.client-store",
+      "uses-state",
+      "fetches-via"
+    ],
+    "start": {
+      "ops": [
+        {
+          "op": "addElement",
+          "element": {
+            "id": "app.shop",
+            "kind": "react.app",
+            "name": "Shop",
+            "status": "existing"
+          }
+        },
+        {
+          "op": "addElement",
+          "element": {
+            "id": "route.orders",
+            "kind": "react.route",
+            "name": "Orders page",
+            "parentId": "app.shop",
+            "status": "existing",
+            "properties": {
+              "path": "/orders"
+            }
+          }
+        },
+        {
+          "op": "addElement",
+          "element": {
+            "id": "cmp.filters",
+            "kind": "react.component",
+            "name": "Filter bar",
+            "parentId": "app.shop",
+            "status": "existing"
+          }
+        },
+        {
+          "op": "addElement",
+          "element": {
+            "id": "apic.http",
+            "kind": "react.api-client",
+            "name": "API client",
+            "parentId": "app.shop",
+            "status": "existing"
+          }
+        },
+        {
+          "op": "addElement",
+          "element": {
+            "id": "svc.api",
+            "kind": "node.service",
+            "name": "API",
+            "status": "existing"
+          }
+        },
+        {
+          "op": "addElement",
+          "element": {
+            "id": "mw.auth",
+            "kind": "node.middleware",
+            "name": "Session check",
+            "parentId": "svc.api",
+            "status": "existing",
+            "properties": {
+              "kind": "auth"
+            }
+          }
+        },
+        {
+          "op": "addRelation",
+          "relation": {
+            "id": "rel.client-calls-api",
+            "type": "calls",
+            "sourceId": "apic.http",
+            "targetId": "svc.api",
+            "protocol": "http",
+            "status": "existing"
+          }
+        },
+        {
+          "op": "addRelation",
+          "relation": {
+            "id": "rel.orders-renders-filters",
+            "type": "renders",
+            "sourceId": "route.orders",
+            "targetId": "cmp.filters",
+            "status": "existing"
+          }
+        }
+      ]
+    },
+    "steps": [
+      {
+        "id": "two-kinds",
+        "title": "Two kinds of state",
+        "body": "The orders page shows **the user's orders** and a **filter** (\"only open orders\").\n\n- The orders live on the server. Your copy can go stale: the warehouse ships an order\n  while the page is open. That is **server state**.\n- The filter exists only in this browser. Nobody else can change it. That is **client\n  state**.\n\nThey need different tools.\n"
+      },
+      {
+        "id": "server-state",
+        "title": "Put the orders in a server-state cache",
+        "body": "Add a **Server-state cache** inside the app. The orders page **uses state** from it, and\nthe cache **fetches via** the API client.\n",
+        "check": {
+          "all": [
+            {
+              "hasRelation": {
+                "type": "uses-state",
+                "from": {
+                  "id": "route.orders"
+                },
+                "to": {
+                  "kind": "react.server-state"
+                }
+              }
+            },
+            {
+              "hasRelation": {
+                "type": "fetches-via",
+                "from": {
+                  "kind": "react.server-state"
+                },
+                "to": {
+                  "id": "apic.http"
+                }
+              }
+            }
+          ]
+        },
+        "success": "The cache handles loading and error states, shares the data between components, and\nrefetches when the user comes back to the tab — none of it written by hand.\n",
+        "solution": [
+          {
+            "op": "addElement",
+            "element": {
+              "id": "qcache.query",
+              "kind": "react.server-state",
+              "name": "Query cache",
+              "parentId": "app.shop",
+              "status": "planned",
+              "properties": {
+                "lib": "tanstack-query",
+                "staleTimeMs": 30000
+              }
+            }
+          },
+          {
+            "op": "addRelation",
+            "relation": {
+              "id": "rel.orders-uses-cache",
+              "type": "uses-state",
+              "sourceId": "route.orders",
+              "targetId": "qcache.query",
+              "status": "planned"
+            }
+          },
+          {
+            "op": "addRelation",
+            "relation": {
+              "id": "rel.cache-fetches",
+              "type": "fetches-via",
+              "sourceId": "qcache.query",
+              "targetId": "apic.http",
+              "status": "planned"
+            }
+          }
+        ]
+      },
+      {
+        "id": "client-state",
+        "title": "Put the filter in a client store",
+        "body": "Add a **Client state store** named \"UI store\" inside the app. The **Filter bar** and the\n**Orders page** both **use state** from it: the bar changes the filter, the page reads it.\n",
+        "check": {
+          "all": [
+            {
+              "hasRelation": {
+                "type": "uses-state",
+                "from": {
+                  "id": "cmp.filters"
+                },
+                "to": {
+                  "kind": "react.client-store"
+                }
+              }
+            },
+            {
+              "hasRelation": {
+                "type": "uses-state",
+                "from": {
+                  "id": "route.orders"
+                },
+                "to": {
+                  "kind": "react.client-store"
+                }
+              }
+            }
+          ]
+        },
+        "hints": [
+          "The client store is in the Full palette (Frontend group), with the shop icon."
+        ],
+        "success": "Two stores, two jobs. The query key includes the filter (`['orders', { status: 'open' }]`),\nso changing the filter fetches the right page of data — and the server data is never\ncopied into the UI store.\n",
+        "solution": [
+          {
+            "op": "addElement",
+            "element": {
+              "id": "store-ui.ui",
+              "kind": "react.client-store",
+              "name": "UI store",
+              "parentId": "app.shop",
+              "status": "planned",
+              "properties": {
+                "lib": "zustand",
+                "persist": "none"
+              }
+            }
+          },
+          {
+            "op": "addRelation",
+            "relation": {
+              "id": "rel.filters-uses-ui",
+              "type": "uses-state",
+              "sourceId": "cmp.filters",
+              "targetId": "store-ui.ui",
+              "status": "planned"
+            }
+          },
+          {
+            "op": "addRelation",
+            "relation": {
+              "id": "rel.orders-uses-ui",
+              "type": "uses-state",
+              "sourceId": "route.orders",
+              "targetId": "store-ui.ui",
+              "status": "planned"
+            }
+          }
+        ]
+      }
+    ],
+    "source": "content/lessons/server-vs-client-state.yaml"
+  },
+  {
+    "id": "lesson.share-a-contract",
+    "title": "One contract for client and server",
+    "summary": "The frontend and the API disagree about a field name and the checkout breaks. Put the API in a shared contract that both sides depend on.",
+    "track": "api-design",
+    "level": "intermediate",
+    "minutes": 12,
+    "profile": "react-node-postgres",
+    "conceptIds": [
+      "node.contract",
+      "node.endpoint",
+      "node.dto",
+      "react.api-client",
+      "depends-on"
+    ],
+    "start": {
+      "ops": [
+        {
+          "op": "addElement",
+          "element": {
+            "id": "app.shop",
+            "kind": "react.app",
+            "name": "Shop",
+            "status": "existing"
+          }
+        },
+        {
+          "op": "addElement",
+          "element": {
+            "id": "apic.http",
+            "kind": "react.api-client",
+            "name": "API client",
+            "parentId": "app.shop",
+            "status": "existing",
+            "properties": {
+              "kind": "fetch"
+            }
+          }
+        },
+        {
+          "op": "addElement",
+          "element": {
+            "id": "svc.api",
+            "kind": "node.service",
+            "name": "API",
+            "status": "existing"
+          }
+        },
+        {
+          "op": "addElement",
+          "element": {
+            "id": "mw.auth",
+            "kind": "node.middleware",
+            "name": "Session check",
+            "parentId": "svc.api",
+            "status": "existing",
+            "properties": {
+              "kind": "auth"
+            }
+          }
+        },
+        {
+          "op": "addElement",
+          "element": {
+            "id": "ctl.orders",
+            "kind": "node.route-handler",
+            "name": "Order routes",
+            "parentId": "svc.api",
+            "status": "existing",
+            "properties": {
+              "validation": "zod"
+            }
+          }
+        },
+        {
+          "op": "addRelation",
+          "relation": {
+            "id": "rel.client-calls-api",
+            "type": "calls",
+            "sourceId": "apic.http",
+            "targetId": "svc.api",
+            "protocol": "http",
+            "properties": {
+              "auth": "session-cookie"
+            },
+            "status": "existing"
+          }
+        }
+      ]
+    },
+    "steps": [
+      {
+        "id": "drift",
+        "title": "When two sides disagree",
+        "body": "The backend renamed `totalPrice` to `total`. The frontend still reads `totalPrice` and\nshows \"NaN €\" in the checkout. Nothing failed at build time, because each side had its\nown idea of the API.\n\nA **contract** writes the API down once — as OpenAPI, zod schemas or a tRPC router — and\nboth sides build against it.\n"
+      },
+      {
+        "id": "contract",
+        "title": "Create the contract",
+        "body": "Add an **API contract package** named \"Shop API contract\". Inside it, add an **API\nendpoint** with method **POST** and path **/orders**.\n",
+        "check": {
+          "hasElement": {
+            "kind": "node.endpoint",
+            "parent": {
+              "kind": "node.contract"
+            },
+            "where": {
+              "properties.method": "POST"
+            }
+          }
+        },
+        "hints": [
+          "The contract is in the Full palette (Backend group). Endpoints fit inside it."
+        ],
+        "solution": [
+          {
+            "op": "addElement",
+            "element": {
+              "id": "api.shop",
+              "kind": "node.contract",
+              "name": "Shop API contract",
+              "status": "planned"
+            }
+          },
+          {
+            "op": "addElement",
+            "element": {
+              "id": "ep.create-order",
+              "kind": "node.endpoint",
+              "name": "POST /orders",
+              "parentId": "api.shop",
+              "status": "planned",
+              "properties": {
+                "method": "POST",
+                "path": "/orders",
+                "auth": "required",
+                "statusCodes": [
+                  201,
+                  400,
+                  409
+                ]
+              }
+            }
+          }
+        ]
+      },
+      {
+        "id": "both-sides",
+        "title": "Both sides depend on it",
+        "body": "Let the **API client** and **Order routes** both **depend on** the contract. The client\ngets typed functions; the server validates requests against the same schemas.\n",
+        "check": {
+          "all": [
+            {
+              "hasRelation": {
+                "type": "depends-on",
+                "from": {
+                  "id": "apic.http"
+                },
+                "to": {
+                  "kind": "node.contract"
+                }
+              }
+            },
+            {
+              "hasRelation": {
+                "type": "depends-on",
+                "from": {
+                  "id": "ctl.orders"
+                },
+                "to": {
+                  "kind": "node.contract"
+                }
+              }
+            }
+          ]
+        },
+        "success": "Rename a field now and both builds fail until both sides agree — at build time, not in\nthe checkout. Browser code depends on the contract, never on server code.\n",
+        "solution": [
+          {
+            "op": "addRelation",
+            "relation": {
+              "id": "rel.client-depends-on-contract",
+              "type": "depends-on",
+              "sourceId": "apic.http",
+              "targetId": "api.shop",
+              "status": "planned"
+            }
+          },
+          {
+            "op": "addRelation",
+            "relation": {
+              "id": "rel.routes-depend-on-contract",
+              "type": "depends-on",
+              "sourceId": "ctl.orders",
+              "targetId": "api.shop",
+              "status": "planned"
+            }
+          }
+        ]
+      }
+    ],
+    "source": "content/lessons/share-a-contract.yaml"
+  },
+  {
+    "id": "lesson.three-models",
+    "title": "Domain, data shape, table — three models of one order",
+    "summary": "An order is a row in a table, a JSON body on the wire, and an object with rules in your code. Draw all three and see why they differ.",
+    "track": "data-and-models",
+    "level": "intermediate",
+    "minutes": 15,
+    "profile": "react-node-postgres",
+    "conceptIds": [
+      "topic.models",
+      "node.domain",
+      "node.dto",
+      "node.endpoint",
+      "node.use-case"
+    ],
+    "start": {
+      "ops": [
+        {
+          "op": "addElement",
+          "element": {
+            "id": "svc.api",
+            "kind": "node.service",
+            "name": "Orders API",
+            "status": "existing"
+          }
+        },
+        {
+          "op": "addElement",
+          "element": {
+            "id": "ctl.orders",
+            "kind": "node.route-handler",
+            "name": "Order routes",
+            "parentId": "svc.api",
+            "status": "existing",
+            "properties": {
+              "validation": "zod"
+            }
+          }
+        },
+        {
+          "op": "addElement",
+          "element": {
+            "id": "ep.create-order",
+            "kind": "node.endpoint",
+            "name": "POST /orders",
+            "parentId": "ctl.orders",
+            "status": "existing",
+            "properties": {
+              "method": "POST",
+              "path": "/orders",
+              "auth": "required"
+            }
+          }
+        },
+        {
+          "op": "addElement",
+          "element": {
+            "id": "uc.place-order",
+            "kind": "node.use-case",
+            "name": "PlaceOrder",
+            "parentId": "svc.api",
+            "status": "existing"
+          }
+        },
+        {
+          "op": "addElement",
+          "element": {
+            "id": "repo.orders",
+            "kind": "node.repository",
+            "name": "OrderRepository",
+            "parentId": "svc.api",
+            "status": "existing"
+          }
+        },
+        {
+          "op": "addRelation",
+          "relation": {
+            "id": "rel.ctl-calls-uc",
+            "type": "calls",
+            "sourceId": "ctl.orders",
+            "targetId": "uc.place-order",
+            "status": "existing"
+          }
+        },
+        {
+          "op": "addRelation",
+          "relation": {
+            "id": "rel.uc-calls-repo",
+            "type": "calls",
+            "sourceId": "uc.place-order",
+            "targetId": "repo.orders",
+            "status": "existing"
+          }
+        }
+      ]
+    },
+    "steps": [
+      {
+        "id": "three-shapes",
+        "title": "Same order, three shapes",
+        "body": "- The **table row** has `customer_id`, `created_at`, maybe a `deleted_at` — whatever\n  storage needs.\n- The **data shape (DTO)** is what crosses the network: the request body for\n  `POST /orders`, the JSON in the response. It must never leak internal columns.\n- The **domain model** holds the rules: an order cannot ship before it is paid.\n\nMixing them up is the most common source of leaks and of rules scattered everywhere.\n"
+      },
+      {
+        "id": "domain",
+        "title": "Give the rules a home",
+        "body": "Add a **Domain model** named \"Order\" inside the Orders API, and let **PlaceOrder**\n**depend on** it. The use case loads data, then asks the Order to apply the rules.\n",
+        "check": {
+          "hasRelation": {
+            "type": "depends-on",
+            "from": {
+              "id": "uc.place-order"
+            },
+            "to": {
+              "kind": "node.domain"
+            }
+          }
+        },
+        "hints": [
+          "The Domain model is the hexagon in the Backend group."
+        ],
+        "success": "The rule \"a paid order cannot be cancelled after shipping\" now has one place to live,\nand a test that needs no database.\n",
+        "solution": [
+          {
+            "op": "addElement",
+            "element": {
+              "id": "dom.order",
+              "kind": "node.domain",
+              "name": "Order",
+              "parentId": "svc.api",
+              "status": "planned"
+            }
+          },
+          {
+            "op": "addRelation",
+            "relation": {
+              "id": "rel.uc-depends-on-order",
+              "type": "depends-on",
+              "sourceId": "uc.place-order",
+              "targetId": "dom.order",
+              "status": "planned"
+            }
+          }
+        ]
+      },
+      {
+        "id": "request-shape",
+        "title": "Describe the request",
+        "body": "Add a **Data shape (DTO)** named \"CreateOrderRequest\" inside the API, with role\n**request**. Let the endpoint `POST /orders` **depend on** it.\n\nThe request holds only what the browser may choose: product IDs and quantities. Not the\nprice — the server looks that up.\n",
+        "check": {
+          "hasRelation": {
+            "type": "depends-on",
+            "from": {
+              "id": "ep.create-order"
+            },
+            "to": {
+              "kind": "node.dto",
+              "where": {
+                "properties.role": "request"
+              }
+            }
+          },
+          "message": "Let POST /orders depend on a data shape with the role \"request\"."
+        },
+        "success": "If the price came from the browser, anyone could buy for one cent. The DTO makes the\nboundary explicit, and validation enforces it.\n",
+        "solution": [
+          {
+            "op": "addElement",
+            "element": {
+              "id": "dto.create-order",
+              "kind": "node.dto",
+              "name": "CreateOrderRequest",
+              "parentId": "svc.api",
+              "status": "planned",
+              "properties": {
+                "role": "request",
+                "format": "zod",
+                "fields": [
+                  {
+                    "name": "items",
+                    "type": "{ productId: string; quantity: number }[]",
+                    "required": true
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "op": "addRelation",
+            "relation": {
+              "id": "rel.ep-depends-on-request",
+              "type": "depends-on",
+              "sourceId": "ep.create-order",
+              "targetId": "dto.create-order",
+              "status": "planned"
+            }
+          }
+        ]
+      },
+      {
+        "id": "response-shape",
+        "title": "And the response",
+        "body": "Add a second DTO, \"OrderSummary\", with role **response**, and let the endpoint depend on\nit too: `id`, `status`, `total` — and nothing internal.\n",
+        "check": {
+          "hasRelation": {
+            "type": "depends-on",
+            "from": {
+              "id": "ep.create-order"
+            },
+            "to": {
+              "kind": "node.dto",
+              "where": {
+                "properties.role": "response"
+              }
+            }
+          }
+        },
+        "success": "Three models, three jobs. The table can gain columns, the domain can gain rules, and the\nAPI stays the same for every client.\n",
+        "solution": [
+          {
+            "op": "addElement",
+            "element": {
+              "id": "dto.order-summary",
+              "kind": "node.dto",
+              "name": "OrderSummary",
+              "parentId": "svc.api",
+              "status": "planned",
+              "properties": {
+                "role": "response",
+                "fields": [
+                  {
+                    "name": "id",
+                    "type": "string",
+                    "required": true
+                  },
+                  {
+                    "name": "status",
+                    "type": "'new' | 'paid' | 'shipped'",
+                    "required": true
+                  },
+                  {
+                    "name": "total",
+                    "type": "number",
+                    "required": true
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "op": "addRelation",
+            "relation": {
+              "id": "rel.ep-depends-on-summary",
+              "type": "depends-on",
+              "sourceId": "ep.create-order",
+              "targetId": "dto.order-summary",
+              "status": "planned"
+            }
+          }
+        ]
+      }
+    ],
+    "source": "content/lessons/three-models.yaml"
+  },
+  {
+    "id": "lesson.tokens-out-of-storage",
+    "title": "Exercise: tokens out of localStorage",
+    "summary": "The shop keeps access tokens in localStorage and persists an auth store there too. One XSS bug would leak every session. Move them out until the rules are happy.",
+    "track": "auth",
+    "level": "intermediate",
+    "minutes": 10,
+    "profile": "react-node-postgres",
+    "conceptIds": [
+      "topic.authentication",
+      "react.app",
+      "react.client-store"
+    ],
+    "start": {
+      "ops": [
+        {
+          "op": "addElement",
+          "element": {
+            "id": "app.shop",
+            "kind": "react.app",
+            "name": "Shop",
+            "status": "existing",
+            "properties": {
+              "tokenStorage": "local-storage"
+            }
+          }
+        },
+        {
+          "op": "addElement",
+          "element": {
+            "id": "store-ui.auth",
+            "kind": "react.client-store",
+            "name": "Auth store",
+            "parentId": "app.shop",
+            "status": "existing",
+            "properties": {
+              "lib": "zustand",
+              "persist": "local-storage"
+            }
+          }
+        },
+        {
+          "op": "addElement",
+          "element": {
+            "id": "svc.api",
+            "kind": "node.service",
+            "name": "API",
+            "status": "existing"
+          }
+        },
+        {
+          "op": "addElement",
+          "element": {
+            "id": "mw.auth",
+            "kind": "node.middleware",
+            "name": "Auth check",
+            "parentId": "svc.api",
+            "status": "existing",
+            "properties": {
+              "kind": "auth"
+            }
+          }
+        },
+        {
+          "op": "addRelation",
+          "relation": {
+            "id": "rel.shop-calls-api",
+            "type": "calls",
+            "sourceId": "app.shop",
+            "targetId": "svc.api",
+            "protocol": "http",
+            "properties": {
+              "auth": "bearer-token"
+            },
+            "status": "existing"
+          }
+        }
+      ]
+    },
+    "steps": [
+      {
+        "id": "the-risk",
+        "title": "Why localStorage is risky",
+        "body": "Any JavaScript on the page can read `localStorage`: your code, every npm package you\nship, and any script an attacker manages to inject (XSS). Tokens stored there can be\ncopied and used from anywhere until they expire.\n\nAn **HttpOnly** cookie cannot be read by JavaScript at all. The browser sends it with\neach request, and `Secure` and `SameSite` limit where.\n"
+      },
+      {
+        "id": "cookie",
+        "title": "Use an HttpOnly cookie",
+        "body": "Select the **Shop** app and set **Token storage** to **http-only-cookie**. Then select the\narrow to the API and set its **auth** to **session-cookie**.\n",
+        "check": {
+          "all": [
+            {
+              "hasElement": {
+                "id": "app.shop",
+                "where": {
+                  "properties.tokenStorage": "http-only-cookie"
+                }
+              }
+            },
+            {
+              "hasRelation": {
+                "type": "calls",
+                "from": {
+                  "id": "app.shop"
+                },
+                "to": {
+                  "id": "svc.api"
+                },
+                "where": {
+                  "properties.auth": "session-cookie"
+                }
+              }
+            }
+          ]
+        },
+        "hints": [
+          "With cookies, add CSRF protection for state-changing requests (SameSite=Lax or Strict, plus a CSRF token or a custom header)."
+        ],
+        "solution": [
+          {
+            "op": "updateElement",
+            "id": "app.shop",
+            "patch": {
+              "properties": {
+                "tokenStorage": "http-only-cookie"
+              }
+            }
+          },
+          {
+            "op": "updateRelation",
+            "id": "rel.shop-calls-api",
+            "patch": {
+              "properties": {
+                "auth": "session-cookie"
+              }
+            }
+          }
+        ]
+      },
+      {
+        "id": "store",
+        "title": "Do not persist the auth store",
+        "body": "The **Auth store** still saves the user's session data to `localStorage`. Set its\n**persist** to **none**. After a reload, the app asks the API \"who am I?\" (`GET /me`),\nwhich answers from the cookie.\n",
+        "check": {
+          "finding": {
+            "ruleId": "RNP-026",
+            "present": false
+          },
+          "message": "Auth data is still kept in web storage."
+        },
+        "success": "Nothing secret is readable by scripts anymore. An XSS bug is still bad — but it can no\nlonger copy sessions to an attacker's machine.\n",
+        "solution": [
+          {
+            "op": "updateElement",
+            "id": "store-ui.auth",
+            "patch": {
+              "properties": {
+                "lib": "zustand",
+                "persist": "none"
+              }
+            }
+          }
+        ]
+      }
+    ],
+    "source": "content/lessons/tokens-out-of-storage.yaml"
+  },
+  {
+    "id": "lesson.users-and-outside-world",
+    "title": "Who uses the system, and what it depends on",
+    "summary": "Add the people who use a shop and the outside services it relies on — and learn why every call to someone else's system needs a timeout.",
+    "track": "foundations",
+    "level": "beginner",
+    "minutes": 10,
+    "profile": "react-node-postgres",
+    "conceptIds": [
+      "gen.actor",
+      "gen.external",
+      "calls",
+      "node.worker"
+    ],
+    "start": {
+      "ops": [
+        {
+          "op": "addElement",
+          "element": {
+            "id": "app.shop",
+            "kind": "react.app",
+            "name": "Shop",
+            "status": "existing"
+          }
+        },
+        {
+          "op": "addElement",
+          "element": {
+            "id": "app.admin",
+            "kind": "react.app",
+            "name": "Admin",
+            "status": "existing"
+          }
+        },
+        {
+          "op": "addElement",
+          "element": {
+            "id": "svc.api",
+            "kind": "node.service",
+            "name": "API",
+            "status": "existing"
+          }
+        },
+        {
+          "op": "addRelation",
+          "relation": {
+            "id": "rel.shop-calls-api",
+            "type": "calls",
+            "sourceId": "app.shop",
+            "targetId": "svc.api",
+            "protocol": "http",
+            "properties": {
+              "auth": "session-cookie"
+            },
+            "status": "existing"
+          }
+        },
+        {
+          "op": "addRelation",
+          "relation": {
+            "id": "rel.admin-calls-api",
+            "type": "calls",
+            "sourceId": "app.admin",
+            "targetId": "svc.api",
+            "protocol": "http",
+            "properties": {
+              "auth": "session-cookie"
+            },
+            "status": "existing"
+          }
+        }
+      ]
+    },
+    "steps": [
+      {
+        "id": "people",
+        "title": "Start with the people",
+        "body": "A diagram without people does not say who the system is for. Add a **User / actor**\nnamed \"Customer\" who **calls** the *Shop* app, and one named \"Support agent\" who calls\nthe *Admin* app.\n",
+        "check": {
+          "all": [
+            {
+              "hasRelation": {
+                "type": "calls",
+                "from": {
+                  "kind": "gen.actor"
+                },
+                "to": {
+                  "id": "app.shop"
+                }
+              }
+            },
+            {
+              "hasRelation": {
+                "type": "calls",
+                "from": {
+                  "kind": "gen.actor"
+                },
+                "to": {
+                  "id": "app.admin"
+                }
+              }
+            }
+          ]
+        },
+        "hints": [
+          "The actor is the first shape in the Generic group."
+        ],
+        "success": "Two kinds of users, two apps, and later two sets of permissions. Each actor's path through\nthe system is a story you can turn into a tour.\n",
+        "solution": [
+          {
+            "op": "addElement",
+            "element": {
+              "id": "actor.customer",
+              "kind": "gen.actor",
+              "name": "Customer",
+              "status": "planned"
+            }
+          },
+          {
+            "op": "addElement",
+            "element": {
+              "id": "actor.support",
+              "kind": "gen.actor",
+              "name": "Support agent",
+              "status": "planned"
+            }
+          },
+          {
+            "op": "addRelation",
+            "relation": {
+              "id": "rel.customer-calls-shop",
+              "type": "calls",
+              "sourceId": "actor.customer",
+              "targetId": "app.shop",
+              "status": "planned"
+            }
+          },
+          {
+            "op": "addRelation",
+            "relation": {
+              "id": "rel.support-calls-admin",
+              "type": "calls",
+              "sourceId": "actor.support",
+              "targetId": "app.admin",
+              "status": "planned"
+            }
+          }
+        ]
+      },
+      {
+        "id": "payments",
+        "title": "Add the payment provider",
+        "body": "The shop takes payments through a provider like Stripe. Add an **External system**\nnamed \"Payments\" and let the **API** call it.\n\nThen select that arrow and set **Timeout (ms)** to 5000. A provider that hangs must not\nmake your customers wait forever.\n",
+        "check": {
+          "hasRelation": {
+            "type": "calls",
+            "from": {
+              "id": "svc.api"
+            },
+            "to": {
+              "kind": "gen.external"
+            },
+            "where": {
+              "properties.timeoutMs": {
+                "exists": true
+              }
+            }
+          },
+          "message": "Connect the API to an external system and give the call a timeout."
+        },
+        "hints": [
+          "The timeout is in the inspector when the arrow is selected."
+        ],
+        "success": "The browser never calls the provider with your secret key — the API does, with a timeout.\n",
+        "solution": [
+          {
+            "op": "addElement",
+            "element": {
+              "id": "ext.payments",
+              "kind": "gen.external",
+              "name": "Payments",
+              "tech": "Stripe",
+              "status": "planned"
+            }
+          },
+          {
+            "op": "addRelation",
+            "relation": {
+              "id": "rel.api-calls-payments",
+              "type": "calls",
+              "sourceId": "svc.api",
+              "targetId": "ext.payments",
+              "protocol": "http",
+              "properties": {
+                "timeoutMs": 5000
+              },
+              "status": "planned"
+            }
+          }
+        ]
+      },
+      {
+        "id": "email-in-background",
+        "title": "Email in the background",
+        "body": "Order emails go through an email provider. Sending one can take seconds, so the customer\nshould not wait for it. Add a **Background worker** named \"Email worker\" and an\n**External system** named \"Email\"; the worker **calls** the email system.\n",
+        "check": {
+          "hasRelation": {
+            "type": "calls",
+            "from": {
+              "kind": "node.worker"
+            },
+            "to": {
+              "kind": "gen.external",
+              "nameIncludes": "email"
+            }
+          }
+        },
+        "hints": [
+          "In a later lesson, the API hands the work to the worker through a job queue."
+        ],
+        "success": "Slow and unreliable outside services belong behind a worker: it can retry without\nanyone waiting.\n",
+        "solution": [
+          {
+            "op": "addElement",
+            "element": {
+              "id": "wrk.email",
+              "kind": "node.worker",
+              "name": "Email worker",
+              "status": "planned"
+            }
+          },
+          {
+            "op": "addElement",
+            "element": {
+              "id": "ext.email",
+              "kind": "gen.external",
+              "name": "Email",
+              "tech": "SendGrid",
+              "status": "planned"
+            }
+          },
+          {
+            "op": "addRelation",
+            "relation": {
+              "id": "rel.worker-calls-email",
+              "type": "calls",
+              "sourceId": "wrk.email",
+              "targetId": "ext.email",
+              "protocol": "http",
+              "properties": {
+                "timeoutMs": 10000
+              },
+              "status": "planned"
+            }
+          }
+        ]
+      }
+    ],
+    "source": "content/lessons/users-and-outside-world.yaml"
   }
 ];

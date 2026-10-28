@@ -1,0 +1,69 @@
+id: lesson.share-a-contract
+title: One contract for client and server
+summary: The frontend and the API disagree about a field name and the checkout breaks. Put the API in a shared contract that both sides depend on.
+track: api-design
+level: intermediate
+minutes: 12
+profile: react-node-postgres
+conceptIds: [node.contract, node.endpoint, node.dto, react.api-client, depends-on]
+start:
+  ops:
+    - op: addElement
+      element: { id: app.shop, kind: react.app, name: Shop, status: existing }
+    - op: addElement
+      element: { id: apic.http, kind: react.api-client, name: API client, parentId: app.shop, status: existing, properties: { kind: fetch } }
+    - op: addElement
+      element: { id: svc.api, kind: node.service, name: API, status: existing }
+    - op: addElement
+      element: { id: mw.auth, kind: node.middleware, name: Session check, parentId: svc.api, status: existing, properties: { kind: auth } }
+    - op: addElement
+      element: { id: ctl.orders, kind: node.route-handler, name: Order routes, parentId: svc.api, status: existing, properties: { validation: zod } }
+    - op: addRelation
+      relation: { id: rel.client-calls-api, type: calls, sourceId: apic.http, targetId: svc.api, protocol: http, status: existing, properties: { auth: session-cookie } }
+steps:
+  - id: drift
+    title: When two sides disagree
+    body: |
+      The backend renamed `totalPrice` to `total`. The frontend still reads `totalPrice` and
+      shows "NaN €" in the checkout. Nothing failed at build time, because each side had its
+      own idea of the API.
+
+      A **contract** writes the API down once — as OpenAPI, zod schemas or a tRPC router — and
+      both sides build against it.
+
+  - id: contract
+    title: Create the contract
+    body: |
+      Add an **API contract package** named "Shop API contract". Inside it, add an **API
+      endpoint** with method **POST** and path **/orders**.
+    check:
+      hasElement:
+        kind: node.endpoint
+        parent: { kind: node.contract }
+        where:
+          properties.method: POST
+    hints:
+      - The contract is in the Full palette (Backend group). Endpoints fit inside it.
+    solution:
+      - op: addElement
+        element: { id: api.shop, kind: node.contract, name: Shop API contract, status: planned }
+      - op: addElement
+        element: { id: ep.create-order, kind: node.endpoint, name: POST /orders, parentId: api.shop, status: planned, properties: { method: POST, path: /orders, auth: required, statusCodes: [201, 400, 409] } }
+
+  - id: both-sides
+    title: Both sides depend on it
+    body: |
+      Let the **API client** and **Order routes** both **depend on** the contract. The client
+      gets typed functions; the server validates requests against the same schemas.
+    check:
+      all:
+        - hasRelation: { type: depends-on, from: { id: apic.http }, to: { kind: node.contract } }
+        - hasRelation: { type: depends-on, from: { id: ctl.orders }, to: { kind: node.contract } }
+    success: |
+      Rename a field now and both builds fail until both sides agree — at build time, not in
+      the checkout. Browser code depends on the contract, never on server code.
+    solution:
+      - op: addRelation
+        relation: { id: rel.client-depends-on-contract, type: depends-on, sourceId: apic.http, targetId: api.shop, status: planned }
+      - op: addRelation
+        relation: { id: rel.routes-depend-on-contract, type: depends-on, sourceId: ctl.orders, targetId: api.shop, status: planned }

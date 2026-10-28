@@ -133,10 +133,11 @@ Each service owns its own database and nobody else connects to it. Services shar
   - Set retries, backoff, expiry and a dead-letter queue.
   - Jobs must be idempotent.
   - `inTransaction: true` on the `enqueues` relation documents the transactional enqueue.
-- **authenticates with** (`authenticates-with`): Uses an auth provider to sign users in or to verify their tokens. Set the method — OIDC with PKCE, passwords, passkeys, API keys.
+- **authenticates with** (`authenticates-with`): Uses an auth provider to sign users in or to verify their tokens. Set the flow — OIDC with PKCE, passwords, passkeys, API keys — and the token type.
 
-  - `method`: `oidc-code-pkce` for browser apps, `password`, `magic-link`, `passkey`,
+  - `flow`: `oidc-code-pkce` for browser apps, `password`, `magic-link`, `passkey`,
     `oauth-client-credentials` for machine clients, `api-key`.
+  - `tokenType`: `session`, `jwt` or `opaque`.
   - Authentication says who; authorization (roles, ownership) is still your code's job.
 - **calls** (`calls`): A synchronous request and response — the caller waits for the answer. Set the protocol, auth, timeout and whether it is safe to retry.
 

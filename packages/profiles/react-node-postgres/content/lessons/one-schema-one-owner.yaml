@@ -1,0 +1,73 @@
+id: lesson.one-schema-one-owner
+title: "Exercise: one schema, one owner"
+summary: Two services write and migrate the same schema. Deploys break each other and nobody knows who may change a column. Fix it until the rules are happy.
+track: data-and-models
+level: intermediate
+minutes: 12
+profile: react-node-postgres
+conceptIds: [pg.schema, migrates, writes, pattern.database-per-service]
+start:
+  ops:
+    - op: addElement
+      element: { id: svc.orders, kind: node.service, name: Orders API, status: existing }
+    - op: addElement
+      element: { id: svc.billing, kind: node.service, name: Billing API, status: existing }
+    - op: addElement
+      element: { id: db.shop, kind: pg.database, name: Shop DB, status: existing }
+    - op: addElement
+      element: { id: schema.orders, kind: pg.schema, name: orders, parentId: db.shop, status: existing }
+    - op: addRelation
+      relation: { id: rel.orders-writes, type: writes, sourceId: svc.orders, targetId: schema.orders, status: existing }
+    - op: addRelation
+      relation: { id: rel.orders-migrates, type: migrates, sourceId: svc.orders, targetId: schema.orders, status: existing }
+    - op: addRelation
+      relation: { id: rel.billing-writes, type: writes, sourceId: svc.billing, targetId: schema.orders, status: existing }
+    - op: addRelation
+      relation: { id: rel.billing-migrates, type: migrates, sourceId: svc.billing, targetId: schema.orders, status: existing }
+steps:
+  - id: what-goes-wrong
+    title: What goes wrong
+    body: |
+      Billing added a column `invoice_id` with its own migration. A week later, Orders renamed
+      `total` to `total_amount`. Billing's next deploy failed, and its migration history no
+      longer matches the database.
+
+      The **Problems** panel shows two findings: *Several migration owners* and *Shared tables
+      between services*.
+
+  - id: one-migrator
+    title: One migration owner
+    body: |
+      The orders schema belongs to the **Orders API**. Delete the **migrates** arrow from the
+      Billing API.
+    check:
+      finding: { ruleId: RNP-002, present: false }
+      message: The orders schema still has two migration owners.
+    success: |
+      Billing still needs an invoice ID on orders — it now asks the Orders team, who add it in
+      their migration.
+    solution:
+      - op: removeRelation
+        id: rel.billing-migrates
+
+  - id: one-writer
+    title: One writer
+    body: |
+      Billing also writes the orders tables directly. Delete that **writes** arrow and let the
+      Billing API **call** the Orders API instead ("mark order 42 as invoiced").
+    check:
+      all:
+        - finding: { ruleId: RNP-001, present: false }
+          message: The orders schema is still written by two services.
+        - hasRelation: { type: calls, from: { id: svc.billing }, to: { id: svc.orders } }
+          message: Let the Billing API call the Orders API.
+    hints:
+      - Events work too ("OrderInvoiced"), but a call is simpler to start with.
+    success: |
+      The Orders team can now change its tables freely, as long as its API keeps its promises.
+      That is what makes two services independently deployable.
+    solution:
+      - op: removeRelation
+        id: rel.billing-writes
+      - op: addRelation
+        relation: { id: rel.billing-calls-orders, type: calls, sourceId: svc.billing, targetId: svc.orders, protocol: http, label: POST /orders/:id/invoice, status: planned }

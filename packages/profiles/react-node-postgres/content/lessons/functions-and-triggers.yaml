@@ -1,0 +1,89 @@
+id: lesson.functions-and-triggers
+title: Stored functions and triggers
+summary: Move a stock check into PostgreSQL as a function, and let a trigger keep an audit log — and learn when logic in the database is a good idea.
+track: data-and-models
+level: intermediate
+minutes: 15
+profile: react-node-postgres
+conceptIds: [pg.function, pg.trigger, invokes, fires-on]
+start:
+  ops:
+    - op: addElement
+      element: { id: svc.api, kind: node.service, name: API, status: existing }
+    - op: addElement
+      element: { id: repo.stock, kind: node.repository, name: StockRepository, parentId: svc.api, status: existing }
+    - op: addElement
+      element: { id: db.shop, kind: pg.database, name: Shop DB, status: existing }
+    - op: addElement
+      element: { id: schema.shop, kind: pg.schema, name: shop, parentId: db.shop, status: existing }
+    - op: addElement
+      element: { id: tbl.products, kind: pg.table, name: products, parentId: schema.shop, status: existing }
+    - op: addElement
+      element: { id: tbl.price-audit, kind: pg.table, name: price_audit, parentId: schema.shop, status: existing }
+    - op: addRelation
+      relation: { id: rel.api-migrates-shop, type: migrates, sourceId: svc.api, targetId: schema.shop, status: existing }
+steps:
+  - id: function
+    title: A function next to the data
+    body: |
+      Reserving stock needs a check and an update that must not interleave with other requests.
+      Add a **Function / stored procedure** named "reserve_stock" inside the **shop** schema, and
+      let **StockRepository** **invoke** it.
+
+      ```sql
+      CREATE FUNCTION reserve_stock(p_id uuid, qty int) RETURNS boolean AS $$
+        UPDATE products SET stock = stock - qty WHERE id = p_id AND stock >= qty
+        RETURNING true;
+      $$ LANGUAGE sql;
+      ```
+    check:
+      hasRelation: { type: invokes, from: { id: repo.stock }, to: { kind: pg.function } }
+    hints:
+      - Code does not "call" database functions in this tool — it **invokes** them.
+    success: |
+      One atomic statement, one round trip. The function also changes rows, so draw that too in
+      the next step.
+    solution:
+      - op: addElement
+        element: { id: fn.reserve-stock, kind: pg.function, name: reserve_stock, parentId: schema.shop, status: planned, properties: { kind: function, language: sql, volatility: volatile } }
+      - op: addRelation
+        relation: { id: rel.repo-invokes-reserve, type: invokes, sourceId: repo.stock, targetId: fn.reserve-stock, status: planned }
+
+  - id: function-writes
+    title: Show what the function changes
+    body: |
+      Connect **reserve_stock** to the **products** table with **writes**. Hidden writes are
+      the main risk of database logic; drawing them keeps them visible.
+    check:
+      hasRelation: { type: writes, from: { kind: pg.function }, to: { id: tbl.products } }
+    solution:
+      - op: addRelation
+        relation: { id: rel.reserve-writes-products, type: writes, sourceId: fn.reserve-stock, targetId: tbl.products, status: planned }
+
+  - id: audit-trigger
+    title: An audit log that nobody can forget
+    body: |
+      Every price change must be logged, whichever app makes it. Add a **Trigger** named
+      "price_audit" in the schema that **fires on** the products table, a second function
+      "write_price_audit" that the trigger **invokes**, and let that function **write** the
+      price_audit table.
+    check:
+      all:
+        - hasRelation: { type: fires-on, from: { kind: pg.trigger }, to: { id: tbl.products } }
+        - hasRelation: { type: invokes, from: { kind: pg.trigger }, to: { kind: pg.function } }
+        - hasRelation: { type: writes, from: { kind: pg.function }, to: { id: tbl.price-audit } }
+    success: |
+      Triggers are great for audit logs and `updated_at` columns. Keep business decisions in
+      one place, though: when a rule lives half in SQL and half in a service, the next person
+      will look in the wrong one.
+    solution:
+      - op: addElement
+        element: { id: trg.price-audit, kind: pg.trigger, name: price_audit, parentId: schema.shop, status: planned, properties: { timing: after, events: [update], level: row } }
+      - op: addElement
+        element: { id: fn.write-price-audit, kind: pg.function, name: write_price_audit, parentId: schema.shop, status: planned, properties: { kind: function, language: plpgsql } }
+      - op: addRelation
+        relation: { id: rel.audit-fires-on-products, type: fires-on, sourceId: trg.price-audit, targetId: tbl.products, status: planned }
+      - op: addRelation
+        relation: { id: rel.audit-invokes-fn, type: invokes, sourceId: trg.price-audit, targetId: fn.write-price-audit, status: planned }
+      - op: addRelation
+        relation: { id: rel.audit-fn-writes, type: writes, sourceId: fn.write-price-audit, targetId: tbl.price-audit, status: planned }
