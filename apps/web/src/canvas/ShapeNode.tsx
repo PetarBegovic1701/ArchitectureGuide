@@ -1,9 +1,9 @@
 import { memo, useEffect, useRef, useState } from 'react';
-import { Handle, Position } from '@xyflow/react';
+import { Handle, NodeResizer, Position } from '@xyflow/react';
 import type { NodeProps } from '@xyflow/react';
 import type { ShapeFlowNode } from '../lib/flow';
 import { CONTAINER_HEADER } from '../lib/model';
-import { drillInto, renameElement } from '../actions';
+import { drillInto, renameElement, resizeElement } from '../actions';
 import { isPhone } from '../hooks';
 import { useUi } from '../store/ui';
 import { SEVERITY_COLOR } from '../lib/findings';
@@ -38,11 +38,15 @@ function ShapeNodeImpl({ data, selected }: NodeProps<ShapeFlowNode>) {
   const Icon = iconFor(data.icon);
   const below = !data.container && LABEL_BELOW.has(data.shape);
   const dashed = data.status === 'planned' && !data.container;
+  // While a container is being resized, it is drawn at the size under the pointer.
+  const [live, setLive] = useState<{ w: number; h: number } | null>(null);
+  const w = live?.w ?? data.w;
+  const h = live?.h ?? data.h;
 
   return (
     <div
       className="relative"
-      style={{ width: data.w, height: data.h }}
+      style={{ width: w, height: h }}
       data-testid={`node-${data.elementId}`}
       title={`${data.name} — ${data.conceptName}`}
       onDoubleClick={(e) => {
@@ -61,10 +65,22 @@ function ShapeNodeImpl({ data, selected }: NodeProps<ShapeFlowNode>) {
           aria-hidden
         />
       )}
+      {data.container && !data.ghost && (
+        <NodeResizer
+          isVisible={selected}
+          minWidth={data.minW}
+          minHeight={data.minH}
+          onResize={(_, r) => setLive({ w: r.width, h: r.height })}
+          onResizeEnd={(_, r) => {
+            setLive(null);
+            resizeElement(data.elementId, { x: r.x, y: r.y, w: r.width, h: r.height });
+          }}
+        />
+      )}
       <ShapeSvg
         shape={data.shape}
-        w={data.w}
-        h={data.h}
+        w={w}
+        h={h}
         color={data.color}
         selected={selected}
         dashed={dashed}

@@ -151,7 +151,8 @@ function MultiSelection({ count }: { count: number }) {
         </button>
       </div>
       <p className="text-xs text-[var(--ag-muted)]">
-        Shapes are aligned within their container. Ctrl+click adds to the selection.
+        Shapes are aligned within their container. Shift+click adds to the selection, Ctrl+click
+        removes, Alt+drag selects a box.
       </p>
     </div>
   );

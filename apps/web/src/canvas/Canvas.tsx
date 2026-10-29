@@ -80,7 +80,7 @@ export function Canvas() {
   const wrapper = useRef<HTMLDivElement>(null);
   const longPress = useRef<{ timer: number; x: number; y: number } | null>(null);
 
-  // "Select several" on touch: taps add to the selection, like Ctrl+click.
+  // "Select several" on touch: taps add to the selection, like Shift+click.
   useEffect(() => store.setState({ multiSelectionActive: multiSelect }), [store, multiSelect]);
 
   const view = project ? activeView(project, viewId) : undefined;
@@ -279,7 +279,7 @@ export function Canvas() {
     setEdges((es) => applyEdgeChanges(changes, es));
   }, []);
 
-  const onSelectionChange = useCallback(({ nodes: n, edges: e }: OnSelectionChangeParams) => {
+  const syncSelection = useCallback(({ nodes: n, edges: e }: OnSelectionChangeParams) => {
     const annotation = n.map((x) => annIdOf(x.id)).find(Boolean) ?? null;
     if (annotation !== useUi.getState().selectedAnnotation)
       useUi.getState().set({ selectedAnnotation: annotation });
@@ -291,6 +291,23 @@ export function Canvas() {
     if (useUi.getState().learnTarget.kind !== 'selection')
       useUi.getState().set({ learnTarget: { kind: 'selection' } });
   }, []);
+  // While a selection box is drawn, React Flow keeps the selection; the store gets it once
+  // the box is let go. Syncing on every move rebuilds the nodes mid-drag and loops.
+  const onSelectionChange = useCallback(
+    (params: OnSelectionChangeParams) => {
+      if (!store.getState().userSelectionActive) syncSelection(params);
+    },
+    [store, syncSelection],
+  );
+  const onSelectionEnd = useCallback(() => {
+    // After React Flow has applied the last change of the box.
+    setTimeout(() =>
+      syncSelection({
+        nodes: flow.getNodes().filter((n) => n.selected),
+        edges: flow.getEdges().filter((e) => e.selected),
+      }),
+    );
+  }, [flow, syncSelection]);
 
   const onNodeDragStop = useCallback(
     (_: unknown, _node: CanvasNode, dragged: CanvasNode[]) => {
@@ -443,6 +460,7 @@ export function Canvas() {
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
         onSelectionChange={onSelectionChange}
+        onSelectionEnd={onSelectionEnd}
         onNodeDragStop={onNodeDragStop}
         onConnectStart={(_, { nodeId }) => nodeId && startConnecting(nodeId)}
         onConnect={onConnect}
@@ -470,6 +488,12 @@ export function Canvas() {
         onNodeClick={(e, node) => {
           if (connectMode && node.type === 'shape')
             connectModeTap(node.id, { x: e.clientX, y: e.clientY });
+          // React Flow toggles on any multi-selection key; here Shift+click always adds
+          // and Ctrl/⌘+click always removes. Runs after React Flow's own change.
+          const add = e.shiftKey;
+          const remove = !add && (e.ctrlKey || e.metaKey);
+          if (add || remove)
+            store.getState().triggerNodeChanges([{ id: node.id, type: 'select', selected: add }]);
         }}
         onNodeContextMenu={(e, node) => {
           if (node.type !== 'shape') return;
@@ -487,8 +511,9 @@ export function Canvas() {
         snapToGrid
         snapGrid={[8, 8]}
         deleteKeyCode={null}
-        selectionKeyCode="Shift"
-        multiSelectionKeyCode={['Meta', 'Control']}
+        // Alt+drag draws a selection box; Shift+click adds, Ctrl/⌘+click removes.
+        selectionKeyCode="Alt"
+        multiSelectionKeyCode={['Shift', 'Meta', 'Control']}
         fitView
         fitViewOptions={{ maxZoom: 1.1, padding: 0.3 }}
         minZoom={0.2}

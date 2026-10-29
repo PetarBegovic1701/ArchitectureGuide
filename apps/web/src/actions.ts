@@ -45,6 +45,7 @@ import {
   freeSpot,
   newElementOps,
   newRelationOps,
+  resizeOps,
   snap,
   takenIds,
 } from './lib/model';
@@ -201,6 +202,14 @@ export function addConnected(
     canvasApi.reveal?.(partnerId);
   }
   return partnerId;
+}
+
+/** Resizes a container on the canvas (`box` in its parent's frame). */
+export function resizeElement(id: Id, box: { x: number; y: number; w: number; h: number }): void {
+  const { project: p, viewId } = project();
+  if (!p) return;
+  const ops = resizeOps(p, activeView(p, viewId), id, box);
+  if (ops.length) dispatch(ops, { label: 'Resize' });
 }
 
 /** Finishes an inline rename. A fresh element also gets an ID that follows its new name. */

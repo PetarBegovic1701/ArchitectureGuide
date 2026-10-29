@@ -10,7 +10,14 @@ import type {
   View,
 } from '@archguide/core';
 import { catalog, conceptOf, shapeFor } from './catalog';
-import { absolutePosition, colorOf, elementById, isContainer, nodeSize } from './model';
+import {
+  absolutePosition,
+  colorOf,
+  elementById,
+  isContainer,
+  minContainerSize,
+  nodeSize,
+} from './model';
 import type { Issue } from './findings';
 import {
   REGION_SIZE,
@@ -32,6 +39,9 @@ export type ShapeNodeData = {
   w: number;
   h: number;
   container: boolean;
+  /** Containers: the smallest size their resize handles allow (room for the children). */
+  minW?: number;
+  minH?: number;
   status: Status;
   editing: boolean;
   /** Open findings about this element (worst severity first). */
@@ -107,6 +117,7 @@ export function toFlowNodes(p: Project, view: View, options: FlowOptions = {}): 
       const concept = conceptOf(el.kind);
       const size = nodeSize(p, view, el.id);
       const container = isContainer(p, view, el.id);
+      const min = container ? minContainerSize(p, view, el.id) : undefined;
       const parentShown = el.parentId !== undefined && shown.has(el.parentId);
       let className: string | undefined;
       if (options.connecting) {
@@ -144,6 +155,7 @@ export function toFlowNodes(p: Project, view: View, options: FlowOptions = {}): 
           w: size.w,
           h: size.h,
           container,
+          ...(min ? { minW: min.w, minH: min.h } : {}),
           status: el.status,
           editing: options.editingId === el.id,
           ...withIssue(options.issues?.get(el.id)),

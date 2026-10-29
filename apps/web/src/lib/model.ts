@@ -72,6 +72,64 @@ export function nodeSize(p: Project, view: View, elementId: Id): { w: number; h:
   return { w, h };
 }
 
+/** Smallest size a container can be resized to: room for its shown children. */
+export function minContainerSize(p: Project, view: View, elementId: Id): { w: number; h: number } {
+  const children = view.nodes.filter((n) => elementById(p, n.elementId)?.parentId === elementId);
+  if (children.length === 0) return { w: 160, h: CONTAINER_HEADER + 48 };
+  let w = 220;
+  let h = 120;
+  for (const child of children) {
+    const size = nodeSize(p, view, child.elementId);
+    w = Math.max(w, child.x + size.w + CONTAINER_PADDING);
+    h = Math.max(h, child.y + size.h + CONTAINER_PADDING);
+  }
+  return { w, h };
+}
+
+/**
+ * Ops that resize a container to `box` (position in its parent's frame, like the node's).
+ * Dragging the left or top edge moves the container, so its children shift back by the
+ * same amount and stay where they were on the canvas; the edge stops at the children.
+ */
+export function resizeOps(
+  p: Project,
+  view: View,
+  elementId: Id,
+  box: { x: number; y: number; w: number; h: number },
+): Op[] {
+  const node = view.nodes.find((n) => n.elementId === elementId);
+  if (!node) return [];
+  const children = view.nodes.filter((n) => elementById(p, n.elementId)?.parentId === elementId);
+  const right = box.x + box.w;
+  const bottom = box.y + box.h;
+  let x = snap(box.x);
+  let y = snap(box.y);
+  if (children.length) {
+    x = Math.min(
+      x,
+      node.x + Math.max(0, Math.min(...children.map((c) => c.x)) - CONTAINER_PADDING),
+    );
+    y = Math.min(y, node.y + Math.max(0, Math.min(...children.map((c) => c.y)) - CONTAINER_HEADER));
+  }
+  const dx = x - node.x;
+  const dy = y - node.y;
+  const ops: Op[] = [
+    {
+      op: 'setViewNode',
+      viewId: view.id,
+      node: { ...node, x, y, w: snap(right - x), h: snap(bottom - y) },
+    },
+  ];
+  if (dx || dy)
+    for (const child of children)
+      ops.push({
+        op: 'setViewNode',
+        viewId: view.id,
+        node: { ...child, x: child.x - dx, y: child.y - dy },
+      });
+  return ops;
+}
+
 /** Whether an element is drawn as a frame around its children. */
 export function isContainer(p: Project, view: View, elementId: Id): boolean {
   const el = elementById(p, elementId);

@@ -57,10 +57,10 @@ test('a selection saved as a template can be inserted again', async ({ page }) =
   await page.goto('/');
   await page.getByRole('button', { name: 'Open the starter' }).click();
   await node(page, 'svc.api').click();
-  // A container is selected by its header; Ctrl adds to the selection.
+  // A container is selected by its header; Shift adds to the selection.
   await node(page, 'db.shop')
     .locator('.ag-container-header')
-    .click({ modifiers: ['Control'] });
+    .click({ modifiers: ['Shift'] });
 
   await page.keyboard.press('Control+k');
   await page.getByLabel('Command', { exact: true }).fill('save selection');

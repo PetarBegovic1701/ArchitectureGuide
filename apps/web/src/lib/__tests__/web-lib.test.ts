@@ -10,10 +10,12 @@ import {
   absolutePosition,
   deleteOps,
   freeSpot,
+  minContainerSize,
   newElementOps,
   newRelationOps,
   nodeSize,
   reparentOps,
+  resizeOps,
 } from '../model';
 import { sampleProject } from '../sample';
 import { ICONS } from '../../canvas/icons';
@@ -130,6 +132,81 @@ describe('reparentOps and deleteOps', () => {
     p = apply(p, deleteOps(p, ['db.shop', 'schema.public'], ['rel.web-calls-api']));
     expect(p.model.elements.map((e) => e.id)).toEqual(['actor.customer', 'app.web', 'svc.api']);
     expect(p.model.relations.map((r) => r.id)).toEqual(['rel.customer-uses-web']);
+  });
+});
+
+describe('resizeOps', () => {
+  const withChild = () => {
+    let p = empty();
+    p = apply(
+      p,
+      newElementOps(p, view(p), 'group.context', { x: 200, y: 200 }, { name: 'Sales' }).ops,
+    );
+    return apply(
+      p,
+      newElementOps(
+        p,
+        view(p),
+        'node.service',
+        { x: 0, y: 0 },
+        { parentId: 'ctx.sales', name: 'Orders' },
+      ).ops,
+    );
+  };
+
+  it('stores a larger size, and the container keeps it', () => {
+    let p = withChild();
+    const node = view(p).nodes.find((n) => n.elementId === 'ctx.sales')!;
+    const size = nodeSize(p, view(p), 'ctx.sales');
+    p = apply(
+      p,
+      resizeOps(p, view(p), 'ctx.sales', { x: node.x, y: node.y, w: size.w + 200, h: size.h + 96 }),
+    );
+    expect(nodeSize(p, view(p), 'ctx.sales')).toEqual({ w: size.w + 200, h: size.h + 96 });
+  });
+
+  it('never gets smaller than its children need', () => {
+    let p = withChild();
+    const node = view(p).nodes.find((n) => n.elementId === 'ctx.sales')!;
+    const min = minContainerSize(p, view(p), 'ctx.sales');
+    p = apply(p, resizeOps(p, view(p), 'ctx.sales', { x: node.x, y: node.y, w: 40, h: 40 }));
+    expect(nodeSize(p, view(p), 'ctx.sales')).toEqual(min);
+  });
+
+  it('dragging the left or top edge keeps the children in place on the canvas', () => {
+    let p = withChild();
+    const node = view(p).nodes.find((n) => n.elementId === 'ctx.sales')!;
+    const size = nodeSize(p, view(p), 'ctx.sales');
+    const child = absolutePosition(p, view(p), 'svc.orders');
+    p = apply(
+      p,
+      resizeOps(p, view(p), 'ctx.sales', {
+        x: node.x - 80,
+        y: node.y - 64,
+        w: size.w + 80,
+        h: size.h + 64,
+      }),
+    );
+    expect(absolutePosition(p, view(p), 'svc.orders')).toEqual(child);
+    expect(absolutePosition(p, view(p), 'ctx.sales')).toEqual({ x: node.x - 80, y: node.y - 64 });
+  });
+
+  it('stops the left edge at the children', () => {
+    let p = withChild();
+    const node = view(p).nodes.find((n) => n.elementId === 'ctx.sales')!;
+    const size = nodeSize(p, view(p), 'ctx.sales');
+    const child = absolutePosition(p, view(p), 'svc.orders');
+    p = apply(
+      p,
+      resizeOps(p, view(p), 'ctx.sales', {
+        x: node.x + 400,
+        y: node.y,
+        w: size.w - 400,
+        h: size.h,
+      }),
+    );
+    expect(absolutePosition(p, view(p), 'svc.orders')).toEqual(child);
+    expect(view(p).nodes.find((n) => n.elementId === 'svc.orders')!.x).toBeGreaterThanOrEqual(16);
   });
 });
 
