@@ -1,4 +1,12 @@
-import { IdSchema, LangSchema, docsLang, textDirection, validRelationTypes } from '@archguide/core';
+import {
+  GraphQuery,
+  IdSchema,
+  LangSchema,
+  antiPatternReason,
+  docsLang,
+  textDirection,
+  validRelationTypes,
+} from '@archguide/core';
 import type { Element, ElementDocs, Id, Layer, Qualities, Relation, Status } from '@archguide/core';
 import { catalog, conceptOf } from '../lib/catalog';
 import { LAYERS, elementById, takenIds } from '../lib/model';
@@ -88,6 +96,7 @@ function PropertiesTab() {
     return (
       <>
         <SelectionProblems id={element.id} />
+        <AntiPatternCard item={element} />
         <DocsForm key={`docs-${element.id}`} element={element} />
         <GuideCard element={element} />
         <ElementForm key={element.id} element={element} />
@@ -97,6 +106,7 @@ function PropertiesTab() {
   return relation ? (
     <>
       <SelectionProblems id={relation.id} />
+      <AntiPatternCard item={relation} />
       <RelationForm key={relation.id} relation={relation} />
     </>
   ) : null;
@@ -228,6 +238,61 @@ function QualitiesForm({ element: el }: { element: Element }) {
         Slow (seconds, not milliseconds)
       </label>
     </fieldset>
+  );
+}
+
+/**
+ * An item kept because the analyzed code has it, although it is an anti-pattern (AP-019):
+ * what the code does, the rule it breaks, where, and a way to clear the mark once the code
+ * is fixed.
+ */
+function AntiPatternCard({ item }: { item: Element | Relation }) {
+  const project = useProject((s) => s.project)!;
+  const ap = item.antiPattern;
+  if (!ap) return null;
+  const reason = antiPatternReason(new GraphQuery(project, catalog), item);
+  const relation = 'sourceId' in item;
+  return (
+    <section
+      className="mb-3 space-y-1 rounded border-2 border-dashed p-2 text-sm"
+      style={{ borderColor: 'var(--ag-error)' }}
+      aria-label="Anti-pattern found in the code"
+      data-testid="anti-pattern-card"
+    >
+      <h3
+        className="text-xs font-semibold uppercase tracking-wide"
+        style={{ color: 'var(--ag-error)' }}
+      >
+        ⚠ Anti-pattern found in the code
+      </h3>
+      <p>{ap.note}</p>
+      {reason && <p className="text-xs text-[var(--ag-muted)]">Breaks: {reason}</p>}
+      {ap.evidence?.length ? (
+        <p className="break-words text-xs text-[var(--ag-muted)]">
+          In {ap.evidence.map((e) => `${e.path}${e.line ? `:${e.line}` : ''}`).join(', ')}
+        </p>
+      ) : null}
+      <p className="text-xs text-[var(--ag-muted)]">
+        It is in the diagram because the code does it. Address it in the code, then update the
+        model.
+      </p>
+      <button
+        type="button"
+        className="text-xs text-[var(--ag-accent)] hover:underline"
+        onClick={() =>
+          dispatch(
+            [
+              relation
+                ? { op: 'updateRelation', id: item.id, patch: { antiPattern: null } }
+                : { op: 'updateElement', id: item.id, patch: { antiPattern: null } },
+            ],
+            { label: 'Clear anti-pattern mark' },
+          )
+        }
+      >
+        The code is fixed: clear the mark
+      </button>
+    </section>
   );
 }
 
@@ -502,7 +567,9 @@ function RelationForm({ relation: r }: { relation: Relation }) {
   const source = elementById(project, r.sourceId);
   const target = elementById(project, r.targetId);
   const type = catalog.relationTypes.get(r.type);
-  const valid = source && target ? validRelationTypes(catalog, source.kind, target.kind) : [];
+  const allowed = source && target ? validRelationTypes(catalog, source.kind, target.kind) : [];
+  // An anti-pattern found in the code keeps a type the rules refuse: list it too.
+  const valid = type && !allowed.some((t) => t.id === type.id) ? [type, ...allowed] : allowed;
   const patch = (p: Record<string, unknown>, label = 'Edit relation') =>
     dispatch([{ op: 'updateRelation', id: r.id, patch: p }], { label });
   return (

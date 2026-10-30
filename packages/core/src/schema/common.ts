@@ -47,6 +47,21 @@ export const EvidenceSchema = z.object({
 });
 export type Evidence = z.infer<typeof EvidenceSchema>;
 
+/**
+ * An anti-pattern recorded on purpose: the analyzed code has it, so the diagram shows it to
+ * stay a faithful picture of the code. The item is kept even when the hard constraints
+ * would refuse it, and rule AP-019 reports it until it is addressed.
+ */
+export const AntiPatternSchema = z.object({
+  /** What the code does and why it is a problem: "The web app queries Postgres directly." */
+  note: z.string().min(1),
+  /** The constraint it breaks, as the rules word it (filled in by the tools). */
+  violates: z.string().min(1).optional(),
+  /** Where the code does it. */
+  evidence: z.array(EvidenceSchema).optional(),
+});
+export type AntiPattern = z.infer<typeof AntiPatternSchema>;
+
 export const ProvenanceSchema = z.object({
   origin: z.enum(['manual', 'inferred', 'template']),
   confidence: z.number().min(0).max(1).optional(),

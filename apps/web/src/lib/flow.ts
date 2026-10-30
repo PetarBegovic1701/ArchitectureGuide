@@ -70,6 +70,8 @@ export type ShapeNodeData = {
   docs?: NodeDocs;
   /** Show the description and function under the shape. */
   showDocs?: boolean;
+  /** Note of an anti-pattern found in the code (the element sits where the rules do not allow). */
+  antiPattern?: string;
 };
 
 export type DiffMark = 'added' | 'changed' | 'removed';
@@ -195,6 +197,7 @@ export function toFlowNodes(p: Project, view: View, options: FlowOptions = {}): 
           ...diffMark(options, el.id),
           ...(options.decisions?.get(el.id) ? { decisionIds: options.decisions.get(el.id)! } : {}),
           ...docsData(p, el, options.showDocs),
+          ...(el.antiPattern ? { antiPattern: el.antiPattern.note } : {}),
         },
       };
     });

@@ -83,14 +83,43 @@ describe('resolveFacts', () => {
     expect(combineConfidence([0.9, 0.9, 0.9])).toBe(0.99);
   });
 
-  it('nests children, drops orphans that need a parent, and skips refused relations', () => {
+  it('nests children, drops orphans that need a parent, and keeps refused relations as anti-patterns', () => {
     expect(r.candidates.elements.find((e) => e.name === 'Orders')?.parentId).toBe('svc.api');
     expect(r.subjects['mod:lost']).toBeUndefined();
     expect(r.warnings.some((w) => w.includes('mod:lost'))).toBe(true);
-    expect(r.candidates.relations).toMatchObject([
-      { id: 'rel.app-web-calls-svc-api', type: 'calls', protocol: 'http', sourceId: 'app.web' },
-    ]);
-    expect(r.warnings.some((w) => w.startsWith('relation not allowed'))).toBe(true);
+    // The code has it, so the draft has it too: marked, with the rule it breaks.
+    const byId = (id: string) => r.candidates.relations.find((x) => x.id === id);
+    expect(r.candidates.relations).toHaveLength(2);
+    expect(byId('rel.app-web-calls-svc-api')).toMatchObject({ type: 'calls', protocol: 'http' });
+    expect(byId('rel.app-web-calls-svc-api')!.antiPattern).toBeUndefined();
+    expect(byId('rel.db-main-calls-app-web')).toMatchObject({
+      sourceId: 'db.main',
+      targetId: 'app.web',
+      antiPattern: {
+        note: 'The code has Main calls Web',
+        violates: expect.stringMatching(/does not call anything/),
+      },
+    });
+    expect(r.warnings.some((w) => w.startsWith('relation not allowed'))).toBe(false);
+  });
+
+  it('keeps an element where the code puts it, marked, when the nesting rules refuse it', () => {
+    const nested = resolveFacts(
+      [
+        ...facts.slice(0, 2),
+        fact({
+          type: 'module',
+          subject: 'mod:in-db',
+          element: { kind: 't.module', name: 'Inside', parent: 'db:main' },
+        }),
+        fact({ type: 'db-database', subject: 'db:main', element: { kind: 't.db', name: 'Main' } }),
+      ],
+      testCatalog,
+    );
+    expect(nested.candidates.elements.find((e) => e.name === 'Inside')).toMatchObject({
+      parentId: 'db.main',
+      antiPattern: { note: 'The code has the module Inside inside Main' },
+    });
   });
 
   it('leaves out rejected subjects and relations', () => {

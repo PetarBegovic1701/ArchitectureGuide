@@ -30,6 +30,7 @@ new projects start with: `core`, `frontend`, `security`, `concurrency`, `api`, `
 
 | Rule | Title | Severity | Packs |
 | --- | --- | --- | --- |
+| [AP-019](#ap-019) | Anti-pattern found in the code | warning | core |
 | [AP-001](#ap-001) | Shared database between services | warning | microservices |
 | [AP-002](#ap-002) | Frontend talks to a database | error | frontend |
 | [AP-003](#ap-003) | Cyclic dependency | warning | core |
@@ -75,6 +76,12 @@ new projects start with: `core`, `frontend`, `security`, `concurrency`, `api`, `
 | [RNP-029](#rnp-029) | Read model written outside its projector | warning | cqrs |
 
 ## Generic rules
+
+### AP-019
+
+**Anti-pattern found in the code** · warning · packs: Core
+
+A diagram drawn from existing code shows the code as it is, including what it does wrong. Such items carry an anti-pattern mark with a note: they are kept even where the rules would refuse them, so the picture stays true, and this finding stays open until they are addressed. Fix the code, then remove the item or its mark from the model. If the team accepts it for now, suppress the finding with a reason or record a decision.
 
 ### AP-001
 

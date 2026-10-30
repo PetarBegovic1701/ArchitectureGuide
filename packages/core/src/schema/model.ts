@@ -1,5 +1,12 @@
 import { z } from 'zod';
-import { IdSchema, LangSchema, LayerSchema, ProvenanceSchema, StatusSchema } from './common';
+import {
+  AntiPatternSchema,
+  IdSchema,
+  LangSchema,
+  LayerSchema,
+  ProvenanceSchema,
+  StatusSchema,
+} from './common';
 
 /** Concept IDs look like "node.service", "pg.schema", "gen.actor", "group.layer". */
 export const KindSchema = z.string().regex(/^[a-z0-9-]+\.[a-z0-9-]+$/, 'Unknown concept ID format');
@@ -52,6 +59,8 @@ export const ElementSchema = z.object({
   codePaths: z.array(z.string().min(1)).optional(),
   notes: z.string().optional(),
   docs: ElementDocsSchema.optional(),
+  /** Set when the element sits where the rules do not allow it, because the code has it so. */
+  antiPattern: AntiPatternSchema.optional(),
   source: ProvenanceSchema.optional(),
 });
 export type Element = z.infer<typeof ElementSchema>;
@@ -74,6 +83,8 @@ export const RelationSchema = z.object({
   properties: z.record(z.string(), z.unknown()).optional(),
   status: StatusSchema,
   notes: z.string().optional(),
+  /** Set when the relation breaks a hard constraint, because the code has it so. */
+  antiPattern: AntiPatternSchema.optional(),
   source: ProvenanceSchema.optional(),
 });
 export type Relation = z.infer<typeof RelationSchema>;

@@ -14,7 +14,9 @@ features, and to **onboard** people and AI agents to a project or a concept.
 - Learn with texts at three levels and interactive lessons on the real canvas that check your work.
 - Onboard people and agents with project tours and an onboarding pack that explains exactly the concepts the project uses.
 
-v1 targets **React + Node.js + PostgreSQL** (TypeScript / JavaScript).
+v1 targets **React + Node.js + PostgreSQL** (TypeScript / JavaScript). The analyzer also reads
+**Python** (FastAPI, Flask, Django, Celery …) and **.NET** (ASP.NET Core, EF Core, worker
+services …) backends.
 
 See [Implementation.md](Implementation.md) for the full design and the delivery plan.
 
@@ -100,7 +102,12 @@ npx archguide generate dependency-cruiser             # also nx, archunit
 
 The analyzer finds deployables, routes, handlers, NestJS modules, state, API clients, schemas
 and tables (Prisma, Drizzle, TypeORM, SQL migrations), job queues, service calls and who owns
-which data, and reports code problems with file and line: database clients in the browser,
+which data. It reads Python and .NET backends too: FastAPI, Flask, Django and Starlette services,
+Celery, RQ and Dramatiq workers, SQLAlchemy, SQLModel and Django models with Alembic or Django
+migrations; ASP.NET Core controllers and minimal APIs, worker services, EF Core contexts and
+migrations, Dapper, MassTransit and Hangfire. Local Python packages and .NET class libraries
+become modules of the deployable that uses them, or shared packages. It reports code problems
+with file and line: database clients in the browser,
 secrets in `VITE_*` variables, shared tables, several migration owners, foreign keys without an
 index, import cycles between modules and more ([docs/RULES.md](docs/RULES.md#analysis-rules)).
 `--db` also reads a live database catalog, read-only. In the editor, the **Analysis** dialog
@@ -108,6 +115,17 @@ lists the suggestions with their evidence (accept, edit or reject), and **Views 
 database view** colors the data by the service that owns it. MCP agents get
 `analyze_repository`, `apply_analysis`, `diff_with_repository`, `generate_enforcement`,
 `write_documentation` and the `map-repository` and `review-change` prompts.
+
+**Anti-patterns as found.** A diagram of existing code shows the code as it is, also where it
+is wrong. When the code does something the rules refuse (a browser app that queries the
+database, a module in the wrong place), the analyzer and MCP agents keep it, with an
+anti-pattern mark: a note on what the code does, the rule it breaks and the file and line.
+Agents pass `antiPattern` per item or `asFound: true` on `upsert_elements` /
+`upsert_relations`; `apply_analysis` keeps what the analyzer found. Marked items are drawn red
+and dashed, the inspector explains them, rule AP-019 reports them until they are addressed, and
+`ARCHITECTURE.md` lists them under "Anti-patterns found in the code". The mark can only be
+cleared once the item follows the rules. Anti-patterns that the rules allow but report (shared
+tables, cycles …) are drawn as they are and stay findings.
 
 **The repository's own documentation on the diagram.** An agent that maps a repository through MCP
 stores what it read in the repository's README, docs and comments, or deduced from the code, with

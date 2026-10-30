@@ -254,7 +254,7 @@ function updateElement(p: Project, id: Id, patch: Record<string, unknown>, catal
     assertNesting(p, catalog, next, next.parentId ?? null);
     for (const child of p.model.elements.filter((e) => e.parentId === id)) {
       const check = checkNesting(catalog, child.kind, next.kind);
-      if (!check.ok)
+      if (!check.ok && !child.antiPattern)
         throw new OpFailure('NESTING_NOT_ALLOWED', check.message, { itemId: child.id });
     }
     const kinds = new Map(p.model.elements.map((e) => [e.id, e.id === id ? next.kind : e.kind]));
@@ -262,6 +262,8 @@ function updateElement(p: Project, id: Id, patch: Record<string, unknown>, catal
       assertRelationAllowed(catalog, r, kinds.get(r.sourceId)!, kinds.get(r.targetId)!);
     }
   }
+  // Removing the anti-pattern mark: the element must now sit where the rules allow it.
+  if (el.antiPattern && !next.antiPattern) assertNesting(p, catalog, next, next.parentId ?? null);
   assertProperties(catalog, next);
   replaceIn(p.model.elements, el, next);
   return [{ op: 'updateElement', id, patch: inverse }];
@@ -337,7 +339,12 @@ function updateRelation(
     throw new OpFailure('SCHEMA_INVALID', 'Use renameId to change an ID.', { itemId: id });
   const { merged, inverse } = mergePatch(rel, patch, undefined, 'Relation');
   const next = parseOrFail(RelationSchema, merged, id);
-  if (next.type !== rel.type || next.sourceId !== rel.sourceId || next.targetId !== rel.targetId) {
+  if (
+    next.type !== rel.type ||
+    next.sourceId !== rel.sourceId ||
+    next.targetId !== rel.targetId ||
+    (rel.antiPattern && !next.antiPattern)
+  ) {
     const source = getElement(p, next.sourceId);
     const target = getElement(p, next.targetId);
     assertRelationAllowed(catalog, next, source.kind, target.kind);
@@ -522,7 +529,9 @@ function assertIdFree(p: Project, id: Id): void {
 function assertNesting(p: Project, catalog: Catalog, el: Element, parentId: Id | null): void {
   const parentKind = parentId === null ? null : getElement(p, parentId).kind;
   const check = checkNesting(catalog, el.kind, parentKind);
-  if (!check.ok) throw new OpFailure(check.code, check.message, { itemId: el.id });
+  // An anti-pattern found in the code is kept as it is (AP-019 reports it).
+  if (!check.ok && !(el.antiPattern && check.code === 'NESTING_NOT_ALLOWED'))
+    throw new OpFailure(check.code, check.message, { itemId: el.id });
 }
 
 function assertRelationAllowed(
@@ -536,6 +545,9 @@ function assertRelationAllowed(
     self: r.sourceId === r.targetId,
   });
   if (check.ok) return;
+  // An anti-pattern found in the code is kept as it is (AP-019 reports it).
+  if (r.antiPattern && (check.code === 'RELATION_NOT_ALLOWED' || check.code === 'SELF_RELATION'))
+    return;
   const extra: { itemId: Id; hint?: string; fix?: Op[] } = { itemId: r.id };
   if (check.flip && p) {
     const taken = new Set([

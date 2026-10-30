@@ -56,6 +56,11 @@ export interface RelationProposal {
   via?: string;
   inTransaction?: boolean;
   properties?: Record<string, unknown>;
+  /**
+   * The relation is an anti-pattern the code has: kept in the model with this note, also when
+   * the rules refuse it (AP-019).
+   */
+  antiPattern?: string;
 }
 
 export interface Fact {

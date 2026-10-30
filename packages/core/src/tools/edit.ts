@@ -181,11 +181,13 @@ export function upsertRelationsOps(
               : `Several relation types fit ${source!.kind} → ${target!.kind}: ${valid.map((t) => t.id).join(', ')}. Say which one.`,
           hint:
             valid.length === 0
-              ? (
-                  checkRelation(catalog, 'calls', source!.kind, target!.kind) as {
-                    message?: string;
-                  }
-                ).message
+              ? `${
+                  (
+                    checkRelation(catalog, 'calls', source!.kind, target!.kind) as {
+                      message?: string;
+                    }
+                  ).message ?? ''
+                } If the code really does this, set "type" to what it does and record it as an anti-pattern (antiPattern, or asFound).`.trim()
               : `Set "type" to one of: ${valid.map((t) => t.id).join(', ')}.`,
         });
         return;

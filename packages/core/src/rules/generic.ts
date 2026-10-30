@@ -1,3 +1,4 @@
+import { checkNesting, checkRelation } from '../catalog';
 import type { GraphQuery } from '../graph';
 import type { Element, Id, Relation } from '../schema';
 import type { RawFinding, Rule, RulePack } from './types';
@@ -628,7 +629,69 @@ const unlabelledCall: Rule = {
       })),
 };
 
+/**
+ * Why a marked item is an anti-pattern: the hard constraint it breaks now (checked live, so
+ * the message stays right when the catalog changes), else what the recorder wrote.
+ */
+export function antiPatternReason(g: GraphQuery, item: Element | Relation): string | undefined {
+  if ('sourceId' in item) {
+    const source = g.element(item.sourceId);
+    const target = g.element(item.targetId);
+    if (!source || !target) return item.antiPattern?.violates;
+    const check = checkRelation(g.catalog, item.type, source.kind, target.kind, {
+      self: item.sourceId === item.targetId,
+    });
+    return check.ok ? item.antiPattern?.violates : check.message;
+  }
+  const parent = item.parentId ? g.element(item.parentId) : undefined;
+  const check = checkNesting(g.catalog, item.kind, parent?.kind ?? null);
+  return check.ok ? item.antiPattern?.violates : check.message;
+}
+
+const recordedAntiPattern: Rule = {
+  id: 'AP-019',
+  title: 'Anti-pattern found in the code',
+  severity: 'warning',
+  packs: ['core'],
+  rationale:
+    'A diagram drawn from existing code shows the code as it is, including what it does wrong. Such items carry an anti-pattern mark with a note: they are kept even where the rules would refuse them, so the picture stays true, and this finding stays open until they are addressed. Fix the code, then remove the item or its mark from the model. If the team accepts it for now, suppress the finding with a reason or record a decision.',
+  check: ({ graph: g }) => [
+    ...g.relations
+      .filter((r) => r.antiPattern)
+      .map((r) => {
+        const what = `${g.element(r.sourceId)?.name ?? r.sourceId} ${g.catalog.relationTypes.get(r.type)?.name ?? r.type} ${g.element(r.targetId)?.name ?? r.targetId}`;
+        return {
+          targetIds: [r.id],
+          relatedIds: [r.sourceId, r.targetId],
+          message: antiPatternMessage(what, r.antiPattern!.note, antiPatternReason(g, r)),
+          fixes: [
+            {
+              title: 'Remove it (the code no longer does this)',
+              ops: [{ op: 'removeRelation' as const, id: r.id }],
+            },
+          ],
+        };
+      }),
+    ...g.elements
+      .filter((e) => e.antiPattern)
+      .map((e) => {
+        const parent = e.parentId ? g.element(e.parentId) : undefined;
+        const what = parent ? `${e.name} inside ${parent.name}` : e.name;
+        return {
+          targetIds: [e.id],
+          ...(parent ? { relatedIds: [parent.id] } : {}),
+          message: antiPatternMessage(what, e.antiPattern!.note, antiPatternReason(g, e)),
+        };
+      }),
+  ],
+};
+
+function antiPatternMessage(what: string, note: string, reason: string | undefined): string {
+  return `${what} is an anti-pattern found in the code: ${note.trim().replace(/\.$/, '')}.${reason ? ` It breaks a rule of the design: ${reason}` : ''} It is in the diagram because the code does it; address it in the code, then update the model.`;
+}
+
 export const GENERIC_RULES: Rule[] = [
+  recordedAntiPattern,
   sharedDatabase,
   frontendToDatabase,
   cycles,

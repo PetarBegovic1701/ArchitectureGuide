@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { applyOps, createCatalog, newProject, slugify } from '@archguide/core';
+import { applyOps, createCatalog, newProject, runRules, slugify } from '@archguide/core';
 import type { AnalysisResult, Element, Project } from '@archguide/core';
 import { ANALYSIS_RULES, profile } from '@archguide/profile-react-node-postgres';
 import { analyzeRepository, discover, readInside } from '.';
@@ -110,6 +110,41 @@ describe('fixture bad-practices', () => {
       line: 2,
       symbol: 'pg',
     });
+  });
+
+  it('keeps what the rules refuse but the code does, marked as an anti-pattern to address', async () => {
+    const result = await analyze('bad-practices');
+    const web = result.candidates.elements.find((e) => e.kind === 'react.app')!;
+    const db = result.candidates.elements.find((e) => e.kind === 'pg.database')!;
+    const read = result.candidates.relations.find(
+      (r) => r.sourceId === web.id && r.targetId === db.id,
+    );
+    expect(read).toMatchObject({
+      type: 'reads',
+      antiPattern: {
+        note: expect.stringContaining('imports the database client "pg"'),
+        violates: expect.stringMatching(/Browser code cannot connect to PostgreSQL/),
+        evidence: [{ path: 'apps/web/src/shared/lib/db.ts', line: 2 }],
+      },
+    });
+    // Applied to a project, the draft keeps it and the rules report it.
+    const project = (newProject(catalog, { name: 'bad' }) as { project: Project }).project;
+    const applied = applyOps(
+      project,
+      [
+        ...result.candidates.elements.map((element) => ({ op: 'addElement' as const, element })),
+        ...result.candidates.relations.map((relation) => ({
+          op: 'addRelation' as const,
+          relation,
+        })),
+      ],
+      catalog,
+    );
+    expect(applied.ok).toBe(true);
+    if (!applied.ok) return;
+    const findings = runRules(applied.project, catalog).filter((f) => f.ruleId === 'AP-019');
+    expect(findings.map((f) => f.targetIds)).toEqual([[read!.id]]);
+    expect(findings[0]!.message).toMatch(/anti-pattern found in the code/);
   });
 });
 

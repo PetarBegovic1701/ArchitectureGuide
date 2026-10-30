@@ -1,4 +1,5 @@
 import { docsLang, hasDocs } from '../docs';
+import { antiPatternReason } from '../rules/generic';
 import type { Element, Relation } from '../schema';
 import { conceptsUsed, glossary, invariants, knownIssues, ownership, patterns } from './facts';
 import type { Facts } from './facts';
@@ -151,6 +152,41 @@ function documentationSection(f: Facts): string {
     .join('\n\n');
 }
 
+/**
+ * What the code does against the design (marked items, AP-019): kept in the model so it
+ * stays faithful, listed here so agents and reviewers address it instead of copying it.
+ */
+function antiPatternsList(f: Facts): string {
+  const g = f.graph;
+  const where = (e: { path: string; line?: number }) => `${e.path}${e.line ? `:${e.line}` : ''}`;
+  const line = (id: string, what: string, item: Parameters<typeof antiPatternReason>[1]) => {
+    const ap = item.antiPattern!;
+    const reason = antiPatternReason(g, item);
+    return [
+      `- \`${id}\` ${what}: ${ap.note.trim().replace(/\.$/, '')}.`,
+      reason ? ` Breaks: ${reason.trim().replace(/\.$/, '')}.` : '',
+      ap.evidence?.length ? ` In ${ap.evidence.map(where).join(', ')}.` : '',
+    ].join('');
+  };
+  return [
+    ...f.elements
+      .filter((e) => e.antiPattern)
+      .map((e) => {
+        const parent = e.parentId ? g.element(e.parentId) : undefined;
+        return line(e.id, parent ? `${e.name} inside ${parent.name}` : e.name, e);
+      }),
+    ...f.relations
+      .filter((r) => r.antiPattern)
+      .map((r) =>
+        line(
+          r.id,
+          `${g.element(r.sourceId)?.name ?? r.sourceId} ${r.type} ${g.element(r.targetId)?.name ?? r.targetId}`,
+          r,
+        ),
+      ),
+  ].join('\n');
+}
+
 function decisionsList(f: Facts): string {
   return f.project.decisions
     .filter((d) => d.status === 'accepted' || d.status === 'proposed')
@@ -246,6 +282,12 @@ export function agentMarkdown(f: Facts, options: ExportOptions): string {
     section('Data ownership', ownershipTable(f)),
     section('Invariants', invariantsList(f)),
     section('Known issues', knownIssuesTable(f)),
+    section(
+      'Anti-patterns found in the code',
+      antiPatternsList(f)
+        ? `The code does these things against the design. They are in the model as found; address them in the code, do not copy them.\n\n${antiPatternsList(f)}`
+        : '',
+    ),
     section('Decisions', decisionsList(f)),
     section('Glossary', glossaryList(f)),
     section('Concepts', options.includeConcepts ? conceptsList(f) : ''),

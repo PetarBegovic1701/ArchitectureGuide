@@ -120,7 +120,7 @@ v1 supports **one stack in depth**:
 | Frontend | React SPA built with Vite; React Router or TanStack Router; TanStack Query / SWR / RTK Query / Apollo; Zustand / Redux Toolkit / Context |
 | Backend | Node.js (22 LTS and later) with Express, Fastify or NestJS; REST, GraphQL, tRPC, WebSocket (Socket.IO / ws) |
 | Database | PostgreSQL through Prisma, Drizzle, TypeORM, Kysely, Knex or `pg`; pg-boss / graphile-worker job queues; LISTEN/NOTIFY |
-| Languages | TypeScript and JavaScript |
+| Languages | TypeScript and JavaScript; the analyzer also reads Python and .NET (C#, F#, Visual Basic) backends (§19.4) |
 | Repos | Single package or npm / pnpm / yarn workspaces; Turborepo and Nx detected |
 | Infra signals | `docker-compose.yml`, `Dockerfile`, `.env*` files |
 
@@ -450,7 +450,16 @@ interface Element {
   codePaths?: string[];      // globs relative to repo root: "services/orders/src/domain/**"
   notes?: string;            // Markdown
   docs?: ElementDocs;        // the repository's own documentation of the element
+  antiPattern?: AntiPattern; // kept as found in the code, although the rules refuse it (§19.6)
   source?: Provenance;
+}
+
+// An anti-pattern found in the analyzed code. The item stays in the model even where the hard
+// constraints refuse it, so the diagram is faithful; rule AP-019 reports it to address.
+interface AntiPattern {
+  note: string;              // what the code does: "The web app queries Postgres directly."
+  violates?: string;         // the rule it breaks, filled in by the tools
+  evidence?: Evidence[];     // file and line
 }
 
 // Documentation of the analyzed repository, written by an AI agent (MCP write_documentation) or
@@ -488,6 +497,7 @@ interface Relation {
   properties?: Record<string, unknown>;   // validated by the relation type's propertySchema (§10.2)
   status: Status;
   notes?: string;
+  antiPattern?: AntiPattern; // kept as found in the code (§19.6)
   source?: Provenance;
 }
 
@@ -2516,6 +2526,40 @@ interface AnalysisDiff {
 | `infra.compose` | `postgres`, `pgbouncer`, Node service images, ports, `depends_on` | `pg.cluster`, `pg.pooler`, port map for matching |
 | `infra.env` | `DATABASE_URL`-style names per package, browser-exposed names | `env-var` (RNP-004) |
 
+**Python** (projects: `pyproject.toml` (PEP 621, Poetry, uv), `setup.py`, `setup.cfg`,
+`Pipfile`, `requirements*.txt`; the root counts only when no folder below it is a project;
+virtual environments are skipped). Sources are read with a small statement reader, no
+Python is run.
+
+| Detector | Signal | Result |
+|---|---|---|
+| `py.deployable` | `FastAPI(`, `Flask(`, `Starlette(`, `Litestar(` …, or `manage.py` with Django | `py.service` (framework, server, data access) |
+| `py.worker` | Celery / RQ / Dramatiq / arq / Huey with task definitions (`@app.task`, `@shared_task`, `@actor`, `WorkerSettings`) | `py.worker` (jobLib) |
+| `py.routes` | `@router.get("/x")`, `@app.route(..., methods=[...])`, `include_router(prefix=)`, `register_blueprint(url_prefix=)`, Django `urls.py` `path()` / `include()` | `node.route-handler` per file (validation: pydantic, marshmallow, DRF serializers) |
+| `py.data` | SQLAlchemy `__tablename__` / `__table_args__`, SQLModel `table=True`, Django `models.Model` (+ `Meta.db_table`); `select()`, `session.add()`, `Model.objects.*`, SQL strings; Alembic `op.create_table` and Django `CreateModel` migrations | `pg.schema`, `pg.table`, `orm-usage`, `migrations` |
+| `py.jobs` | `Celery(broker=…)` and its URL scheme, `.delay()` / `send_task()` / `enqueue()` | `gen.other-broker`, `publishes`, `consumes` |
+| `py.http-calls` | `httpx` / `requests` / `aiohttp` calls with a base URL from `os.environ`, pydantic settings or module constants | `calls` between services (any language) |
+| `py.external-sdk`, `py.auth` | `stripe`, `sendgrid`, `boto3` …; `python-jose`, `pyjwt`, `fastapi-users`, DRF SimpleJWT … | `gen.external` + `calls`; `node.middleware(auth)` + `gen.auth-provider` |
+
+**.NET** (projects: `.csproj`, `.fsproj`, `.vbproj` with NuGet packages and project
+references; test projects are skipped). C# is read with a small declaration reader.
+
+| Detector | Signal | Result |
+|---|---|---|
+| `dotnet.deployable` | `Microsoft.NET.Sdk.Web` + `WebApplication.CreateBuilder`, Azure Functions | `dotnet.service` (aspnetcore, aspnetcore-minimal, grpc, azure-functions) |
+| `dotnet.worker` | `Microsoft.NET.Sdk.Worker` or an executable with `AddHostedService`, `BackgroundService`, MassTransit consumers, Hangfire server | `dotnet.worker` (jobLib) |
+| `dotnet.routes` | `[ApiController]` / `ControllerBase` with `[Route]` and `[HttpGet]` …; `MapGet` / `MapGroup` | `node.route-handler` per controller or file |
+| `dotnet.data` | `DbContext` with `DbSet<T>`, `HasDefaultSchema`, `[Table]`; `db.Orders.Add/Where/…`, Dapper and SQL strings; EF Core `Migrations/` (`CreateTable(name:, schema:)`); `UseNpgsql` (other providers → `gen.other-store`) | `pg.schema`, `pg.table`, `orm-usage`, `migrations` |
+| `dotnet.messaging` | MassTransit `UsingRabbitMq` / `UsingAzureServiceBus` …, `IConsumer<T>`, `Publish`; Hangfire `BackgroundJob.Enqueue` | `gen.other-broker`, `publishes`, `consumes` |
+| `dotnet.http-calls` | `AddHttpClient` with a base address from `Configuration["X"]` or an environment variable | `calls` between services |
+| `dotnet.external-sdk`, `dotnet.auth` | `Stripe.net`, `SendGrid`, `AWSSDK.*` …; JwtBearer, Identity, Microsoft.Identity.Web, Auth0 | as above |
+
+**Libraries of both** (`lang.libs`): a local Python package or .NET class library that one
+deployable uses (directly or through other libraries) becomes its module (`*.Domain` →
+`node.domain`, `*.Application` → `node.use-case`, else `node.module`); one that several
+deployables use becomes `node.shared-lib`. Project references and path dependencies become
+`depends-on`.
+
 ### 19.5 Data ownership algorithm
 
 ```
@@ -2544,6 +2588,12 @@ table level in the database view.
   1. same `id`;
   2. overlapping `codePaths` with the same kind;
   3. same kind + same normalized name inside the same parent.
+- **As found:** the draft shows the code as it is. A relation the rules refuse, or an
+  element in a parent the nesting rules refuse, is kept with an `antiPattern` mark (`note`,
+  `violates`, `evidence`) instead of being dropped; the op engine accepts marked items, rule
+  AP-019 reports them until they are addressed, and the mark can only be removed once the
+  item follows the rules. MCP agents record what the analyzer cannot see the same way
+  (`antiPattern` per item, or `asFound: true`).
 - **Diff:** `newInCode`, `missingInCode`, `changed` (fields that differ:
   routes, tech, parent …), and `suggestedOps` (add inferred items with
   `origin: 'inferred'`, `reviewed: false`; never auto-remove: missing items
@@ -2612,8 +2662,8 @@ type ToolResult =
 | `list_templates` | – | `[{ id, code, name, summary, parameters }]` |
 | `apply_template` | `projectId`, `templateId`, `params`, `parentId?`, `changeSetId?` | created IDs |
 | `create_project` | `id?`, `name`, `description?`, `templateId?`, `params?` | project summary |
-| `upsert_elements` | `projectId`, `elements: Partial<Element> & { id?: Id; kind: string; name: string }[]` (max 200), `changeSetId?` | created / updated IDs (generated IDs returned) |
-| `upsert_relations` | `projectId`, `relations: { id?: Id; type?: string; sourceId: Id; targetId: Id; ... }[]` (max 400), `changeSetId?`. Missing `type` → smart default; ambiguous → error listing the valid types | IDs |
+| `upsert_elements` | `projectId`, `elements: Partial<Element> & { id?: Id; kind: string; name: string }[]` (max 200), `asFound?`, `changeSetId?` | created / updated IDs (generated IDs returned); `antiPatterns` marked |
+| `upsert_relations` | `projectId`, `relations: { id?: Id; type?: string; sourceId: Id; targetId: Id; antiPattern?; ... }[]` (max 400), `asFound?`, `changeSetId?`. Missing `type` → smart default; ambiguous → error listing the valid types. `antiPattern` / `asFound` keep what the code does although the rules refuse it (§19.6) | IDs; `antiPatterns` marked |
 | `remove_items` | `projectId`, `ids: Id[]`, `cascade?: boolean`, `changeSetId?` | removed IDs |
 | `rename_id` | `projectId`, `from`, `to` | – |
 | `write_documentation` | `projectId`, `project?: { lang, summary?, author?, sources? }`, `elements?: { id, name?, description?, function?, basis?, sources?, lang? }[]` (max 400), `changeSetId?`. Left out: kept; `null`: removed | documented IDs |
@@ -3228,7 +3278,7 @@ is a separate, continuous stream: best done by an author with a senior reviewer.
 | 1 | Web only, or also desktop (Tauri)? | Web + `archguide serve` first; Tauri only if file access becomes a pain |
 | 2 | Hosted sync / collaboration? | Not in v1. Git is the sync layer. Ops are ready for Yjs later |
 | 3 | License and distribution | npm packages (`archguide`, `archguide-mcp`); public static web build. License to choose (MIT or Apache-2.0 fits the goal) |
-| 4 | ~~Languages for the analyzer~~ | **Decided:** React + Node.js + PostgreSQL, JS/TS only |
+| 4 | ~~Languages for the analyzer~~ | **Decided:** React + Node.js + PostgreSQL, plus Python and .NET backends (§19.4) |
 | 5 | Next.js in v1? | v1.1 profile, right after v1 (needs its own rules for server components) |
 | 6 | Supabase / PostgREST? | v1.1, with an RLS rule |
 | 7 | Product name and domain | "ArchitectureGuide" / `archguide` CLI as a working name |

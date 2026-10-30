@@ -57,6 +57,7 @@ function pruneElement(e: Element): Element {
   if (e.properties) e.properties = sortKeys(e.properties);
   if (e.source) dropEmpty(e.source, ['evidence']);
   if (e.docs) dropEmpty(e.docs, ['sources']);
+  if (e.antiPattern) dropEmpty(e.antiPattern, ['evidence']);
   dropEmpty(e, ['docs']);
   return e;
 }
@@ -65,6 +66,7 @@ function pruneRelation(r: Relation): Relation {
   dropEmpty(r, ['properties']);
   if (r.properties) r.properties = sortKeys(r.properties);
   if (r.source) dropEmpty(r.source, ['evidence']);
+  if (r.antiPattern) dropEmpty(r.antiPattern, ['evidence']);
   return r;
 }
 

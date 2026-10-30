@@ -22,6 +22,7 @@ export function agentYaml(f: Facts): string {
       ...(e.codePaths?.length ? { code: e.codePaths } : {}),
       ...(owner?.owners.length === 1 ? { ownedBy: owner.owners[0] } : {}),
       ...(e.docs && hasDocs(e) ? { docs: e.docs } : {}),
+      ...(e.antiPattern ? { antiPattern: e.antiPattern.note } : {}),
     };
   };
   const relation = (r: Relation) => {
@@ -32,6 +33,7 @@ export function agentYaml(f: Facts): string {
       ...(r.mode ? { mode: r.mode } : {}),
       ...(r.inTransaction ? { inTransaction: true } : {}),
       ...(r.properties ?? {}),
+      ...(r.antiPattern ? { antiPattern: r.antiPattern.note } : {}),
     };
     return Object.keys(props).length
       ? [r.sourceId, r.type, r.targetId, props]

@@ -164,6 +164,13 @@ export function registerAnalysisCommands(program: Command, env: CommandEnv): voi
             `${paint.yellow(f.ruleId)} ${f.message}${at ? paint.dim(` (${at.path}${at.line ? `:${at.line}` : ''})`) : ''}\n`,
           );
         }
+        // What the code does against the rules: in the draft as found, marked (AP-019).
+        for (const x of [...result.candidates.elements, ...result.candidates.relations].filter(
+          (i) => i.antiPattern,
+        ))
+          env.io.out(
+            `${paint.yellow('anti-pattern')} ${x.antiPattern!.note}${x.antiPattern!.violates ? paint.dim(` (${x.antiPattern!.violates})`) : ''}\n`,
+          );
         for (const w of result.warnings) env.io.out(`${paint.yellow('warning')} ${w}\n`);
         if (o.write)
           env.info(

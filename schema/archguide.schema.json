@@ -295,6 +295,48 @@
                   }
                 }
               },
+              "antiPattern": {
+                "type": "object",
+                "properties": {
+                  "note": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "violates": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "evidence": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "path": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "line": {
+                          "type": "integer",
+                          "exclusiveMinimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "symbol": {
+                          "type": "string"
+                        },
+                        "detector": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "path"
+                      ]
+                    }
+                  }
+                },
+                "required": [
+                  "note"
+                ]
+              },
               "source": {
                 "type": "object",
                 "properties": {
@@ -417,6 +459,48 @@
               },
               "notes": {
                 "type": "string"
+              },
+              "antiPattern": {
+                "type": "object",
+                "properties": {
+                  "note": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "violates": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "evidence": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "path": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "line": {
+                          "type": "integer",
+                          "exclusiveMinimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "symbol": {
+                          "type": "string"
+                        },
+                        "detector": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "path"
+                      ]
+                    }
+                  }
+                },
+                "required": [
+                  "note"
+                ]
               },
               "source": {
                 "type": "object",
@@ -1182,6 +1266,48 @@
                             }
                           }
                         },
+                        "antiPattern": {
+                          "type": "object",
+                          "properties": {
+                            "note": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "violates": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "evidence": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "path": {
+                                    "type": "string",
+                                    "minLength": 1
+                                  },
+                                  "line": {
+                                    "type": "integer",
+                                    "exclusiveMinimum": 0,
+                                    "maximum": 9007199254740991
+                                  },
+                                  "symbol": {
+                                    "type": "string"
+                                  },
+                                  "detector": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "path"
+                                ]
+                              }
+                            }
+                          },
+                          "required": [
+                            "note"
+                          ]
+                        },
                         "source": {
                           "type": "object",
                           "properties": {
@@ -1392,6 +1518,48 @@
                         },
                         "notes": {
                           "type": "string"
+                        },
+                        "antiPattern": {
+                          "type": "object",
+                          "properties": {
+                            "note": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "violates": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "evidence": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "path": {
+                                    "type": "string",
+                                    "minLength": 1
+                                  },
+                                  "line": {
+                                    "type": "integer",
+                                    "exclusiveMinimum": 0,
+                                    "maximum": 9007199254740991
+                                  },
+                                  "symbol": {
+                                    "type": "string"
+                                  },
+                                  "detector": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "path"
+                                ]
+                              }
+                            }
+                          },
+                          "required": [
+                            "note"
+                          ]
                         },
                         "source": {
                           "type": "object",

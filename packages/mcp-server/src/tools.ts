@@ -13,6 +13,7 @@ import {
   checkStep,
   documentationOps,
   draftTour,
+  markAsFound,
   explainText,
   exportProject,
   findingKey,
@@ -30,14 +31,14 @@ import {
   upsertRelationsOps,
   viewNodeSize,
 } from '@archguide/core';
-import type { Catalog, Project, Tour } from '@archguide/core';
+import type { Catalog, ModelOp, Project, Tour } from '@archguide/core';
 import {
   applyToWorkspace,
   createInWorkspace,
   exportFiles,
   writeExport,
 } from '@archguide/workspace';
-import type { Envelope, McpContext } from './context';
+import type { Envelope, McpContext, ToolError } from './context';
 import { brief, change, fail, findingsSummary, ok, readModel, readProject } from './context';
 
 const PLAN_FORMATS: readonly string[] = ['plan-md', 'speckit', 'kiro'];
@@ -110,6 +111,36 @@ const docsInput = z
     "Documentation of the block in the repository's own words and language (see write_documentation).",
   );
 
+const antiPatternInput = z
+  .object({
+    note: z
+      .string()
+      .min(1)
+      .describe(
+        'What the code does and why it is a problem, e.g. "The web app queries Postgres directly."',
+      ),
+    evidence: z
+      .array(
+        z.object({
+          path: z.string().min(1),
+          line: z.number().int().positive().optional(),
+          symbol: z.string().optional(),
+        }),
+      )
+      .optional()
+      .describe('Where the code does it.'),
+  })
+  .describe(
+    'Marks the item as an anti-pattern found in the analyzed code. It is kept even where the rules refuse it (the diagram stays faithful to the code) and reported by rule AP-019 until it is addressed.',
+  );
+
+const asFoundArg = z
+  .boolean()
+  .default(false)
+  .describe(
+    'Record the code as it is (mapping an existing repository): items the rules refuse are kept with an anti-pattern mark that names the broken rule, instead of being refused. Prefer an antiPattern note per item, which says what the code does.',
+  );
+
 const elementInput = z.looseObject({
   id: z
     .string()
@@ -130,6 +161,7 @@ const elementInput = z.looseObject({
   properties: z.record(z.string(), z.unknown()).optional(),
   codePaths: z.array(z.string()).optional(),
   docs: docsInput.optional(),
+  antiPattern: antiPatternInput.optional(),
 });
 
 const relationInput = z.looseObject({
@@ -148,6 +180,7 @@ const relationInput = z.looseObject({
   inTransaction: z.boolean().optional(),
   properties: z.record(z.string(), z.unknown()).optional(),
   status: z.enum(['planned', 'existing', 'deprecated']).optional(),
+  antiPattern: antiPatternInput.optional(),
 });
 
 const tourInput = z.object({
@@ -186,6 +219,26 @@ function stampOrigin(p: Project, catalog: Catalog) {
 
 export function registerTools(server: McpServer, ctx: McpContext): void {
   const { catalog } = ctx;
+  /** Keeps refused items as marked anti-patterns (asFound), and names them in the result. */
+  const asFoundEdit = (
+    p: Project,
+    edit: { ops: ModelOp[]; ids: string[]; errors: ToolError[] },
+    asFound: boolean,
+  ) => {
+    const { ops, marked } = markAsFound(p, catalog, edit.ops, { asFound });
+    return {
+      ...edit,
+      ops,
+      ...(marked.length
+        ? {
+            data: {
+              antiPatterns: marked,
+              note: 'Kept as anti-patterns found in the code (rule AP-019 reports them until they are addressed).',
+            },
+          }
+        : {}),
+    };
+  };
   const ws = ctx.workspace;
 
   // --- reading the model ---------------------------------------------------------------
@@ -349,18 +402,22 @@ export function registerTools(server: McpServer, ctx: McpContext): void {
     {
       title: 'Add or update elements',
       description:
-        'Creates elements (no id, or a new one) or updates them (a known id). Later items can use IDs created earlier in the same call as parentId. Returns the IDs and only the findings this change introduced.',
+        'Creates elements (no id, or a new one) or updates them (a known id). Later items can use IDs created earlier in the same call as parentId. Returns the IDs and only the findings this change introduced. When mapping existing code, an element the code puts where the rules do not allow is kept with an antiPattern note (or asFound: true).',
       inputSchema: {
         projectId: projectIdArg,
         elements: z.array(elementInput).min(1).max(200),
+        asFound: asFoundArg,
         changeSetId: changeSetIdArg,
       },
     },
-    ({ projectId, elements, changeSetId }) =>
+    ({ projectId, elements, asFound, changeSetId }) =>
       run(() =>
-        change(ctx, projectId, (p) => upsertElementsOps(p, catalog, elements as never), {
-          changeSetId,
-        }),
+        change(
+          ctx,
+          projectId,
+          (p) => asFoundEdit(p, upsertElementsOps(p, catalog, elements as never), asFound),
+          { changeSetId },
+        ),
       ),
   );
 
@@ -369,18 +426,22 @@ export function registerTools(server: McpServer, ctx: McpContext): void {
     {
       title: 'Add or update relations',
       description:
-        'Connects elements. Without "type", the only valid type is used; when several fit, the error lists them. A refused pair explains why and, where possible, offers the reversed relation as a fix.',
+        'Connects elements. Without "type", the only valid type is used; when several fit, the error lists them. A refused pair explains why and, where possible, offers the reversed relation as a fix. When mapping existing code that really does what the rules refuse, keep it faithful: give the type the code uses and an antiPattern note (or asFound: true); it is kept and reported as an anti-pattern to address.',
       inputSchema: {
         projectId: projectIdArg,
         relations: z.array(relationInput).min(1).max(400),
+        asFound: asFoundArg,
         changeSetId: changeSetIdArg,
       },
     },
-    ({ projectId, relations, changeSetId }) =>
+    ({ projectId, relations, asFound, changeSetId }) =>
       run(() =>
-        change(ctx, projectId, (p) => upsertRelationsOps(p, catalog, relations as never), {
-          changeSetId,
-        }),
+        change(
+          ctx,
+          projectId,
+          (p) => asFoundEdit(p, upsertRelationsOps(p, catalog, relations as never), asFound),
+          { changeSetId },
+        ),
       ),
   );
 

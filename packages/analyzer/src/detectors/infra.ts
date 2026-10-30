@@ -259,6 +259,7 @@ const imports: Detector = {
       }
     }
 
+    const hasDatabase = ctx.facts.some((f) => f.subject === DATABASE);
     // RNP-003: a database client anywhere in a React app's import graph.
     for (const app of ctx.facts.filter(
       (f) => f.type === 'deployable' && f.element?.kind === 'react.app',
@@ -289,6 +290,17 @@ const imports: Detector = {
               evidence: [at(e.from, e.line, e.specifier)],
               confidence: 0.95,
               detector: 'code.imports',
+              // The diagram shows what the code does: the app talks to the database.
+              ...(hasDatabase
+                ? {
+                    relation: {
+                      type: 'reads',
+                      from: app.subject,
+                      to: DATABASE,
+                      antiPattern: `The browser bundle imports the database client "${e.external}" (${e.from}:${e.line})`,
+                    },
+                  }
+                : {}),
             });
           if (e.to && !seen.has(e.to)) {
             seen.add(e.to);

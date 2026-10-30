@@ -94,7 +94,7 @@ export function suggestionsOf(
         id: e.id,
         type: 'element',
         title: e.name,
-        detail: `${conceptOf(e.kind)?.name ?? e.kind}${e.parentId ? ` in ${nameOf(e.parentId)}` : ''}`,
+        detail: `${e.antiPattern ? '⚠ anti-pattern found in the code · ' : ''}${conceptOf(e.kind)?.name ?? e.kind}${e.parentId ? ` in ${nameOf(e.parentId)}` : ''}`,
         detector: e.source?.evidence?.[0]?.detector ?? 'analysis',
         confidence: e.source?.confidence ?? 1,
         evidence: e.source?.evidence ?? [],
@@ -111,7 +111,12 @@ export function suggestionsOf(
         type: 'relation',
         title: `${nameOf(r.sourceId)} ${r.type} ${nameOf(r.targetId)}`,
         detail:
-          [r.label, r.via, r.inTransaction ? 'in a transaction' : undefined]
+          [
+            r.antiPattern ? `⚠ anti-pattern found in the code: ${r.antiPattern.note}` : undefined,
+            r.label,
+            r.via,
+            r.inTransaction ? 'in a transaction' : undefined,
+          ]
             .filter(Boolean)
             .join(' · ') || 'relation',
         detector: 'relations',

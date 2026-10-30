@@ -2,7 +2,7 @@ import type { ZodType } from 'zod';
 import type { Catalog } from '../catalog';
 import { checkNesting, checkRelation } from '../catalog';
 import { makeElementId, makeRelationId } from '../ids';
-import type { Element, Evidence, Id, Model, Relation } from '../schema';
+import type { AntiPattern, Element, Evidence, Id, Model, Relation } from '../schema';
 import type { Fact } from './types';
 
 /** Evidence kept per candidate; more is noise in the review panel. */
@@ -68,7 +68,10 @@ export interface Resolved {
  * Facts → candidate elements and relations (§19.6): one element per subject, the kind and
  * name of the most confident fact, merged code paths, properties and evidence, and a
  * noisy-or confidence. Parents come from the facts; an element whose parent is missing or
- * not allowed goes to the top level when it may, and is dropped otherwise.
+ * not allowed goes to the top level when it may. Otherwise it stays in the parent the code
+ * gives it, with an anti-pattern mark, and it is dropped only when it has no parent. A
+ * relation the rules refuse is kept with an anti-pattern mark too: the draft shows the code
+ * as it is, and rule AP-019 reports what to address.
  */
 export function resolveFacts(
   facts: readonly Fact[],
@@ -111,14 +114,25 @@ export function resolveFacts(
       continue;
     }
     let parentId: Id | undefined;
+    let antiPattern: AntiPattern | undefined;
     const parentSubject = parentOf(subject);
-    if (parentSubject && subjects[parentSubject]) {
-      const parent = elements.find((e) => e.id === subjects[parentSubject]);
-      if (parent && checkNesting(catalog, main.kind, parent.kind).ok) parentId = parent.id;
-    }
+    const parent =
+      parentSubject && subjects[parentSubject]
+        ? elements.find((e) => e.id === subjects[parentSubject])
+        : undefined;
+    if (parent && checkNesting(catalog, main.kind, parent.kind).ok) parentId = parent.id;
     if (!parentId && !checkNesting(catalog, main.kind, null).ok) {
-      warnings.push(`${subject}: a ${concept.name} needs a parent; dropped`);
-      continue;
+      if (!parent) {
+        warnings.push(`${subject}: a ${concept.name} needs a parent; dropped`);
+        continue;
+      }
+      // The code puts it where the rules do not allow it: keep it there, marked (AP-019).
+      parentId = parent.id;
+      antiPattern = {
+        note: `The code has the ${concept.name.toLowerCase()} ${main.name} inside ${parent.name}`,
+        violates: (checkNesting(catalog, main.kind, parent.kind) as { message: string }).message,
+        evidence: mergeEvidence(list).slice(0, 3),
+      };
     }
     const codePaths = [...new Set(list.flatMap((f) => f.element?.codePaths ?? []))].sort();
     const properties = validProperties(
@@ -145,6 +159,7 @@ export function resolveFacts(
       ...(layer ? { layer: layer as Element['layer'] } : {}),
       ...(codePaths.length ? { codePaths } : {}),
       ...(Object.keys(properties).length ? { properties } : {}),
+      ...(antiPattern ? { antiPattern } : {}),
       source: {
         origin: 'inferred',
         confidence: combineConfidence(list.map((f) => f.confidence)),
@@ -165,6 +180,7 @@ export function resolveFacts(
   const relations: Relation[] = [];
   const relationIds = new Set<Id>();
   const refused = new Set<string>();
+  const nameOf = (id: Id) => elements.find((e) => e.id === id)?.name ?? id;
   for (const key of [...byKey.keys()].sort()) {
     const list = [...byKey.get(key)!].sort((a, b) => b.confidence - a.confidence);
     const r = list[0]!.relation!;
@@ -172,11 +188,24 @@ export function resolveFacts(
     const targetId = subjects[r.to];
     if (!sourceId || !targetId || sourceId === targetId) continue;
     const check = checkRelation(catalog, r.type, kindOf.get(sourceId)!, kindOf.get(targetId)!);
-    if (!check.ok) {
+    let antiPattern: AntiPattern | undefined;
+    if (!check.ok && check.code === 'RELATION_NOT_ALLOWED') {
+      // The code does what the rules forbid: keep it, marked, so the model stays faithful.
+      antiPattern = {
+        note:
+          list.find((f) => f.relation?.antiPattern)?.relation?.antiPattern ??
+          `The code has ${nameOf(sourceId)} ${r.type} ${nameOf(targetId)}`,
+        violates: check.message,
+        evidence: mergeEvidence(list).slice(0, 3),
+      };
+    } else if (!check.ok) {
       const note = `${kindOf.get(sourceId)} -${r.type}-> ${kindOf.get(targetId)}`;
       if (!refused.has(note)) warnings.push(`relation not allowed, skipped: ${note}`);
       refused.add(note);
       continue;
+    } else {
+      const flagged = list.find((f) => f.relation?.antiPattern)?.relation?.antiPattern;
+      if (flagged) antiPattern = { note: flagged, evidence: mergeEvidence(list).slice(0, 3) };
     }
     const id = makeRelationId(sourceId, r.type, targetId, relationIds);
     relationIds.add(id);
@@ -206,6 +235,7 @@ export function resolveFacts(
       ...(via ? { via: via as string } : {}),
       ...(inTransaction ? { inTransaction } : {}),
       ...(Object.keys(properties).length ? { properties } : {}),
+      ...(antiPattern ? { antiPattern } : {}),
       source: {
         origin: 'inferred',
         confidence: combineConfidence(list.map((f) => f.confidence)),

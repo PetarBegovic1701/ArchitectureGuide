@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "Reads a React + Node.js + PostgreSQL repository and drafts the architecture model with evidence",
+  "description": "Reads a React, Node.js, Python or .NET repository with PostgreSQL and drafts the architecture model with evidence",
   "exports": {
     ".": "./src/index.ts"
   },

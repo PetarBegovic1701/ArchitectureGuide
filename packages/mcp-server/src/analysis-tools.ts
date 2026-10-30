@@ -1,7 +1,7 @@
 import { relative, resolve } from 'node:path';
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { ENFORCEMENT_TARGETS, matchModel, selectSuggestions } from '@archguide/core';
+import { ENFORCEMENT_TARGETS, markAsFound, matchModel, selectSuggestions } from '@archguide/core';
 import type { AnalysisResult } from '@archguide/core';
 import {
   analysisDir,
@@ -39,7 +39,17 @@ function summarize(r: AnalysisResult) {
         ?.slice(0, 2)
         .map((x) => `${x.path}${x.line ? `:${x.line}` : ''}`),
     })),
-    relations: r.candidates.relations.map((x) => `${x.sourceId} -${x.type}-> ${x.targetId}`),
+    relations: r.candidates.relations.map(
+      (x) => `${x.sourceId} -${x.type}-> ${x.targetId}${x.antiPattern ? ' (anti-pattern)' : ''}`,
+    ),
+    /** What the code does that the rules refuse: kept in the draft, marked, to address. */
+    antiPatterns: [...r.candidates.elements, ...r.candidates.relations]
+      .filter((x) => x.antiPattern)
+      .map((x) => ({
+        id: x.id,
+        note: x.antiPattern!.note,
+        ...(x.antiPattern!.violates ? { violates: x.antiPattern!.violates } : {}),
+      })),
     findings: r.findings.map((f) => ({
       ruleId: f.ruleId,
       severity: f.severity,
@@ -108,7 +118,7 @@ export function registerAnalysisTools(server: McpServer, ctx: McpContext): void 
     {
       title: 'Analyze the repository',
       description:
-        'Reads the repository (no code is run) and drafts the architecture with evidence: deployables, routes, handlers, modules, state, schemas, tables, queues, calls and data ownership, plus findings with file and line. Compared with the project when there is one. The full result is saved to .archguide/analysis/last.json; apply it with apply_analysis.',
+        'Reads the repository (no code is run) and drafts the architecture with evidence: deployables, routes, handlers, modules, state, schemas, tables, queues, calls and data ownership, plus findings with file and line. Reads TypeScript/JavaScript (React, Node), Python (FastAPI, Flask, Django, Celery …) and .NET (ASP.NET Core, EF Core, worker services …). What the code does against the rules is kept in the draft as anti-patterns (antiPatterns). Compared with the project when there is one. The full result is saved to .archguide/analysis/last.json; apply it with apply_analysis.',
       inputSchema: {
         path: z
           .string()
@@ -148,7 +158,7 @@ export function registerAnalysisTools(server: McpServer, ctx: McpContext): void 
     {
       title: 'Apply the analysis',
       description:
-        'Adds the elements and relations of the last analysis to the project, as inferred and not yet reviewed by a person. Matched against the current model first, so nothing is added twice and nothing is removed.',
+        'Adds the elements and relations of the last analysis to the project, as inferred and not yet reviewed by a person. Matched against the current model first, so nothing is added twice and nothing is removed. What the code does against the rules is added as found, marked as anti-patterns to address (rule AP-019).',
       inputSchema: {
         projectId: projectIdArg,
         accept: z.union([z.literal('all'), z.array(z.string()).min(1)]).default('all'),
@@ -170,7 +180,17 @@ export function registerAnalysisTools(server: McpServer, ctx: McpContext): void 
           const diff = matchModel(p.model, last.candidates, {
             detectableKinds: new Set(last.candidates.elements.map((e) => e.kind)),
           });
-          const ops = selectSuggestions(diff, { accept, minConfidence });
+          const { ops } = markAsFound(
+            p,
+            catalog,
+            selectSuggestions(diff, { accept, minConfidence }),
+          );
+          const antiPatterns = ops.flatMap((o) =>
+            (o.op === 'addElement' && o.element.antiPattern) ||
+            (o.op === 'addRelation' && o.relation.antiPattern)
+              ? [o.op === 'addElement' ? o.element.id : o.relation.id]
+              : [],
+          );
           return {
             ops,
             ids: ops.flatMap((o) =>
@@ -182,7 +202,16 @@ export function registerAnalysisTools(server: McpServer, ctx: McpContext): void 
                     ? [o.id]
                     : [],
             ),
-            data: { applied: ops.length, skipped: diff.suggestedOps.length - ops.length },
+            data: {
+              applied: ops.length,
+              skipped: diff.suggestedOps.length - ops.length,
+              ...(antiPatterns.length
+                ? {
+                    antiPatterns,
+                    note: 'The code has these anti-patterns; they are in the model as found, and rule AP-019 reports them until they are addressed.',
+                  }
+                : {}),
+            },
           };
         });
       }),

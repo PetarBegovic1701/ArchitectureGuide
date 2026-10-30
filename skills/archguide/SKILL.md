@@ -40,6 +40,11 @@ editing the JSON by hand. When `npx archguide serve` runs, every change shows up
 Use the MCP prompt `map-repository`, or `npx archguide init && npx archguide analyze --write`, then
 correct names and responsibilities with the MCP tools and `export` agent-md with `write: true`.
 
+Keep the model faithful to the code, also where the code is wrong. If the code does something
+the rules refuse, add it as it is with `antiPattern: { note, evidence }` (or `asFound: true` on
+the call) instead of leaving it out or drawing the design it should have. Rule AP-019 reports it
+as something to address; list these anti-patterns in your report.
+
 Then document the blocks with `write_documentation`: for each deployable, module and data store, its
 name, description (what it is) and function (what it does), as you read them in the README, docs and
 comments (`basis: "read"`) or deduced them from the code (`basis: "deduced"`), with the files as

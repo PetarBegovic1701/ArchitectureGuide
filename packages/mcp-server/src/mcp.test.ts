@@ -209,6 +209,63 @@ describe('MCP tools', () => {
       expect(badLang.ok).toBe(false);
     });
 
+    it('keeps anti-patterns found in the code, marked, and reports them to address', async () => {
+      await call('upsert_elements', {
+        elements: [
+          { id: 'app.web', kind: 'react.app', name: 'Web', status: 'existing' },
+          { id: 'db.main', kind: 'pg.database', name: 'Main', status: 'existing' },
+        ],
+      });
+      // Without a mark the rules refuse it, and the hint says how to record it as found.
+      const refused = await call('upsert_relations', {
+        relations: [{ sourceId: 'app.web', targetId: 'db.main', type: 'reads' }],
+      });
+      expect(refused).toMatchObject({ ok: false, errors: [{ code: 'RELATION_NOT_ALLOWED' }] });
+
+      const kept = await call('upsert_relations', {
+        relations: [
+          {
+            sourceId: 'app.web',
+            targetId: 'db.main',
+            type: 'reads',
+            status: 'existing',
+            antiPattern: {
+              note: 'The web app imports pg and queries the database',
+              evidence: [{ path: 'apps/web/src/db.ts', line: 2 }],
+            },
+          },
+        ],
+      });
+      expect(kept.ok).toBe(true);
+      expect(kept.data?.antiPatterns).toBeUndefined();
+      expect(kept.findings!.map((f) => f.ruleId)).toContain('AP-019');
+      const rel = (await onDisk()).model.relations.find((r) => r.sourceId === 'app.web')!;
+      expect(rel.antiPattern).toMatchObject({
+        note: 'The web app imports pg and queries the database',
+        violates: expect.stringMatching(/Browser code cannot connect to PostgreSQL/),
+      });
+
+      // asFound: the refused nesting is kept and marked, with the rule it breaks.
+      const nested = await call('upsert_elements', {
+        asFound: true,
+        elements: [
+          { id: 'mod.billing', kind: 'node.module', name: 'Billing', parentId: 'db.main' },
+        ],
+      });
+      expect(nested).toMatchObject({ ok: true, data: { antiPatterns: ['mod.billing'] } });
+      expect((await onDisk()).model.elements.find((e) => e.id === 'mod.billing')).toMatchObject({
+        parentId: 'db.main',
+        antiPattern: { note: 'Found in the analyzed code' },
+      });
+      const all = await call('validate_project');
+      expect(
+        all.data
+          .filter((f: { ruleId: string }) => f.ruleId === 'AP-019')
+          .map((f: { targetIds: string[] }) => f.targetIds[0])
+          .sort(),
+      ).toEqual([rel.id, 'mod.billing'].sort());
+    });
+
     it('explains mistakes: unknown kinds, ambiguous types and refused pairs', async () => {
       const bad = await call('upsert_elements', { elements: [{ kind: 'node.servce', name: 'X' }] });
       expect(bad).toMatchObject({ ok: false, errors: [{ code: 'UNKNOWN_KIND' }] });

@@ -21,6 +21,9 @@ const ICON_CORNER: ReadonlySet<string> = new Set([
   'document',
 ]);
 
+/** Items marked as anti-patterns found in the code (AP-019). */
+export const ANTI_PATTERN_COLOR = 'var(--ag-error)';
+
 export const DIFF_COLOR = {
   added: 'var(--ag-valid)',
   changed: 'var(--ag-warning)',
@@ -146,6 +149,22 @@ function ShapeNodeImpl({ data, selected }: NodeProps<ShapeFlowNode>) {
       {data.showDocs && data.docs && !data.ghost && !data.container && (
         <DocsCard docs={data.docs} id={data.elementId} below={below} />
       )}
+      {data.antiPattern && !data.diff && (
+        <>
+          <div
+            className="pointer-events-none absolute -inset-1 rounded-lg border-2 border-dashed"
+            style={{ borderColor: ANTI_PATTERN_COLOR }}
+            aria-hidden
+          />
+          <span
+            className="pointer-events-none absolute -top-5 left-0 whitespace-nowrap rounded px-1 text-[10px] font-semibold text-white"
+            style={{ background: ANTI_PATTERN_COLOR }}
+            data-testid={`anti-pattern-${data.elementId}`}
+          >
+            ⚠ anti-pattern
+          </span>
+        </>
+      )}
       {data.issue && <IssueBadge id={data.elementId} issue={data.issue} />}
       {data.decisionIds && (
         <button
@@ -217,7 +236,9 @@ function IssueBadge({
 /** Name, concept, and the documentation's description and function, for the hover text. */
 function tooltip(data: ShapeFlowNode['data']): string {
   const d = data.docs;
-  const head = `${d?.name ?? data.name} — ${data.conceptName}`;
+  const head = `${d?.name ?? data.name} — ${data.conceptName}${
+    data.antiPattern ? `\n⚠ Anti-pattern found in the code: ${data.antiPattern}` : ''
+  }`;
   if (!d) return head;
   return [
     d.name && d.name !== data.name ? `${head} (${data.name})` : head,
