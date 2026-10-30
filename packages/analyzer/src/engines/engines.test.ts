@@ -131,13 +131,18 @@ LISTEN invoices;`);
 });
 
 describe('compose and env', () => {
-  it('keeps names and URL hosts and ports, never the values', () => {
+  it('keeps names and URL schemes, hosts and ports, never the values', () => {
     const env = parseEnv(
       '.env',
       'DATABASE_URL=postgres://app:hunter2@db:5432/shop\nexport API_KEY="sk-secret"\n# comment\n',
     );
     expect(env).toEqual([
-      { name: 'DATABASE_URL', file: '.env', line: 1, url: { host: 'db', port: 5432 } },
+      {
+        name: 'DATABASE_URL',
+        file: '.env',
+        line: 1,
+        url: { host: 'db', port: 5432, scheme: 'postgres' },
+      },
       { name: 'API_KEY', file: '.env', line: 2 },
     ]);
     const compose = parseCompose(`services:
@@ -157,7 +162,7 @@ describe('compose and env', () => {
       build: './services/api',
       ports: [{ host: 3000, container: 3000 }, { container: 9229 }],
       environment: ['DATABASE_URL', 'TOKEN'],
-      urls: [{ name: 'DATABASE_URL', host: 'db', port: 5432 }],
+      urls: [{ name: 'DATABASE_URL', host: 'db', port: 5432, scheme: 'postgres' }],
       dependsOn: ['db'],
     });
     expect(JSON.stringify([env, compose])).not.toMatch(/hunter2|sk-secret|abc/);

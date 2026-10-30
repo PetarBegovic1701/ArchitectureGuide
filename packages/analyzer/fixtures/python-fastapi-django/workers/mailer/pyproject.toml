@@ -1,0 +1,9 @@
+[tool.poetry]
+name = "mailer"
+version = "0.1.0"
+
+[tool.poetry.dependencies]
+python = "^3.12"
+celery = { version = "^5.4", extras = ["redis"] }
+sendgrid = "^6.11"
+shop-common = { path = "../../libs/common", develop = true }

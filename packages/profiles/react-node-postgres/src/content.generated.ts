@@ -278,6 +278,118 @@ export const DOCS: LearningDoc[] = [
     "source": "content/docs/dispatches.md"
   },
   {
+    "id": "dotnet.service",
+    "kind": "concept",
+    "title": ".NET service (API)",
+    "summary": "A .NET process that answers requests (ASP.NET Core controllers or minimal APIs). It checks the caller, validates input, applies the rules and owns its data.",
+    "level": "beginner",
+    "tracks": [
+      "foundations",
+      "concurrency-and-parallelism"
+    ],
+    "tags": [
+      "dotnet",
+      "csharp",
+      "aspnetcore",
+      "backend"
+    ],
+    "explain": {
+      "beginner": "A .NET service is a backend process written in C# (or F#, or Visual Basic) on ASP.NET\nCore. It has the same job as a Node service: it receives HTTP requests, checks who is\ncalling, validates the input, applies the business rules and reads or writes its own\ndata.\n\nControllers map methods to paths with attributes (`[HttpGet(\"{id}\")]`). Minimal APIs map\npaths in `Program.cs` (`app.MapGet(\"/orders\", ...)`).",
+      "intermediate": "- Validate requests with data annotations or FluentValidation, and return problem\n  details for errors.\n- Keep controllers thin. Put the work in application services, and data access behind a\n  repository or a `DbContext` (Entity Framework Core, Dapper).\n- Give the service its own schema and EF Core migrations. Other services use its API.\n- Register the authentication middleware (`AddAuthentication`, `UseAuthorization`), and\n  mark public endpoints on purpose with `[AllowAnonymous]`.",
+      "senior": "- ASP.NET Core serves requests on a thread pool. Use `async` all the way down; a blocking\n  `.Result` on a task can starve the pool under load.\n- Each instance has its own connection pool (Npgsql). Instances × pool size must fit\n  Postgres; put a pooler in front at scale.\n- A solution often holds several projects. Show the deployable projects as services and\n  the class libraries as modules or shared packages, with their project references."
+    },
+    "mistakes": [
+      "Blocking on async code (`.Result`, `.Wait()`), which leads to thread-pool starvation.",
+      "One `DbContext` and one database shared by several services.",
+      "A long-lived `DbContext` (a singleton) shared between requests."
+    ],
+    "examples": [
+      {
+        "title": "A minimal API endpoint with EF Core",
+        "language": "csharp",
+        "code": "var builder = WebApplication.CreateBuilder(args);\nbuilder.Services.AddDbContext<OrdersDb>(o =>\n    o.UseNpgsql(builder.Configuration.GetConnectionString(\"Orders\")));\nvar app = builder.Build();\n\napp.MapPost(\"/orders\", async (NewOrder order, OrdersDb db) =>\n{\n    db.Orders.Add(new Order(order.ProductId, order.Quantity));\n    await db.SaveChangesAsync();\n    return Results.Created();\n});\n\napp.Run();"
+      }
+    ],
+    "related": [
+      "node.service",
+      "node.route-handler",
+      "node.repository",
+      "pg.schema",
+      "calls"
+    ],
+    "references": [
+      {
+        "title": "Overview of ASP.NET Core",
+        "url": "https://learn.microsoft.com/en-us/aspnet/core/introduction-to-aspnet-core"
+      },
+      {
+        "title": "Minimal APIs overview",
+        "url": "https://learn.microsoft.com/en-us/aspnet/core/fundamentals/minimal-apis/overview"
+      },
+      {
+        "title": "Entity Framework Core — Overview",
+        "url": "https://learn.microsoft.com/en-us/ef/core/"
+      }
+    ],
+    "source": "content/docs/dotnet.service.md"
+  },
+  {
+    "id": "dotnet.worker",
+    "kind": "concept",
+    "title": ".NET worker",
+    "summary": "A .NET process that runs background work (a hosted service, Hangfire, Quartz.NET, MassTransit consumers) outside the request, with retries when something fails.",
+    "level": "intermediate",
+    "tracks": [
+      "concurrency-and-parallelism"
+    ],
+    "tags": [
+      "dotnet",
+      "csharp",
+      "hosted-service",
+      "hangfire",
+      "jobs"
+    ],
+    "explain": {
+      "beginner": "A .NET worker is a process without a web front: it runs jobs in the background. The\n.NET \"Worker Service\" template runs one or more `BackgroundService` classes. Hangfire\nand Quartz.NET run jobs on a schedule or from a queue. MassTransit consumers handle\nmessages from a broker.",
+      "intermediate": "- Jobs and consumers must be **idempotent**: a message can come twice.\n- Set retries with backoff, and a dead-letter queue for messages that keep failing.\n- Use a new scope (and a new `DbContext`) per job; do not keep one for the life of the\n  worker.\n- Show the queue or broker on the diagram, with the producers and this worker.",
+      "senior": "- Publish messages with an outbox (MassTransit has one) so a message never leaves when\n  the transaction rolls back.\n- Limit concurrency per consumer, and keep slow and fast work on separate queues.\n- Stop gracefully: honour the `CancellationToken` so a deploy does not cut a job in half."
+    },
+    "mistakes": [
+      "A `while (true)` loop without a delay or a cancellation check.",
+      "One `DbContext` for the whole life of the worker.",
+      "Non-idempotent consumers that charge a card twice when a message is redelivered."
+    ],
+    "examples": [
+      {
+        "title": "A hosted service that processes work in a loop",
+        "language": "csharp",
+        "code": "public sealed class InvoiceWorker(IServiceScopeFactory scopes) : BackgroundService\n{\n    protected override async Task ExecuteAsync(CancellationToken stop)\n    {\n        while (!stop.IsCancellationRequested)\n        {\n            using var scope = scopes.CreateScope();\n            var invoices = scope.ServiceProvider.GetRequiredService<InvoiceJobs>();\n            await invoices.RunNextAsync(stop);\n            await Task.Delay(TimeSpan.FromSeconds(5), stop);\n        }\n    }\n}"
+      }
+    ],
+    "related": [
+      "node.worker",
+      "dotnet.service",
+      "processes",
+      "consumes",
+      "pattern.background-jobs"
+    ],
+    "references": [
+      {
+        "title": "Worker services in .NET",
+        "url": "https://learn.microsoft.com/en-us/dotnet/core/extensions/workers"
+      },
+      {
+        "title": "Hangfire — Documentation",
+        "url": "https://docs.hangfire.io/en/latest/"
+      },
+      {
+        "title": "MassTransit — Consumers",
+        "url": "https://masstransit.io/documentation/concepts/consumers"
+      }
+    ],
+    "source": "content/docs/dotnet.worker.md"
+  },
+  {
     "id": "emits",
     "kind": "relation",
     "title": "emits",
@@ -3946,6 +4058,125 @@ export const DOCS: LearningDoc[] = [
       }
     ],
     "source": "content/docs/publishes.md"
+  },
+  {
+    "id": "py.service",
+    "kind": "concept",
+    "title": "Python service (API)",
+    "summary": "A Python process that answers requests (FastAPI, Flask, Django). Like a Node service, it checks the caller, validates input, applies the rules and owns its data.",
+    "level": "beginner",
+    "tracks": [
+      "foundations",
+      "concurrency-and-parallelism"
+    ],
+    "tags": [
+      "python",
+      "fastapi",
+      "flask",
+      "django",
+      "backend"
+    ],
+    "explain": {
+      "beginner": "A Python service is a backend process written in Python. It has the same job as a Node\nservice: it receives HTTP requests from the React app or from other services, checks who\nis calling, validates the input, applies the business rules and reads or writes its own\ndata.\n\nFastAPI and Flask map a function to a path (`@app.get(\"/orders\")`). Django maps paths to\nviews in `urls.py`. A server such as Uvicorn or Gunicorn runs the application and accepts\nthe connections.",
+      "intermediate": "- Validate every request at the edge. FastAPI does it with Pydantic models; Flask and\n  Django need a form, a serializer or a schema library.\n- Keep the routes thin. Put the work in services or use cases, and the SQL behind a\n  repository (SQLAlchemy, the Django ORM).\n- Give the service its own schema and migrations (Alembic or Django migrations). Other\n  services use its API, not its tables.\n- `async def` handlers share one event loop per process: a blocking call (a sync driver,\n  a slow library) stops every other request of that process.",
+      "senior": "- Python runs one thread of Python code at a time per process (the GIL). Scale with more\n  processes (`gunicorn -w`, `uvicorn --workers`) and more instances, and size the\n  database pool per process: instances × workers × pool size must fit Postgres.\n- Move CPU-heavy or slow work to a worker (Celery, RQ, arq) instead of doing it in the\n  request.\n- Treat the OpenAPI document that FastAPI generates as the contract with the frontend,\n  and generate the TypeScript client from it."
+    },
+    "mistakes": [
+      "Blocking calls inside `async def` handlers (the `requests` library, a sync database driver).",
+      "A database pool per worker process that, multiplied by all processes, exceeds the connection limit of Postgres.",
+      "Two services that write the same tables because they share one Django project or one SQLAlchemy model package."
+    ],
+    "examples": [
+      {
+        "title": "A FastAPI route with a validated request",
+        "language": "python",
+        "code": "from fastapi import FastAPI\nfrom pydantic import BaseModel\n\napp = FastAPI()\n\nclass NewOrder(BaseModel):\n    product_id: int\n    quantity: int\n\n@app.post(\"/orders\", status_code=201)\nasync def create_order(order: NewOrder):\n    return await orders.place(order)"
+      }
+    ],
+    "related": [
+      "node.service",
+      "node.route-handler",
+      "node.repository",
+      "pg.schema",
+      "calls",
+      "topic.event-loop-and-parallelism"
+    ],
+    "references": [
+      {
+        "title": "FastAPI — First steps",
+        "url": "https://fastapi.tiangolo.com/tutorial/first-steps/"
+      },
+      {
+        "title": "Flask — Quickstart",
+        "url": "https://flask.palletsprojects.com/en/stable/quickstart/"
+      },
+      {
+        "title": "Django — Writing your first Django app",
+        "url": "https://docs.djangoproject.com/en/stable/intro/tutorial01/"
+      },
+      {
+        "title": "Uvicorn — Deployment",
+        "url": "https://www.uvicorn.org/deployment/"
+      }
+    ],
+    "source": "content/docs/py.service.md"
+  },
+  {
+    "id": "py.worker",
+    "kind": "concept",
+    "title": "Python worker",
+    "summary": "A Python process that runs background jobs from a queue (Celery, RQ, Dramatiq, arq), outside the request, with retries when something fails.",
+    "level": "intermediate",
+    "tracks": [
+      "concurrency-and-parallelism"
+    ],
+    "tags": [
+      "python",
+      "celery",
+      "rq",
+      "dramatiq",
+      "jobs",
+      "async"
+    ],
+    "explain": {
+      "beginner": "Some work is slow or can fail: sending an email, making a report, calling a partner API.\nThe user should not wait for it. The API puts a job on a queue and answers at once. A\n**worker**, a separate Python process, takes the jobs from the queue, runs them, and\ntries again when one fails.",
+      "intermediate": "- Jobs must be **idempotent**: a job can run twice. Check \"already done?\" before you\n  send an email or charge a card.\n- Set retries with backoff, and a place for jobs that keep failing.\n- The broker (Redis, RabbitMQ, or Postgres) is a separate part of the architecture.\n  Show it on the diagram, with the producers and the workers.\n- Concurrency is the number of jobs one worker runs at the same time; instances are the\n  number of worker processes.",
+      "senior": "- Add the job in the same transaction as the data when the broker allows it (a Postgres\n  job table), or use an outbox, so a rolled-back order never sends its email.\n- Separate queues by latency class, so slow reports do not delay password-reset emails.\n- Watch the queue depth and the age of the oldest job, and alert when they grow."
+    },
+    "mistakes": [
+      "Non-idempotent jobs (double charges, duplicate emails).",
+      "Sending the job before the commit, so a failed transaction still runs the job.",
+      "Passing whole objects to the job instead of an ID, so the job works on old data."
+    ],
+    "examples": [
+      {
+        "title": "A Celery task and its producer",
+        "language": "python",
+        "code": "@app.task(bind=True, max_retries=5)\ndef send_confirmation(self, order_id: int):\n    if emails.already_sent(order_id):\n        return  # idempotent\n    mailer.send_confirmation(order_id)\n\n# In the API, after the commit:\nsend_confirmation.delay(order.id)"
+      }
+    ],
+    "related": [
+      "node.worker",
+      "py.service",
+      "processes",
+      "enqueues",
+      "pattern.background-jobs"
+    ],
+    "references": [
+      {
+        "title": "Celery — Introduction",
+        "url": "https://docs.celeryq.dev/en/stable/getting-started/introduction.html"
+      },
+      {
+        "title": "RQ — Simple job queues for Python",
+        "url": "https://python-rq.org/"
+      },
+      {
+        "title": "Dramatiq — Motivation",
+        "url": "https://dramatiq.io/motivation.html"
+      }
+    ],
+    "source": "content/docs/py.worker.md"
   },
   {
     "id": "react.action",

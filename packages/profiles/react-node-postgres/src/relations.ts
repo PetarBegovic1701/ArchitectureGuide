@@ -1,7 +1,9 @@
 import type { RelationRule, RelationType } from '@archguide/core';
+import { PYTHON_DOTNET_DEPLOYABLES } from './concepts';
 
 /** Node elements that run code and can talk to Postgres. */
 const NODE_ACTORS = [
+  ...PYTHON_DOTNET_DEPLOYABLES,
   'node.service',
   'node.bff',
   'node.worker',
@@ -16,6 +18,7 @@ const NODE_ACTORS = [
 const DB_CODE = ['pg.function', 'pg.trigger'];
 /** Backend elements that hold server-only code. Contracts, DTOs and shared packages are not in it. */
 const SERVER_CODE = [
+  ...PYTHON_DOTNET_DEPLOYABLES,
   'node.service',
   'node.bff',
   'node.worker',
@@ -262,17 +265,22 @@ export const RELATION_RULES: RelationRule[] = [
   // Allow rules.
   {
     type: 'migrates',
-    from: ['node.service', 'node.bff', 'node.worker'],
+    from: ['node.service', 'node.bff', 'node.worker', ...PYTHON_DOTNET_DEPLOYABLES],
     to: ['pg.schema', 'pg.database'],
   },
   { type: 'invokes', from: [...NODE_ACTORS, ...DB_CODE], to: ['pg.function'] },
   { type: 'fires-on', from: ['pg.trigger'], to: ['pg.table', 'pg.view'] },
   // graphile-worker's add_job() and pg_notify() can be called from SQL as well.
   { type: 'enqueues', from: [...NODE_ACTORS, ...DB_CODE], to: ['pg.job-queue'] },
-  { type: 'processes', from: ['node.worker'], to: ['pg.job-queue'], priority: 27 },
   {
     type: 'processes',
-    from: ['node.service', 'node.module', 'node.use-case'],
+    from: ['node.worker', 'py.worker', 'dotnet.worker'],
+    to: ['pg.job-queue'],
+    priority: 27,
+  },
+  {
+    type: 'processes',
+    from: ['node.service', 'py.service', 'dotnet.service', 'node.module', 'node.use-case'],
     to: ['pg.job-queue'],
   },
   { type: 'notifies', from: [...NODE_ACTORS, ...DB_CODE], to: ['pg.channel'] },
@@ -280,7 +288,11 @@ export const RELATION_RULES: RelationRule[] = [
   { type: 'connects-via', from: NODE_ACTORS, to: ['pg.pooler'] },
   { type: 'connects-via', from: ['pg.pooler'], to: ['pg.database'] },
   { type: 'replicates-to', from: ['pg.database'], to: ['pg.replica'] },
-  { type: 'serves', from: ['node.service', 'node.bff', 'gen.cdn'], to: ['react.app'] },
+  {
+    type: 'serves',
+    from: ['node.service', 'node.bff', 'py.service', 'dotnet.service', 'gen.cdn'],
+    to: ['react.app'],
+  },
   {
     type: 'uses-state',
     from: [

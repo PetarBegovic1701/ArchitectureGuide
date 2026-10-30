@@ -1,0 +1,26 @@
+services:
+  postgres:
+    image: postgres:16
+    ports:
+      - "5432:5432"
+  redis:
+    image: redis:7
+  orders:
+    build: ./services/orders
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: postgresql://shop:shop@postgres:5432/shop
+      CATALOG_URL: http://catalog:8001
+      BROKER_URL: redis://redis:6379/0
+    depends_on: [postgres, redis, catalog]
+  catalog:
+    build: ./services/catalog
+    ports:
+      - "8001:8001"
+    environment:
+      DATABASE_URL: postgresql://shop:shop@postgres:5432/shop
+  mailer:
+    build: ./workers/mailer
+    environment:
+      BROKER_URL: redis://redis:6379/0

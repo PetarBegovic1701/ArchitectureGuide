@@ -660,9 +660,69 @@ const GENERIC: Record<string, ConceptGuide> = {
   },
 };
 
+const PYTHON_DOTNET: Record<string, ConceptGuide> = {
+  'py.service': {
+    examples: [
+      'A FastAPI "orders" API that the React shop calls, with SQLAlchemy models and Alembic migrations.',
+      'A Django back office that also serves a REST API with Django REST framework.',
+    ],
+    connections: [
+      from('react.app', 'calls', 'The React app (or its API client) calls the service.'),
+      out('reads', 'pg.schema', 'The service reads its own schema.'),
+      out('writes', 'pg.schema', 'The service writes its own schema.'),
+      out('migrates', 'pg.schema', 'Alembic or Django migrations own the schema.'),
+      out('calls', 'node.service', 'It calls other services over HTTP.'),
+      out('calls', 'gen.external', 'It calls a payment or email provider.'),
+    ],
+  },
+  'py.worker': {
+    examples: [
+      'A Celery worker that sends the order confirmation email.',
+      'An RQ worker that builds monthly PDF reports.',
+    ],
+    connections: [
+      out('consumes', 'gen.other-broker', 'It takes jobs from the broker (Redis, RabbitMQ).'),
+      out('processes', 'pg.job-queue', 'Or from a job table in Postgres.'),
+      out('writes', 'pg.schema', 'It saves the result of a job.'),
+      out('calls', 'gen.external', 'It calls the email or payment provider.'),
+    ],
+  },
+  'dotnet.service': {
+    examples: [
+      'An ASP.NET Core Web API with controllers and Entity Framework Core on PostgreSQL.',
+      'A minimal API that serves the catalog to the React app.',
+    ],
+    connections: [
+      from('react.app', 'calls', 'The React app (or its API client) calls the service.'),
+      out('reads', 'pg.schema', 'The service reads its own schema.'),
+      out('writes', 'pg.schema', 'The service writes its own schema.'),
+      out('migrates', 'pg.schema', 'EF Core migrations own the schema.'),
+      out('calls', 'node.service', 'It calls other services over HTTP.'),
+      out(
+        'authenticates-with',
+        'gen.auth-provider',
+        'JWT bearer authentication checks tokens of the provider.',
+      ),
+    ],
+  },
+  'dotnet.worker': {
+    examples: [
+      'A worker service that sends invoices every night.',
+      'MassTransit consumers that handle "order placed" messages from RabbitMQ.',
+    ],
+    connections: [
+      out('consumes', 'gen.other-broker', 'Consumers take messages from the broker.'),
+      out('processes', 'pg.job-queue', 'Or jobs from a Postgres job table (Hangfire).'),
+      out('writes', 'pg.schema', 'It saves the result of a job.'),
+      out('calls', 'gen.external', 'It calls an external system.'),
+    ],
+  },
+};
+
 export const GUIDES: Record<string, ConceptGuide> = {
   ...REACT,
   ...NODE,
+  ...PYTHON_DOTNET,
   ...POSTGRES,
   ...GENERIC,
 };

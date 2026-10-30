@@ -1,0 +1,35 @@
+{
+  "elements": [
+    { "kind": "py.service", "name": "Orders" },
+    { "kind": "py.service", "name": "Catalog" },
+    { "kind": "py.worker", "name": "Mailer" },
+    { "kind": "node.shared-lib", "name": "Common" },
+    { "kind": "node.route-handler", "name": "Orders routes" },
+    { "kind": "node.route-handler", "name": "Products routes" },
+    { "kind": "node.middleware", "name": "Auth middleware" },
+    { "kind": "pg.cluster", "name": "PostgreSQL" },
+    { "kind": "pg.database", "name": "Shop DB" },
+    { "kind": "pg.schema", "name": "orders" },
+    { "kind": "pg.schema", "name": "public" },
+    { "kind": "pg.table", "name": "orders" },
+    { "kind": "pg.table", "name": "order_lines" },
+    { "kind": "pg.table", "name": "products_product" },
+    { "kind": "pg.table", "name": "product_reviews" },
+    { "kind": "gen.other-broker", "name": "Redis" },
+    { "kind": "gen.external", "name": "SendGrid" }
+  ],
+  "relations": [
+    { "type": "calls", "from": "Orders", "to": "Catalog" },
+    { "type": "publishes", "from": "Orders", "to": "Redis" },
+    { "type": "consumes", "from": "Mailer", "to": "Redis" },
+    { "type": "depends-on", "from": "Orders", "to": "Common" },
+    { "type": "depends-on", "from": "Mailer", "to": "Common" },
+    { "type": "migrates", "from": "Orders", "to": "orders" },
+    { "type": "migrates", "from": "Catalog", "to": "public" },
+    { "type": "writes", "from": "Orders", "to": "orders" },
+    { "type": "writes", "from": "Orders", "to": "order_lines" },
+    { "type": "reads", "from": "Catalog", "to": "products_product" },
+    { "type": "writes", "from": "Catalog", "to": "product_reviews" },
+    { "type": "calls", "from": "Mailer", "to": "SendGrid" }
+  ]
+}

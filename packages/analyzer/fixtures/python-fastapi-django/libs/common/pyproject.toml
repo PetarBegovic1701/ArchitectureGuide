@@ -1,0 +1,4 @@
+[project]
+name = "shop-common"
+version = "0.1.0"
+dependencies = ["pydantic>=2.8"]

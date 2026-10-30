@@ -12,7 +12,7 @@ export interface ComposeService {
   /** Names only (values are not kept). */
   environment: string[];
   /** Hosts and ports of URL-shaped environment values ("db:5432"), for matching services. */
-  urls: { name: string; host: string; port?: number }[];
+  urls: { name: string; host: string; port?: number; scheme?: string }[];
 }
 
 /** `docker-compose*.yml` services (Implementation.md §19.2 `compose`). */
@@ -79,11 +79,17 @@ export function parseCompose(text: string): { services: ComposeService[]; error?
   return { services: out };
 }
 
-/** Host and port of a URL-shaped value; nothing else of the value is kept. */
-export function urlShape(value: string): { host: string; port?: number } | undefined {
-  const m = /^[a-z][a-z0-9+.-]*:\/\/(?:[^@/]*@)?([a-z0-9.-]+)(?::(\d+))?/i.exec(value.trim());
+/** Scheme, host and port of a URL-shaped value; nothing else of the value is kept. */
+export function urlShape(
+  value: string,
+): { host: string; port?: number; scheme: string } | undefined {
+  const m = /^([a-z][a-z0-9+.-]*):\/\/(?:[^@/]*@)?([a-z0-9.-]+)(?::(\d+))?/i.exec(value.trim());
   if (!m) return undefined;
-  return { host: m[1]!.toLowerCase(), ...(m[2] ? { port: Number(m[2]) } : {}) };
+  return {
+    host: m[2]!.toLowerCase(),
+    ...(m[3] ? { port: Number(m[3]) } : {}),
+    scheme: m[1]!.toLowerCase(),
+  };
 }
 
 export interface EnvVar {
@@ -91,7 +97,7 @@ export interface EnvVar {
   file: string;
   line: number;
   /** Host and port when the value is a URL; the value itself is never read into results. */
-  url?: { host: string; port?: number };
+  url?: { host: string; port?: number; scheme?: string };
 }
 
 /** `.env*` files: names, and the shape of URL values only (Implementation.md §19.2 `env`). */

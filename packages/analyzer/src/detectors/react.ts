@@ -362,7 +362,9 @@ const backendLink: Detector = {
     const services = ctx.facts.filter(
       (f) =>
         f.type === 'deployable' &&
-        (f.element?.kind === 'node.service' || f.element?.kind === 'node.bff'),
+        ['node.service', 'node.bff', 'py.service', 'dotnet.service'].includes(
+          f.element?.kind ?? '',
+        ),
     );
     if (!apps.length || !services.length) return out;
     const ports = await servicePorts(ctx, services);

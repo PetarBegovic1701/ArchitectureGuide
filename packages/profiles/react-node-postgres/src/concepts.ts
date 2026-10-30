@@ -2,11 +2,44 @@ import { z } from 'zod';
 import type { Concept } from '@archguide/core';
 
 const TOP_OR_GROUP = ['top', 'group.*'];
-const NODE_DEPLOYABLES = ['node.service', 'node.bff', 'node.worker'];
-/** Places for code-level Node elements: inside a deployable, a module, or a layer group. */
-const NODE_CODE_PARENTS = ['node.service', 'node.bff', 'node.worker', 'node.module', 'group.layer'];
+/** Backend deployables written in Python or .NET (C#, F#, Visual Basic). */
+export const PYTHON_DOTNET_DEPLOYABLES = [
+  'py.service',
+  'py.worker',
+  'dotnet.service',
+  'dotnet.worker',
+];
+const NODE_DEPLOYABLES = ['node.service', 'node.bff', 'node.worker', ...PYTHON_DOTNET_DEPLOYABLES];
+/**
+ * Places for code-level backend elements (modules, handlers, repositories …): inside a
+ * deployable, a module, or a layer group. They are language-neutral, so Python and .NET
+ * deployables hold them too.
+ */
+const NODE_CODE_PARENTS = [...NODE_DEPLOYABLES, 'node.module', 'group.layer'];
 
-const dataAccess = z.enum(['prisma', 'drizzle', 'typeorm', 'kysely', 'knex', 'pg']);
+const dataAccess = z.enum([
+  'prisma',
+  'drizzle',
+  'typeorm',
+  'kysely',
+  'knex',
+  'pg',
+  // Python
+  'sqlalchemy',
+  'sqlmodel',
+  'django-orm',
+  'tortoise',
+  'peewee',
+  'psycopg',
+  'asyncpg',
+  // .NET
+  'efcore',
+  'dapper',
+  'npgsql',
+  'ado-net',
+]);
+/** Language of the code an element holds, when it is not TypeScript or JavaScript. */
+const language = z.enum(['typescript', 'javascript', 'python', 'csharp', 'fsharp', 'vb']);
 const framework = z.enum(['express', 'fastify', 'nestjs']);
 const transport = z.enum(['rest', 'graphql', 'trpc', 'websocket']);
 /** How many processes run and how each uses CPU cores (learning topic: parallelism). */
@@ -284,7 +317,16 @@ const NODE: Concept[] = [
     category: 'deployable',
     icon: 'clock',
     idPrefix: 'cron',
-    allowedParents: ['top', 'group.*', 'node.service', 'node.worker'],
+    allowedParents: [
+      'top',
+      'group.*',
+      'node.service',
+      'node.worker',
+      'py.service',
+      'py.worker',
+      'dotnet.service',
+      'dotnet.worker',
+    ],
     propertySchema: z
       .object({ lib: z.enum(['pg-boss', 'node-cron', 'pg_cron']), cron: z.string() })
       .partial(),
@@ -312,9 +354,9 @@ const NODE: Concept[] = [
     icon: 'package',
     idPrefix: 'mod',
     allowedParents: [...NODE_DEPLOYABLES, 'group.*'],
-    propertySchema: z.object({ exports: z.array(z.string()) }).partial(),
+    propertySchema: z.object({ exports: z.array(z.string()), language }).partial(),
     palette: { group: 'Backend', order: 60, basic: true },
-    docs: 'A NestJS module or a feature folder with a public API.',
+    docs: 'A NestJS module, a Python package, a .NET project or namespace, or a feature folder with a public API.',
     aliases: ['nest module', 'feature'],
   },
   {
@@ -327,11 +369,23 @@ const NODE: Concept[] = [
     propertySchema: z
       .object({
         routes: z.array(z.string()),
-        validation: z.enum(['zod', 'joi', 'class-validator', 'typebox', 'none']),
+        validation: z.enum([
+          'zod',
+          'joi',
+          'class-validator',
+          'typebox',
+          'pydantic',
+          'marshmallow',
+          'django-forms',
+          'data-annotations',
+          'fluentvalidation',
+          'none',
+        ]),
+        language,
       })
       .partial(),
     palette: { group: 'Backend', order: 70, basic: true },
-    docs: 'Receives HTTP requests: an Express router, Fastify routes or a NestJS controller.',
+    docs: 'Receives HTTP requests: an Express router, Fastify routes, a NestJS controller, a FastAPI or Flask router, Django views, or an ASP.NET Core controller.',
     aliases: ['controller', 'router', 'endpoint', 'handler'],
   },
   {
@@ -393,9 +447,9 @@ const NODE: Concept[] = [
     icon: 'plug-zap',
     idPrefix: 'repo',
     allowedParents: NODE_CODE_PARENTS,
-    propertySchema: z.object({ dataAccess }).partial(),
+    propertySchema: z.object({ dataAccess, language }).partial(),
     palette: { group: 'Backend', order: 120, basic: true },
-    docs: 'Reads and writes the database through an ORM or query builder.',
+    docs: 'Reads and writes the database through an ORM or query builder (Prisma, SQLAlchemy, Entity Framework Core …).',
     aliases: ['prisma', 'drizzle', 'typeorm', 'kysely', 'knex', 'dao', 'orm'],
   },
   {
@@ -469,6 +523,8 @@ const NODE: Concept[] = [
       'node.route-handler',
       'node.service',
       'node.bff',
+      'py.service',
+      'dotnet.service',
       'react.app',
       'react.feature',
     ],
@@ -497,9 +553,9 @@ const NODE: Concept[] = [
     icon: 'library',
     idPrefix: 'lib',
     allowedParents: TOP_OR_GROUP,
-    propertySchema: z.object({ package: z.string() }).partial(),
+    propertySchema: z.object({ package: z.string(), language }).partial(),
     palette: { group: 'Backend', order: 140, basic: false },
-    docs: 'A workspace package used by several apps (utils, config, types).',
+    docs: 'A workspace package used by several apps (utils, config, types): an npm package, a local Python package, or a .NET class library.',
     aliases: ['package', 'utils', 'common'],
   },
 ];
@@ -725,4 +781,116 @@ const POSTGRES: Concept[] = [
   },
 ];
 
-export const CONCEPTS: Concept[] = [...REACT, ...NODE, ...POSTGRES];
+/** How many processes run and how each uses CPU cores, for Python and .NET deployables. */
+const runtimeScaling = {
+  instances: z.number().int().positive(),
+  /** Database connections per instance. */
+  poolSize: z.number().int().positive(),
+};
+
+/** Python and .NET backends (repositories the analyzer reads besides Node). */
+const PYTHON_DOTNET: Concept[] = [
+  {
+    id: 'py.service',
+    name: 'Python service',
+    category: 'deployable',
+    icon: 'server',
+    idPrefix: 'pysvc',
+    allowedParents: TOP_OR_GROUP,
+    propertySchema: z
+      .object({
+        framework: z.enum([
+          'fastapi',
+          'flask',
+          'django',
+          'starlette',
+          'litestar',
+          'aiohttp',
+          'sanic',
+          'tornado',
+        ]),
+        server: z.enum(['uvicorn', 'gunicorn', 'hypercorn', 'daphne', 'granian']),
+        pythonVersion: z.string(),
+        transport: z.array(transport),
+        dataAccess,
+        /** Worker processes per instance (gunicorn -w, uvicorn --workers). */
+        workers: z.number().int().positive(),
+        ...runtimeScaling,
+      })
+      .partial(),
+    palette: { group: 'Backend', order: 15, basic: false },
+    docs: 'A Python process that serves requests (FastAPI, Flask, Django …).',
+    aliases: ['python', 'fastapi', 'flask', 'django', 'api', 'backend', 'uvicorn', 'gunicorn'],
+  },
+  {
+    id: 'py.worker',
+    name: 'Python worker',
+    category: 'deployable',
+    icon: 'cog',
+    idPrefix: 'pywrk',
+    allowedParents: TOP_OR_GROUP,
+    propertySchema: z
+      .object({
+        jobLib: z.enum(['celery', 'rq', 'dramatiq', 'arq', 'huey', 'apscheduler']),
+        broker: z.string(),
+        concurrency: z.number().int().positive(),
+        dataAccess,
+        ...runtimeScaling,
+      })
+      .partial(),
+    palette: { group: 'Backend', order: 35, basic: false },
+    docs: 'A Python process that runs background jobs from a queue (Celery, RQ, Dramatiq, arq).',
+    aliases: ['python', 'celery', 'rq', 'dramatiq', 'job', 'consumer'],
+  },
+  {
+    id: 'dotnet.service',
+    name: '.NET service',
+    category: 'deployable',
+    icon: 'server',
+    idPrefix: 'netsvc',
+    allowedParents: TOP_OR_GROUP,
+    propertySchema: z
+      .object({
+        framework: z.enum(['aspnetcore', 'aspnetcore-minimal', 'grpc', 'azure-functions']),
+        targetFramework: z.string(),
+        language,
+        transport: z.array(transport),
+        dataAccess,
+        ...runtimeScaling,
+      })
+      .partial(),
+    palette: { group: 'Backend', order: 16, basic: false },
+    docs: 'A .NET process that serves requests (ASP.NET Core controllers or minimal APIs).',
+    aliases: ['.net', 'dotnet', 'csharp', 'c#', 'asp.net', 'aspnetcore', 'api', 'backend'],
+  },
+  {
+    id: 'dotnet.worker',
+    name: '.NET worker',
+    category: 'deployable',
+    icon: 'cog',
+    idPrefix: 'netwrk',
+    allowedParents: TOP_OR_GROUP,
+    propertySchema: z
+      .object({
+        jobLib: z.enum([
+          'hosted-service',
+          'hangfire',
+          'quartz',
+          'masstransit',
+          'nservicebus',
+          'azure-functions',
+        ]),
+        targetFramework: z.string(),
+        language,
+        concurrency: z.number().int().positive(),
+        dataAccess,
+        ...runtimeScaling,
+      })
+      .partial(),
+    palette: { group: 'Backend', order: 36, basic: false },
+    docs: 'A .NET process that runs background work (a hosted service, Hangfire, Quartz.NET, MassTransit consumers).',
+    aliases: ['.net', 'dotnet', 'csharp', 'hosted service', 'hangfire', 'quartz', 'masstransit'],
+  },
+];
+
+export const CONCEPTS: Concept[] = [...REACT, ...NODE, ...PYTHON_DOTNET, ...POSTGRES];

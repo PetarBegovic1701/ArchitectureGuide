@@ -4,12 +4,36 @@ import { join, posix, relative, resolve, sep } from 'node:path';
 import fg from 'fast-glob';
 import ignore from 'ignore';
 import { parse as parseYaml } from 'yaml';
+import {
+  normalizePy,
+  parseDotnetProject,
+  parsePipfile,
+  parsePyproject,
+  parseRequirements,
+  parseSetupCfg,
+  parseSetupPy,
+} from './engines/manifests';
+import type { DotnetProject, PythonManifest } from './engines/manifests';
+
+/** What a package is written in: npm packages, Python projects, .NET projects. */
+export type PackageLanguage = 'js' | 'python' | 'dotnet';
 
 export interface PackageInfo {
-  /** `name` from package.json, or the folder name. */
+  /**
+   * `name` from package.json or pyproject.toml, the .NET project name ("Orders.Api"), or
+   * the folder name.
+   */
   name: string;
   /** Folder relative to the repository root, POSIX separators; "" for the root. */
   dir: string;
+  /** Default "js". */
+  language?: PackageLanguage;
+  /** The manifest the package was found by, for evidence (default `<dir>/package.json`). */
+  manifestFile?: string;
+  /** Python projects: what the manifests say. */
+  python?: Pick<PythonManifest, 'scripts' | 'pythonVersion'> & { manifests: string[] };
+  /** .NET projects: the parsed project file. */
+  dotnet?: DotnetProject;
   manifest: {
     dependencies: Record<string, string>;
     devDependencies: Record<string, string>;
@@ -55,6 +79,118 @@ const ALWAYS_IGNORED = [
 ];
 
 const toPosix = (p: string) => p.split(sep).join('/');
+
+/** Folders of virtual environments and build output of Python and .NET projects. */
+const LANGUAGE_IGNORED = [
+  '**/.venv/**',
+  '**/venv/**',
+  '**/__pycache__/**',
+  '**/site-packages/**',
+  '**/.tox/**',
+  '**/.mypy_cache/**',
+  '**/obj/**',
+  '**/bin/Debug/**',
+  '**/bin/Release/**',
+];
+
+const PY_MANIFESTS = ['pyproject.toml', 'setup.py', 'setup.cfg', 'Pipfile', 'requirements.txt'];
+
+/**
+ * Python projects: folders with a pyproject.toml, setup.py, setup.cfg, Pipfile or
+ * requirements*.txt. The repository root counts only when no folder below it is a project
+ * (a root pyproject.toml of a monorepo is usually tooling).
+ */
+async function pythonPackages(root: string): Promise<PackageInfo[]> {
+  const files = await fg(
+    [...PY_MANIFESTS.map((m) => `**/${m}`), '**/requirements*.txt', '**/requirements/*.txt'],
+    { cwd: root, ignore: [...ALWAYS_IGNORED, ...LANGUAGE_IGNORED], followSymbolicLinks: false },
+  );
+  const byDir = new Map<string, string[]>();
+  for (const f of files.sort()) {
+    let dir = posix.dirname(f);
+    if (posix.basename(dir) === 'requirements' && f.endsWith('.txt')) dir = posix.dirname(dir);
+    const d = dir === '.' ? '' : dir;
+    byDir.set(d, [...(byDir.get(d) ?? []), f]);
+  }
+  if (byDir.size > 1) byDir.delete('');
+  const out: PackageInfo[] = [];
+  for (const [dir, manifests] of byDir) {
+    const parsed: PythonManifest[] = [];
+    for (const f of manifests) {
+      const text = await readFile(join(root, f), 'utf8').catch(() => '');
+      const base = posix.basename(f);
+      parsed.push(
+        base === 'pyproject.toml'
+          ? parsePyproject(text)
+          : base === 'setup.py'
+            ? parseSetupPy(text)
+            : base === 'setup.cfg'
+              ? parseSetupCfg(text)
+              : base === 'Pipfile'
+                ? parsePipfile(text)
+                : { deps: parseRequirements(text), scripts: {} },
+      );
+    }
+    const deps = new Set(parsed.flatMap((m) => m.deps));
+    const name = parsed.find((m) => m.name)?.name ?? (posix.basename(dir) || 'root');
+    const pythonVersion = parsed.find((m) => m.pythonVersion)?.pythonVersion;
+    // The main manifest: pyproject.toml first, then the others in PY_MANIFESTS order.
+    const main =
+      PY_MANIFESTS.map((m) => manifests.find((f) => posix.basename(f) === m)).find(Boolean) ??
+      manifests[0]!;
+    out.push({
+      name: normalizePy(name),
+      dir,
+      language: 'python',
+      manifestFile: main,
+      manifest: { dependencies: {}, devDependencies: {}, scripts: {} },
+      deps,
+      python: {
+        manifests,
+        scripts: Object.assign({}, ...parsed.map((m) => m.scripts)) as Record<string, string>,
+        ...(pythonVersion ? { pythonVersion } : {}),
+      },
+    });
+  }
+  return out;
+}
+
+/**
+ * .NET projects: every .csproj, .fsproj and .vbproj. The dependencies are the NuGet
+ * packages and the names of the referenced projects, so a project reference reads like a
+ * workspace dependency.
+ */
+async function dotnetPackages(root: string): Promise<PackageInfo[]> {
+  const files = await fg(['**/*.csproj', '**/*.fsproj', '**/*.vbproj'], {
+    cwd: root,
+    ignore: [...ALWAYS_IGNORED, ...LANGUAGE_IGNORED],
+    followSymbolicLinks: false,
+  });
+  const projects = await Promise.all(
+    files.sort().map(async (f) => ({
+      file: f,
+      project: parseDotnetProject(f, await readFile(join(root, f), 'utf8').catch(() => '')),
+    })),
+  );
+  const nameOf = new Map(projects.map((p) => [p.file, p.project.name]));
+  return projects.flatMap(({ file, project }) => {
+    const d = posix.dirname(file);
+    const refs = project.projectRefs.map(
+      (r) => nameOf.get(r) ?? posix.basename(r).replace(/\.\w+proj$/, ''),
+    );
+    return [
+      {
+        name: project.name,
+        dir: d === '.' ? '' : d,
+        language: 'dotnet' as const,
+        manifestFile: file,
+        manifest: { dependencies: {}, devDependencies: {}, scripts: {} },
+        deps: new Set([...project.packages, ...refs]),
+        dotnet: project,
+      },
+    ];
+  });
+}
 
 async function readJson(path: string): Promise<Record<string, unknown> | undefined> {
   try {
@@ -136,6 +272,8 @@ export async function discover(
     }
   }
   if (packages.length === 0 && rootJson) packages.push(packageInfo('', rootJson));
+  packages.push(...(await pythonPackages(root)), ...(await dotnetPackages(root)));
+  packages.sort((a, b) => a.dir.localeCompare(b.dir) || a.name.localeCompare(b.name));
 
   const gitignore = ignore();
   for (const file of await fg(['**/.gitignore'], {
@@ -161,7 +299,7 @@ export async function discover(
 
   const listed = await fg(options.include?.length ? options.include : ['**/*'], {
     cwd: root,
-    ignore: [...ALWAYS_IGNORED, ...(options.exclude ?? [])],
+    ignore: [...ALWAYS_IGNORED, ...LANGUAGE_IGNORED, ...(options.exclude ?? [])],
     dot: true,
     onlyFiles: true,
     followSymbolicLinks: false,
@@ -198,6 +336,10 @@ export async function discover(
       : null;
   return { root, packages, files, monorepo, warnings };
 }
+
+/** The manifest a package was found by: package.json, pyproject.toml, a .csproj … */
+export const manifestOf = (p: PackageInfo) =>
+  p.manifestFile ?? (p.dir ? `${p.dir}/package.json` : 'package.json');
 
 /** The package a file belongs to: the deepest package folder that contains it. */
 export function packageOf(packages: readonly PackageInfo[], file: string): PackageInfo | undefined {

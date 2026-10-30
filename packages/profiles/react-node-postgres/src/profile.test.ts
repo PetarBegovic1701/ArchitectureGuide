@@ -24,7 +24,7 @@ describe('profile integrity', () => {
 
   it('every profile concept is complete and in the right namespace', () => {
     for (const c of profile.concepts) {
-      expect(c.id, c.id).toMatch(/^(react|node|pg)\./);
+      expect(c.id, c.id).toMatch(/^(react|node|py|dotnet|pg)\./);
       expect(CATEGORIES[c.category], c.id).toBeDefined();
       expect(SHAPES[shapeOf(c)], c.id).toBeDefined();
       expect(c.docs.length, c.id).toBeGreaterThan(10);

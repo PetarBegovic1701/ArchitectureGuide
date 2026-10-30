@@ -1,0 +1,39 @@
+{
+  "elements": [
+    { "kind": "dotnet.service", "name": "Orders API" },
+    { "kind": "dotnet.service", "name": "Catalog API" },
+    { "kind": "dotnet.worker", "name": "Invoicing worker" },
+    { "kind": "node.use-case", "name": "Orders application" },
+    { "kind": "node.domain", "name": "Orders domain" },
+    { "kind": "node.module", "name": "Orders infrastructure" },
+    { "kind": "node.shared-lib", "name": "Shop contracts" },
+    { "kind": "node.route-handler", "name": "Orders controller" },
+    { "kind": "node.route-handler", "name": "Catalog API routes" },
+    { "kind": "node.middleware", "name": "Auth middleware" },
+    { "kind": "pg.cluster", "name": "PostgreSQL" },
+    { "kind": "pg.database", "name": "Shop DB" },
+    { "kind": "pg.schema", "name": "orders" },
+    { "kind": "pg.schema", "name": "catalog" },
+    { "kind": "pg.table", "name": "Orders" },
+    { "kind": "pg.table", "name": "OrderLines" },
+    { "kind": "pg.table", "name": "products" },
+    { "kind": "gen.other-broker", "name": "RabbitMQ" },
+    { "kind": "gen.external", "name": "Stripe" }
+  ],
+  "relations": [
+    { "type": "calls", "from": "Orders API", "to": "Catalog API" },
+    { "type": "publishes", "from": "Orders API", "to": "RabbitMQ" },
+    { "type": "consumes", "from": "Invoicing worker", "to": "RabbitMQ" },
+    { "type": "depends-on", "from": "Orders API", "to": "Orders application" },
+    { "type": "depends-on", "from": "Orders API", "to": "Orders infrastructure" },
+    { "type": "depends-on", "from": "Orders infrastructure", "to": "Orders domain" },
+    { "type": "depends-on", "from": "Orders application", "to": "Orders domain" },
+    { "type": "depends-on", "from": "Orders API", "to": "Shop contracts" },
+    { "type": "depends-on", "from": "Invoicing worker", "to": "Shop contracts" },
+    { "type": "migrates", "from": "Orders API", "to": "orders" },
+    { "type": "migrates", "from": "Catalog API", "to": "catalog" },
+    { "type": "writes", "from": "Orders API", "to": "Orders" },
+    { "type": "reads", "from": "Catalog API", "to": "products" },
+    { "type": "calls", "from": "Invoicing worker", "to": "Stripe" }
+  ]
+}

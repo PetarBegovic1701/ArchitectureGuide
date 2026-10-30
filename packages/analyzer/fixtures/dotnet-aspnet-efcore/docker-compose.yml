@@ -1,0 +1,21 @@
+services:
+  postgres:
+    image: postgres:16
+  rabbitmq:
+    image: rabbitmq:3-management
+  orders-api:
+    build: ./src/Orders.Api
+    ports:
+      - "5000:8080"
+    environment:
+      ConnectionStrings__Orders: Host=postgres;Database=shop
+      CATALOG_URL: http://catalog-api:8080
+      RABBITMQ_URL: amqp://rabbitmq:5672
+  catalog-api:
+    build: ./src/Catalog.Api
+    ports:
+      - "5001:8080"
+  invoicing-worker:
+    build: ./src/Invoicing.Worker
+    environment:
+      RABBITMQ_URL: amqp://rabbitmq:5672

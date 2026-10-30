@@ -1,7 +1,8 @@
 import type { Fact } from '@archguide/core';
 import type { Detector, DetectorContext } from '../context';
 import { at } from '../context';
-import { codeFiles, depEvidence, hasDep, shortName, title } from './util';
+import { manifestOf } from '../discover';
+import { codeFiles, depEvidence, hasDep, languageProp, shortName, title } from './util';
 
 const HTTP_FRAMEWORKS = ['express', 'fastify', '@nestjs/core', 'koa', 'hono', '@hapi/hapi'];
 
@@ -9,12 +10,17 @@ const HTTP_FRAMEWORKS = ['express', 'fastify', '@nestjs/core', 'koa', 'hono', '@
 const packages: Detector = {
   id: 'ws.packages',
   async run(ctx) {
-    const file = ctx.pkg.dir ? `${ctx.pkg.dir}/package.json` : 'package.json';
+    const file = manifestOf(ctx.pkg);
     return [
       {
         type: 'package',
         subject: ctx.pkgSubject(ctx.pkg),
-        data: { name: ctx.pkg.name, dir: ctx.pkg.dir, deps: [...ctx.pkg.deps].sort() },
+        data: {
+          name: ctx.pkg.name,
+          dir: ctx.pkg.dir,
+          language: ctx.pkg.language ?? 'js',
+          deps: [...ctx.pkg.deps].sort(),
+        },
         evidence: [at(file, 1)],
         confidence: 1,
         detector: 'ws.packages',
@@ -181,7 +187,8 @@ const libs: Detector = {
     const out: Fact[] = [];
     for (const p of ctx.packages) {
       const subject = ctx.pkgSubject(p);
-      if (deployables.has(subject) || !p.dir) continue;
+      // Python and .NET libraries: lang.libs.
+      if (deployables.has(subject) || !p.dir || (p.language ?? 'js') !== 'js') continue;
       const importers = new Map<string, { file: string; line: number }>();
       for (const e of graph.edges) {
         if (!e.to || !e.to.startsWith(`${p.dir}/`)) continue;
@@ -193,7 +200,7 @@ const libs: Detector = {
       for (const q of ctx.packages)
         if (q !== p && q.deps.has(p.name) && !importers.has(ctx.pkgSubject(q)))
           importers.set(ctx.pkgSubject(q), {
-            file: q.dir ? `${q.dir}/package.json` : 'package.json',
+            file: manifestOf(q),
             line: 0,
           });
       if (importers.size === 0) continue;
@@ -209,7 +216,7 @@ const libs: Detector = {
         subject,
         data: { role: 'library' },
         evidence: [
-          at(`${p.dir}/package.json`, 1),
+          at(manifestOf(p), 1),
           ...[...importers.values()].slice(0, 3).map((i) => at(i.file, i.line || undefined)),
         ],
         confidence: 0.8,
@@ -221,7 +228,7 @@ const libs: Detector = {
           properties:
             kind === 'node.contract'
               ? { kind: p.deps.has('@trpc/server') ? 'trpc' : 'zod' }
-              : { package: p.name },
+              : { package: p.name, ...languageProp(p) },
         },
       });
       for (const [from, ev] of importers)
@@ -240,4 +247,6 @@ const libs: Detector = {
   },
 };
 
-export const WORKSPACE_DETECTORS: Detector[] = [packages, reactApp, nodeDeployable, libs];
+/** Deployables of npm packages; the libraries detector runs after every language's deployables. */
+export const WORKSPACE_DETECTORS: Detector[] = [packages, reactApp, nodeDeployable];
+export const WORKSPACE_LIBS: Detector[] = [libs];

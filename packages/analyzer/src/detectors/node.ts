@@ -4,7 +4,7 @@ import type { Detector, DetectorContext } from '../context';
 import { at } from '../context';
 import type { FileIndex, Value } from '../engines/ts-index';
 import { obj, ref, text } from '../engines/ts-index';
-import { servicePorts } from './react';
+import { backendServices, serviceResolver } from './targets';
 import { codeFiles, deployablesFor, depEvidence, hasDep, title } from './util';
 
 const METHODS = ['get', 'post', 'put', 'patch', 'delete', 'all', 'options', 'head'];
@@ -423,27 +423,13 @@ const httpCalls: Detector = {
   id: 'node.http-calls',
   scope: 'repo',
   async run(ctx) {
-    const services = ctx.facts.filter(
-      (f) => f.type === 'deployable' && f.element?.kind.startsWith('node.'),
-    );
-    if (services.length < 2) return [];
-    const ports = await servicePorts(ctx, services);
-    const env = await ctx.engines.env();
-    const compose = await ctx.engines.compose();
-    const byHost = new Map<string, string>();
-    for (const { file, services: list } of compose)
-      for (const c of list) {
-        const dir = c.build ? posix.normalize(posix.join(posix.dirname(file), c.build)) : undefined;
-        const svc = services.find(
-          (s) => ctx.packages.find((p) => ctx.pkgSubject(p) === s.subject)?.dir === dir,
-        );
-        if (svc) byHost.set(c.name.toLowerCase(), svc.subject);
-      }
-    const composeUrls = compose.flatMap((c) =>
-      c.services.flatMap((s) => s.urls.map((u) => ({ ...u, file: c.file, line: s.line }))),
-    );
+    // Node code calls services in any language.
+    const services = backendServices(ctx);
+    const callers = services.filter((f) => f.element?.kind.startsWith('node.'));
+    if (services.length < 2 || callers.length === 0) return [];
+    const resolve = await serviceResolver(ctx, services);
     const out: Fact[] = [];
-    for (const from of services) {
+    for (const from of callers) {
       const p = ctx.packages.find((x) => ctx.pkgSubject(x) === from.subject);
       if (!p) continue;
       const base = p.dir ? `${p.dir}/` : '';
@@ -452,28 +438,7 @@ const httpCalls: Detector = {
         for (const c of index?.calls ?? []) {
           if (!/^(fetch|axios(\.\w+)?|got|ky|undici\.request|request)$/.test(c.callee)) continue;
           for (const name of envNames(c.args)) {
-            const value =
-              env.find((e) => e.name === name && e.url) ?? composeUrls.find((u) => u.name === name);
-            const url =
-              value && 'url' in value
-                ? value.url
-                : (value as { host?: string; port?: number } | undefined);
-            let to: string | undefined;
-            if (url?.host && byHost.has(url.host)) to = byHost.get(url.host);
-            if (!to && url?.port && ['localhost', '127.0.0.1'].includes(url.host ?? ''))
-              to = ports.get(url.port)?.subject;
-            if (!to) {
-              const stem = name
-                .replace(/_(SERVICE_)?(API_)?(URL|HOST|BASE_URL|ORIGIN)$/, '')
-                .toLowerCase()
-                .replace(/_/g, '-');
-              to = services.find(
-                (s) =>
-                  posix.basename(
-                    ctx.packages.find((q) => ctx.pkgSubject(q) === s.subject)?.dir ?? '',
-                  ) === stem,
-              )?.subject;
-            }
+            const to = resolve(name);
             if (!to || to === from.subject) continue;
             out.push({
               type: 'http-call',

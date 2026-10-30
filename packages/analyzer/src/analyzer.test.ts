@@ -51,44 +51,47 @@ function recall(result: AnalysisResult, ref: Reference) {
   };
 }
 
-describe.each(['vite-express-prisma', 'nest-modular-drizzle', 'pnpm-bff-pgboss'])(
-  'fixture %s',
-  (name) => {
-    it('finds at least 80% of the hand-made reference, and every item has evidence in the repository', async () => {
-      const result = await analyze(name);
-      const ref = JSON.parse(
-        await readFile(join(fixtures, name, 'reference.json'), 'utf8'),
-      ) as Reference;
-      const r = recall(result, ref);
-      expect(r.elements, `missing: ${r.missing.join('; ')}`).toBeGreaterThanOrEqual(0.8);
-      expect(
-        r.relations,
-        `missing: ${r.relMissing.map((x) => `${x.from} ${x.type} ${x.to}`).join('; ')}`,
-      ).toBeGreaterThanOrEqual(0.8);
-      for (const item of [...result.candidates.elements, ...result.candidates.relations]) {
-        expect(item.source?.origin).toBe('inferred');
-        expect(item.source?.evidence?.length, `${item.id} has no evidence`).toBeGreaterThan(0);
-        for (const e of item.source!.evidence!)
-          expect(existsSync(join(fixtures, name, e.path)), e.path).toBe(true);
-      }
-      expect(result.warnings).toEqual([]);
-      // The draft is a valid model: it applies to an empty project as it is.
-      const project = (newProject(catalog, { name }) as { project: Project }).project;
-      const applied = applyOps(
-        project,
-        [
-          ...result.candidates.elements.map((element) => ({ op: 'addElement' as const, element })),
-          ...result.candidates.relations.map((relation) => ({
-            op: 'addRelation' as const,
-            relation,
-          })),
-        ],
-        catalog,
-      );
-      expect(applied.ok, JSON.stringify(!applied.ok && applied.errors.slice(0, 3))).toBe(true);
-    });
-  },
-);
+describe.each([
+  'vite-express-prisma',
+  'nest-modular-drizzle',
+  'pnpm-bff-pgboss',
+  'python-fastapi-django',
+  'dotnet-aspnet-efcore',
+])('fixture %s', (name) => {
+  it('finds at least 80% of the hand-made reference, and every item has evidence in the repository', async () => {
+    const result = await analyze(name);
+    const ref = JSON.parse(
+      await readFile(join(fixtures, name, 'reference.json'), 'utf8'),
+    ) as Reference;
+    const r = recall(result, ref);
+    expect(r.elements, `missing: ${r.missing.join('; ')}`).toBeGreaterThanOrEqual(0.8);
+    expect(
+      r.relations,
+      `missing: ${r.relMissing.map((x) => `${x.from} ${x.type} ${x.to}`).join('; ')}`,
+    ).toBeGreaterThanOrEqual(0.8);
+    for (const item of [...result.candidates.elements, ...result.candidates.relations]) {
+      expect(item.source?.origin).toBe('inferred');
+      expect(item.source?.evidence?.length, `${item.id} has no evidence`).toBeGreaterThan(0);
+      for (const e of item.source!.evidence!)
+        expect(existsSync(join(fixtures, name, e.path)), e.path).toBe(true);
+    }
+    expect(result.warnings).toEqual([]);
+    // The draft is a valid model: it applies to an empty project as it is.
+    const project = (newProject(catalog, { name }) as { project: Project }).project;
+    const applied = applyOps(
+      project,
+      [
+        ...result.candidates.elements.map((element) => ({ op: 'addElement' as const, element })),
+        ...result.candidates.relations.map((relation) => ({
+          op: 'addRelation' as const,
+          relation,
+        })),
+      ],
+      catalog,
+    );
+    expect(applied.ok, JSON.stringify(!applied.ok && applied.errors.slice(0, 3))).toBe(true);
+  });
+});
 
 describe('fixture bad-practices', () => {
   it('triggers every analysis rule, each with file and line', async () => {
@@ -195,5 +198,36 @@ describe('repository boundary and limits', () => {
     expect(found.files.some((f) => f.startsWith('generated/'))).toBe(false);
     expect(found.warnings.join(' ')).toMatch(/over 1 KB were skipped/);
     expect(found.warnings.join(' ')).toMatch(/partial/);
+  });
+
+  it('finds Python and .NET projects with their dependencies, and skips virtual environments', async () => {
+    const py = await discover(join(fixtures, 'python-fastapi-django'));
+    // The root pyproject.toml is tooling: the projects below it are the packages.
+    expect(py.packages.map((p) => [p.dir, p.name, p.language])).toEqual([
+      ['libs/common', 'shop-common', 'python'],
+      ['services/catalog', 'catalog', 'python'],
+      ['services/orders', 'orders', 'python'],
+      ['workers/mailer', 'mailer', 'python'],
+    ]);
+    expect([...py.packages[2]!.deps]).toContain('shop-common');
+    const net = await discover(join(fixtures, 'dotnet-aspnet-efcore'));
+    const api = net.packages.find((p) => p.name === 'Orders.Api')!;
+    expect(api).toMatchObject({
+      language: 'dotnet',
+      manifestFile: 'src/Orders.Api/Orders.Api.csproj',
+    });
+    expect([...api.deps]).toEqual(
+      expect.arrayContaining(['MassTransit.RabbitMQ', 'Orders.Application', 'Shop.Contracts']),
+    );
+
+    const repo = await mkdtemp(join(tmpdir(), 'archguide-venv-'));
+    await mkdir(join(repo, '.venv', 'lib'), { recursive: true });
+    await writeFile(join(repo, '.venv', 'lib', 'requirements.txt'), 'django\n');
+    await mkdir(join(repo, 'bin', 'Debug'), { recursive: true });
+    await writeFile(join(repo, 'bin', 'Debug', 'x.py'), 'x = 1\n');
+    await writeFile(join(repo, 'requirements.txt'), 'flask\n');
+    const found = await discover(repo);
+    expect(found.packages.map((p) => [p.dir, p.language])).toEqual([['', 'python']]);
+    expect(found.files).toEqual(['requirements.txt']);
   });
 });

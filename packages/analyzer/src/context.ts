@@ -14,6 +14,10 @@ import { parseSql } from './engines/sql';
 import type { SqlFile } from './engines/sql';
 import { parseCompose, parseEnv } from './engines/config';
 import type { ComposeService, EnvVar } from './engines/config';
+import { indexPython } from './engines/py-index';
+import type { PyIndex } from './engines/py-index';
+import { indexCSharp } from './engines/cs-index';
+import type { CsIndex } from './engines/cs-index';
 
 /** Engines shared by all detectors of one run; everything is parsed lazily, once. */
 export class Engines {
@@ -21,6 +25,8 @@ export class Engines {
   private indexes = new Map<string, FileIndex>();
   private prismas = new Map<string, Promise<PrismaSchema | undefined>>();
   private sqls = new Map<string, Promise<SqlFile | undefined>>();
+  private pys = new Map<string, Promise<PyIndex | undefined>>();
+  private css = new Map<string, Promise<CsIndex | undefined>>();
   private graphPromise?: Promise<ImportGraph>;
   readonly warnings: string[] = [];
   parsedFiles = 0;
@@ -83,6 +89,42 @@ export class Engines {
         return r;
       });
       this.sqls.set(file, p);
+    }
+    return p;
+  }
+
+  /** A Python module's index (Implementation.md §19.3). */
+  py(file: string): Promise<PyIndex | undefined> {
+    let p = this.pys.get(file);
+    if (!p) {
+      p = this.read(file).then((t) => {
+        if (t === undefined) return undefined;
+        try {
+          return indexPython(t);
+        } catch (error) {
+          this.warnings.push(`${file}: could not be parsed (${(error as Error).message})`);
+          return undefined;
+        }
+      });
+      this.pys.set(file, p);
+    }
+    return p;
+  }
+
+  /** A C# file's index. */
+  cs(file: string): Promise<CsIndex | undefined> {
+    let p = this.css.get(file);
+    if (!p) {
+      p = this.read(file).then((t) => {
+        if (t === undefined || !file.endsWith('.cs')) return undefined;
+        try {
+          return indexCSharp(t);
+        } catch (error) {
+          this.warnings.push(`${file}: could not be parsed (${(error as Error).message})`);
+          return undefined;
+        }
+      });
+      this.css.set(file, p);
     }
     return p;
   }

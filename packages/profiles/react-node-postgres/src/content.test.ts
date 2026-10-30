@@ -18,7 +18,18 @@ const known = (id: string) =>
   docIds.has(id) || catalog.concepts.has(id) || catalog.relationTypes.has(id);
 /** Lesson checks see the same findings as the Problems panel. */
 const ctx = (project: Project) => ({ catalog, findings: runRules(project, catalog) });
-const LANGUAGES = new Set(['ts', 'tsx', 'js', 'sql', 'prisma', 'yaml', 'json', 'bash']);
+const LANGUAGES = new Set([
+  'ts',
+  'tsx',
+  'js',
+  'sql',
+  'prisma',
+  'yaml',
+  'json',
+  'bash',
+  'python',
+  'csharp',
+]);
 
 describe('learning texts', () => {
   it('has content', () => {

@@ -10,18 +10,36 @@ export const DATABASE = 'db:main';
 export const schemaSubject = (schema: string) => `schema:${schema}`;
 export const tableSubject = (schema: string, table: string) => `table:${schema}.${table}`;
 
-async function databaseFact(
+/**
+ * The repository's name, for the database: package.json `name`, a root pyproject.toml
+ * `[project] name`, the .NET solution file, else the folder.
+ */
+async function repositoryName(ctx: DetectorContext): Promise<string> {
+  if (ctx.engines.repo.files.includes('package.json'))
+    try {
+      const root = JSON.parse((await ctx.engines.read('package.json')) ?? '{}') as {
+        name?: string;
+      };
+      if (root.name) return root.name;
+    } catch {
+      // not JSON: try the other manifests
+    }
+  if (ctx.engines.repo.files.includes('pyproject.toml')) {
+    const text = (await ctx.engines.read('pyproject.toml')) ?? '';
+    const name = /^\[project\][^[]*?^name\s*=\s*["']([^"']+)["']/ms.exec(text)?.[1];
+    if (name) return name;
+  }
+  const sln = ctx.engines.repo.files.find((f) => !f.includes('/') && f.endsWith('.sln'));
+  if (sln) return posix.basename(sln, '.sln');
+  return posix.basename(ctx.root);
+}
+
+export async function databaseFact(
   ctx: DetectorContext,
   evidence: Fact['evidence'],
   detector: string,
 ): Promise<Fact> {
-  let name = posix.basename(ctx.root);
-  try {
-    const root = JSON.parse((await ctx.engines.read('package.json')) ?? '{}') as { name?: string };
-    if (root.name) name = root.name;
-  } catch {
-    // keep the folder name
-  }
+  const name = await repositoryName(ctx);
   return {
     type: 'db-database',
     subject: DATABASE,
@@ -33,7 +51,7 @@ async function databaseFact(
   };
 }
 
-const schemaFact = (
+export const schemaFact = (
   schema: string,
   evidence: Fact['evidence'],
   detector: string,
@@ -53,7 +71,7 @@ const schemaFact = (
   },
 });
 
-interface TableShape {
+export interface TableShape {
   schema: string;
   table: string;
   model?: string;
@@ -67,7 +85,7 @@ interface TableShape {
 }
 
 /** db-table, db-fk and db-index facts for one table shape. */
-function tableFacts(t: TableShape, detector: string, confidence = 0.9): Fact[] {
+export function tableFacts(t: TableShape, detector: string, confidence = 0.9): Fact[] {
   const subject = tableSubject(t.schema, t.table);
   const out: Fact[] = [
     {

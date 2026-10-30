@@ -38,8 +38,11 @@ function setProps(
   return { title, ops: [op] };
 }
 
-/** Node deployables that run request-handling code (not background processes). */
-const SERVING = ['node.service', 'node.bff'];
+/** Deployables that run request-handling code (not background processes), in any language. */
+const SERVING = ['node.service', 'node.bff', 'py.service', 'dotnet.service'];
+/** Deployables that run background jobs, in any language. */
+const WORKERS = ['node.worker', 'py.worker', 'dotnet.worker'];
+const isWorker = (g: GraphQuery, el: Element | undefined) => WORKERS.some((k) => g.is(el, k));
 
 /** Text of the element that keyword rules look at: name, responsibilities and tags. */
 const keywords = (el: Element) =>
@@ -79,7 +82,7 @@ function syncReach(g: GraphQuery, start: Id): Element[] {
       if (seen.has(n)) continue;
       seen.add(n);
       const el = g.element(n);
-      if (!el || g.is(el, 'node.worker')) continue;
+      if (!el || isWorker(g, el)) continue;
       result.push(el);
       queue.push(n);
     }
@@ -120,7 +123,7 @@ const sharedTables: Rule = {
     }
     return [...byUnit].flatMap(([unitId, writes]) => {
       const writers = runners(g, writes).filter(
-        (d) => !g.is(d, 'node.worker') && !g.is(d, 'node.scheduler'),
+        (d) => !isWorker(g, d) && !g.is(d, 'node.scheduler'),
       );
       if (writers.length < 2) return [];
       return [
@@ -330,7 +333,7 @@ const noPooling: Rule = {
     'Every instance of a service opens its own pool of Postgres connections. With many instances, or serverless functions that start and stop all the time, Postgres runs out of connections. Put a pooler (PgBouncer in transaction mode, or a managed pooler) between the service and the database.',
   invariant:
     'Horizontally scaled or serverless services MUST connect to PostgreSQL through a connection pooler.',
-  appliesTo: ['node.service', 'node.bff'],
+  appliesTo: SERVING,
   check: ({ graph: g }) =>
     g
       .ofKind(...SERVING)
@@ -356,7 +359,7 @@ const notifyForDurableWork: Rule = {
     g.ofKind('pg.channel').flatMap((ch) => {
       const workers = g
         .incoming(ch.id, 'listens')
-        .filter((r) => g.is(g.deployableOf(r.sourceId), 'node.worker'));
+        .filter((r) => isWorker(g, g.deployableOf(r.sourceId)));
       if (workers.length === 0) return [];
       return [
         {
@@ -507,7 +510,7 @@ const publicWithoutAuth: Rule = {
     'Anything the browser can reach, anyone on the internet can reach. Show how the service checks who is calling: an auth middleware, a gateway that checks tokens, or a link to an auth provider. If an endpoint is public on purpose, mark it with `auth: none` and suppress the finding with a reason.',
   invariant:
     'Services reachable from the browser MUST authenticate callers (auth middleware, gateway or auth provider).',
-  appliesTo: ['node.service', 'node.bff'],
+  appliesTo: SERVING,
   check: ({ graph: g }) =>
     publicEntries(g)
       .filter((e) => !hasAuth(g, e))
@@ -557,7 +560,7 @@ function parallelism(g: GraphQuery, id: Id): number {
     d.qualities?.scaling === 'horizontal' || d.qualities?.scaling === 'serverless'
       ? Math.max(2, g.num(d, 'instances', 2))
       : g.num(d, 'instances', 1);
-  return instances * (g.is(d, 'node.worker') ? g.num(d, 'concurrency', 1) : 1);
+  return instances * (isWorker(g, d) ? g.num(d, 'concurrency', 1) : 1);
 }
 
 const lostUpdate: Rule = {
@@ -931,7 +934,7 @@ const readModelWriter: Rule = {
         const target = g.element(r.targetId);
         if (!target?.tags?.includes('read-model')) return [];
         const runner = g.deployableOf(r.sourceId);
-        if (runner && g.is(runner, 'node.worker')) return [];
+        if (runner && isWorker(g, runner)) return [];
         return [
           {
             targetIds: [r.id],
