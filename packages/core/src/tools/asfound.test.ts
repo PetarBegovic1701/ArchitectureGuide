@@ -131,5 +131,8 @@ describe('anti-patterns found in the code', () => {
     expect(exportProject('agent-yaml', p, testCatalog).files[0]!.content).toContain(
       'antiPattern: The DB calls the app',
     );
+    const onboarding = exportProject('onboarding-md', p, testCatalog).files[0]!.content;
+    expect(onboarding).toContain('## Anti-patterns found in the code');
+    expect(onboarding).toContain('`rel.db-calls-web` main calls web: The DB calls the app.');
   });
 });

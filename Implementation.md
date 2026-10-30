@@ -2048,8 +2048,9 @@ relations to highlight, and linked concept texts. Audience: `any`, `beginner`,
   elements.
 
 **Onboarding pack** (export `onboarding-md`, §18): what the system does; the big
-picture (Mermaid); the tour as text; key scenarios; data ownership; rules of the road
-(invariants); decisions; glossary; **concepts used in this project** — only the
+picture (Mermaid); what each part is and does (the repository's documentation, §7.2, in its
+own language); the tour as text; key scenarios; data ownership; rules of the road
+(invariants); anti-patterns found in the code (§19.6); decisions; glossary; **concepts used in this project** — only the
 concepts, relation types and properties that actually appear, each with its summary
 and a link to the text at the chosen level; where to start (tasks tagged
 `good-first-task`, open change sets).
@@ -2639,6 +2640,12 @@ claude mcp add archguide -- npx -y archguide-mcp --workspace ./architecture
 
 Options: `--workspace <dir>` (default `./architecture`), `--repo <dir>`
 (default: the workspace's `codeRoot`), `--read-only`.
+
+The server's instructions (sent to every client on connect) say to read the model before
+cross-service changes, to change it only through the write tools, and, when mapping a
+repository, to document each block with `write_documentation` in the repository's own
+language and to record what the code does against the rules as found (`antiPattern`,
+`asFound`).
 
 ### 20.1 Response envelope (all tools)
 

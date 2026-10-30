@@ -198,6 +198,17 @@ describe('MCP tools', () => {
       expect(md.data).toContain('## Documentation');
       expect(md.data).toContain('**Bestelldienst**');
       expect(md.data).toContain('Function: Prüft den Warenkorb und speichert die Bestellung.');
+      // People joining the project get the same texts.
+      const onboarding = await call('get_onboarding');
+      expect(onboarding.data).toContain('## What the parts are and do');
+      expect(onboarding.data).toContain('**Bestelldienst**');
+      // Every client learns about it when it connects, and the read tool says it is there.
+      expect(client.getInstructions()).toMatch(/write_documentation/);
+      expect(client.getInstructions()).toMatch(/antiPattern/);
+      const { tools } = await client.listTools();
+      expect(tools.find((t) => t.name === 'get_architecture')!.description).toMatch(
+        /documentation of each block.*anti-patterns found in the code/,
+      );
 
       const unknown = await call('write_documentation', {
         elements: [{ id: 'svc.nope', description: 'x' }],

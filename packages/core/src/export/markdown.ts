@@ -113,7 +113,7 @@ function knownIssuesTable(f: Facts): string {
 }
 
 /** The repository's own documentation, as the agent wrote it (§7.2); never translated. */
-function documentationSection(f: Facts): string {
+export function documentationSection(f: Facts): string {
   const p = f.project;
   const documented = f.elements.filter(hasDocs);
   if (!p.docs && documented.length === 0) return '';
@@ -156,7 +156,7 @@ function documentationSection(f: Facts): string {
  * What the code does against the design (marked items, AP-019): kept in the model so it
  * stays faithful, listed here so agents and reviewers address it instead of copying it.
  */
-function antiPatternsList(f: Facts): string {
+export function antiPatternsList(f: Facts): string {
   const g = f.graph;
   const where = (e: { path: string; line?: number }) => `${e.path}${e.line ? `:${e.line}` : ''}`;
   const line = (id: string, what: string, item: Parameters<typeof antiPatternReason>[1]) => {

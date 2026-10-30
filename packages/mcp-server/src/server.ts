@@ -16,6 +16,9 @@ export const SERVER_VERSION = '0.0.0';
 const INSTRUCTIONS = `ArchGuide holds the architecture model of this repository (architecture/*.archguide.json).
 Read it with get_architecture before changing code that crosses services or data stores.
 Change it only through the write tools; each returns the new revision and only the findings the change introduced.
+When you map an existing repository (prompt map-repository; it reads TypeScript, Python and .NET), keep the model faithful to the code:
+- Document each block with write_documentation (name, description, function), in the language of the repository's own documentation, without translating; the diagram shows these texts as written.
+- When the code does something the rules refuse, add it as found with an antiPattern note (or asFound: true) instead of leaving it out; rule AP-019 reports it as something to address.
 When "archguide serve" runs, every change shows up live in the open browser tab.`;
 
 /** The catalog the CLI and the MCP server use: core concepts and the React/Node/PostgreSQL profile. */

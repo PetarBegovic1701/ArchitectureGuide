@@ -9,7 +9,7 @@ import { draftTour } from '../tours/draft';
 import { computeFacts, conceptsUsed, docsById, glossary, invariants } from './facts';
 import type { Facts } from './facts';
 import { mermaid } from './formats';
-import { ownershipTable } from './markdown';
+import { antiPatternsList, documentationSection, ownershipTable } from './markdown';
 import type { ExportOptions, ExportResult } from './types';
 
 /** The text of a learning doc at a level (intermediate falls back to beginner). */
@@ -39,7 +39,8 @@ function tourText(f: Facts, tour: Tour): string {
 
 /**
  * `ONBOARDING.md` for people joining the project (Implementation.md §17.8): the big
- * picture, the tour as text, data ownership, rules of the road, decisions, glossary,
+ * picture, what the parts are and do (the repository's documentation), the tour as text,
+ * data ownership, rules of the road, anti-patterns found in the code, decisions, glossary,
  * the concepts this project uses explained at the reader's level, and where to start.
  */
 export function onboardingMarkdown(f: Facts, options: ExportOptions): string {
@@ -73,6 +74,9 @@ export function onboardingMarkdown(f: Facts, options: ExportOptions): string {
     `## ${tour.title.replace(/^Tour: /, 'Tour of ')}`,
     tourText(f, tour),
   ];
+  // What each part is and does, in the words (and language) of the repository's documentation.
+  const documentation = documentationSection(f);
+  if (documentation) parts.push('## What the parts are and do', documentation);
   if (patternDocs.length)
     parts.push(
       '## Patterns used',
@@ -83,6 +87,12 @@ export function onboardingMarkdown(f: Facts, options: ExportOptions): string {
   const ownership = ownershipTable(f);
   if (ownership) parts.push('## Who owns which data', ownership);
   if (rules.length) parts.push('## Rules of the road', rules.map((r) => `- ${r.text}`).join('\n'));
+  const antiPatterns = antiPatternsList(f);
+  if (antiPatterns)
+    parts.push(
+      '## Anti-patterns found in the code',
+      `The code does these things against the design. They are in the diagram as found, so it matches the code; do not copy them, and fix them when you work nearby.\n\n${antiPatterns}`,
+    );
   if (decisions.length)
     parts.push(
       '## Decisions',

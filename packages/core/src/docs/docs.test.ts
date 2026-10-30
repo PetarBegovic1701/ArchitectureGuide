@@ -127,6 +127,9 @@ describe('repository documentation', () => {
     expect(yaml.elements.find((e: { id: string }) => e.id === 'svc.api').docs.function).toBe(
       'Proverava korpu i čuva porudžbinu.',
     );
+    const onboarding = exportProject('onboarding-md', p, testCatalog).files[0]!.content;
+    expect(onboarding).toContain('## What the parts are and do');
+    expect(onboarding).toContain('- Function: Proverava korpu i čuva porudžbinu.');
     // No documentation, no section.
     expect(exportProject('agent-md', sampleProject(), testCatalog).files[0]!.content).not.toContain(
       '## Documentation',

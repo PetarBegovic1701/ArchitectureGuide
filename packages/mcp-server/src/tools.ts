@@ -278,7 +278,7 @@ export function registerTools(server: McpServer, ctx: McpContext): void {
     {
       title: 'Read the architecture',
       description:
-        'The model as agent Markdown (elements, relations, data ownership, invariants, known issues, decisions), agent YAML, or the project JSON. Use focus + depth for one area.',
+        "The model as agent Markdown (elements, the repository's documentation of each block (name, description, function, in its own language), relations, data ownership, invariants, known issues, anti-patterns found in the code, decisions), agent YAML, or the project JSON. Use focus + depth for one area.",
       inputSchema: {
         projectId: projectIdArg,
         format: z.enum(['agent-md', 'agent-yaml', 'json']).default('agent-md'),
@@ -803,7 +803,7 @@ export function registerTools(server: McpServer, ctx: McpContext): void {
     {
       title: 'Onboarding pack',
       description:
-        'ONBOARDING.md for someone joining the project: the big picture, the tour, rules of the road, decisions, glossary and the concepts it uses at the chosen level.',
+        "ONBOARDING.md for someone joining the project: the big picture, what each part is and does (the repository's documentation), the tour, rules of the road, anti-patterns found in the code, decisions, glossary and the concepts it uses at the chosen level.",
       inputSchema: { projectId: projectIdArg, level: LevelSchema.default('intermediate') },
       annotations: { readOnlyHint: true },
     },
