@@ -46,7 +46,7 @@ export function registerPrompts(server: McpServer, _ctx: McpContext): void {
     {
       title: 'Map this repository',
       description:
-        'Draft the architecture model from the code, review it, and write ARCHITECTURE.md.',
+        "Draft the architecture model from the code, document it in the repository's own language, review it, and write ARCHITECTURE.md.",
       argsSchema: { projectName: z.string().optional() },
     },
     ({ projectName }) => ({
@@ -62,9 +62,10 @@ export function registerPrompts(server: McpServer, _ctx: McpContext): void {
               '2. Open the top evidence files of the deployables and of anything with low confidence, and confirm what they are (services, apps, workers, layers).',
               `3. If list_projects shows no project, create_project${projectName ? ` with name "${projectName}"` : ''}.`,
               '4. apply_analysis with minConfidence 0.6. Then correct it with upsert_elements / upsert_relations: real names, responsibilities, and relations the code hides.',
-              '5. validate_project. Fix findings, or suppress_finding with a real reason.',
-              '6. export with format "agent-md" and write: true; generate_enforcement with write: true.',
-              '7. Report what was inferred and still needs a human review (the items with source.reviewed false), and the findings left open.',
+              '5. Document the blocks with write_documentation: read the repository\'s README, docs and code comments, and for every deployable, module and data store you understand write its name, description (what it is) and function (what it does), with basis "read" or "deduced" and the files as sources. Write in the language the repository\'s documentation is written in, do not translate it, and set project.lang to that language\'s BCP 47 tag (with a project summary). The editor shows these texts on the diagram as written.',
+              '6. validate_project. Fix findings, or suppress_finding with a real reason.',
+              '7. export with format "agent-md" and write: true; generate_enforcement with write: true.',
+              '8. Report what was inferred and still needs a human review (the items with source.reviewed false), the documentation language, and the findings left open.',
             ].join('\n'),
           },
         },

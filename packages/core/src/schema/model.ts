@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { IdSchema, LayerSchema, ProvenanceSchema, StatusSchema } from './common';
+import { IdSchema, LangSchema, LayerSchema, ProvenanceSchema, StatusSchema } from './common';
 
 /** Concept IDs look like "node.service", "pg.schema", "gen.actor", "group.layer". */
 export const KindSchema = z.string().regex(/^[a-z0-9-]+\.[a-z0-9-]+$/, 'Unknown concept ID format');
@@ -12,6 +12,27 @@ export const QualitiesSchema = z.object({
   slow: z.boolean().optional(),
 });
 export type Qualities = z.infer<typeof QualitiesSchema>;
+
+/**
+ * Documentation of an element in the analyzed repository's own words: what an AI agent (or a
+ * person) read in its README, docs and comments, or deduced from its code. Shown on the canvas
+ * in the language it was written in; never translated.
+ */
+export const ElementDocsSchema = z.object({
+  /** Language of the texts below. Default: the project's documentation language (`docs.lang`). */
+  lang: LangSchema.optional(),
+  /** The element's name in the documentation, shown on the canvas instead of `name`. */
+  name: z.string().min(1).max(200).optional(),
+  /** What the element is. */
+  description: z.string().min(1).optional(),
+  /** What the element does: its function in the system. */
+  function: z.string().min(1).optional(),
+  /** `read`: taken from the repository's documentation. `deduced`: inferred from the code. */
+  basis: z.enum(['read', 'deduced']).optional(),
+  /** Files the text was read or deduced from, relative to the repository root. */
+  sources: z.array(z.string().min(1)).optional(),
+});
+export type ElementDocs = z.infer<typeof ElementDocsSchema>;
 
 export const ElementSchema = z.object({
   id: IdSchema,
@@ -30,6 +51,7 @@ export const ElementSchema = z.object({
   properties: z.record(z.string(), z.unknown()).optional(),
   codePaths: z.array(z.string().min(1)).optional(),
   notes: z.string().optional(),
+  docs: ElementDocsSchema.optional(),
   source: ProvenanceSchema.optional(),
 });
 export type Element = z.infer<typeof ElementSchema>;

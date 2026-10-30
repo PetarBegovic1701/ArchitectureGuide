@@ -40,6 +40,13 @@ editing the JSON by hand. When `npx archguide serve` runs, every change shows up
 Use the MCP prompt `map-repository`, or `npx archguide init && npx archguide analyze --write`, then
 correct names and responsibilities with the MCP tools and `export` agent-md with `write: true`.
 
+Then document the blocks with `write_documentation`: for each deployable, module and data store, its
+name, description (what it is) and function (what it does), as you read them in the README, docs and
+comments (`basis: "read"`) or deduced them from the code (`basis: "deduced"`), with the files as
+`sources`. Write in the language the repository's documentation uses, do not translate, and set
+`project.lang` to its BCP 47 tag (`"en"`, `"de"`, `"sr-Latn"`). The editor shows these texts on the
+diagram as written.
+
 ## When you join a project or explain it to someone
 
 Read the onboarding pack (MCP `get_onboarding`, or `npx archguide onboarding`). For any concept you are

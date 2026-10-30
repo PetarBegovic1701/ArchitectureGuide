@@ -249,6 +249,43 @@ describe('flow mapping', () => {
     expect(nodes.find((n) => n.id === 'app.web')!.className).toBeUndefined();
   });
 
+  it('carries the documentation, its language and direction, to the shapes', () => {
+    const p = apply(sampleProject('s', '2026-10-27T00:00:00.000Z'), [
+      { op: 'updateProject', patch: { docs: { lang: 'ar' } } },
+      {
+        op: 'updateElement',
+        id: 'svc.api',
+        patch: {
+          docs: { name: 'خدمة الطلبات', description: 'تستقبل الطلبات', function: 'تحفظها' },
+        },
+      },
+      {
+        op: 'updateElement',
+        id: 'app.web',
+        patch: { docs: { lang: 'ja', description: 'ウェブ' } },
+      },
+    ]);
+    const nodes = toFlowNodes(p, view(p), { showDocs: true });
+    expect(nodes.find((n) => n.id === 'svc.api')!.data).toMatchObject({
+      name: 'API',
+      showDocs: true,
+      docs: {
+        lang: 'ar',
+        dir: 'rtl',
+        name: 'خدمة الطلبات',
+        description: 'تستقبل الطلبات',
+        function: 'تحفظها',
+      },
+    });
+    expect(nodes.find((n) => n.id === 'app.web')!.data.docs).toEqual({
+      lang: 'ja',
+      dir: 'ltr',
+      description: 'ウェブ',
+    });
+    expect(nodes.find((n) => n.id === 'db.shop')!.data.docs).toBeUndefined();
+    expect(toFlowNodes(p, view(p)).find((n) => n.id === 'svc.api')!.data.showDocs).toBeUndefined();
+  });
+
   it('spreads parallel relations between the same two elements', () => {
     const p = sampleProject('s', '2026-10-27T00:00:00.000Z');
     const edges = toFlowEdges(p, view(p)).filter(

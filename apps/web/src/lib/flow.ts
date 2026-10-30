@@ -1,6 +1,7 @@
 import type { Edge, Node } from '@xyflow/react';
 import type {
   Annotation,
+  Element,
   Id,
   LineStyle,
   Project,
@@ -9,6 +10,7 @@ import type {
   Status,
   View,
 } from '@archguide/core';
+import { docsLang, hasDocs, textDirection } from '@archguide/core';
 import { catalog, conceptOf, shapeFor } from './catalog';
 import {
   absolutePosition,
@@ -27,6 +29,16 @@ import {
   annNodeId,
   calloutPosition,
 } from './annotations';
+
+/** The repository's documentation of an element, as written (§7.2). */
+export type NodeDocs = {
+  /** BCP 47 tag of the texts; undefined when neither the element nor the project gives one. */
+  lang?: string;
+  dir?: 'ltr' | 'rtl';
+  name?: string;
+  description?: string;
+  function?: string;
+};
 
 export type ShapeNodeData = {
   elementId: Id;
@@ -54,6 +66,10 @@ export type ShapeNodeData = {
   decisionIds?: Id[];
   /** Change-set mode: a shape the change removes, drawn from the baseline. Not editable. */
   ghost?: boolean;
+  /** Documentation of the element; its name replaces `name` on the label. */
+  docs?: NodeDocs;
+  /** Show the description and function under the shape. */
+  showDocs?: boolean;
 };
 
 export type DiffMark = 'added' | 'changed' | 'removed';
@@ -92,6 +108,22 @@ export interface FlowOptions {
   decisions?: ReadonlyMap<Id, Id[]>;
   /** Ownership colors (database view): they replace the shapes' own colors. */
   ownership?: ReadonlyMap<Id, string> | null;
+  /** Show the documentation's description and function under the shapes. */
+  showDocs?: boolean;
+}
+
+/** An element's documentation for the canvas, with its language and writing direction. */
+export function nodeDocs(p: Project, el: Element): NodeDocs | undefined {
+  if (!el.docs || !hasDocs(el)) return undefined;
+  const lang = docsLang(p, el);
+  const dir = textDirection(lang);
+  return {
+    ...(lang ? { lang } : {}),
+    ...(dir ? { dir } : {}),
+    ...(el.docs.name ? { name: el.docs.name } : {}),
+    ...(el.docs.description ? { description: el.docs.description } : {}),
+    ...(el.docs.function ? { function: el.docs.function } : {}),
+  };
 }
 
 /**
@@ -162,6 +194,7 @@ export function toFlowNodes(p: Project, view: View, options: FlowOptions = {}): 
           highlighted: options.highlightIds?.has(el.id) ?? false,
           ...diffMark(options, el.id),
           ...(options.decisions?.get(el.id) ? { decisionIds: options.decisions.get(el.id)! } : {}),
+          ...docsData(p, el, options.showDocs),
         },
       };
     });
@@ -248,6 +281,15 @@ export function toGhosts(
     )
     .map((e) => ({ ...e, id: `ghost:${e.id}`, selectable: false, focusable: false }));
   return { nodes, edges };
+}
+
+function docsData(
+  p: Project,
+  el: Element,
+  show: boolean | undefined,
+): { docs?: NodeDocs; showDocs?: boolean } {
+  const docs = nodeDocs(p, el);
+  return docs ? { docs, ...(show ? { showDocs: true } : {}) } : {};
 }
 
 /** Leaves `issue` out of the data when there is none. */

@@ -53,6 +53,8 @@ interface UiState {
   problemsOpen: boolean;
   /** The concept guide above a shape's properties is open (§13.11). */
   guideOpen: boolean;
+  /** The repository's documentation (description, function) is shown under the shapes. */
+  showDocs: boolean;
 
   // Session state.
   inspectorTab: InspectorTab;
@@ -174,6 +176,7 @@ export const useUi = create<UiState>()(
       preferredTypes: {},
       problemsOpen: true,
       guideOpen: true,
+      showDocs: true,
       inspectorTab: 'properties',
       openNoteId: null,
       noteEditing: false,
@@ -233,6 +236,7 @@ export const useUi = create<UiState>()(
         preferredTypes: s.preferredTypes,
         problemsOpen: s.problemsOpen,
         guideOpen: s.guideOpen,
+        showDocs: s.showDocs,
       }),
     },
   ),

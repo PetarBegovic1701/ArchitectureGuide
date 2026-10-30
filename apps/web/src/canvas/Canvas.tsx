@@ -127,6 +127,7 @@ export function Canvas() {
   const selectedAnnotation = useUi((s) => s.selectedAnnotation);
   const editingAnnotation = useUi((s) => s.editingAnnotation);
   const showResolved = useUi((s) => s.showResolvedComments);
+  const showDocs = useUi((s) => s.showDocs);
   const findings = project ? findingsOf(project) : NO_FINDINGS;
   const issues = useMemo(() => issuesByItem(findings, level), [findings, level]);
   const tourState = useUi((s) => s.tour);
@@ -162,6 +163,7 @@ export function Canvas() {
       dimmed,
       decisions: decisionsByElement(project),
       ownership,
+      showDocs,
     });
     const notes = toAnnotationNodes(project, view, {
       selectedId: selectedAnnotation,
@@ -188,6 +190,7 @@ export function Canvas() {
     dimmed,
     ghosts,
     ownership,
+    showDocs,
     selectedAnnotation,
     editingAnnotation,
     showResolved,
@@ -225,7 +228,8 @@ export function Canvas() {
       const el = wrapper.current;
       if (!el) throw new Error('The canvas is not ready.');
       const before = flow.getViewport();
-      await flow.fitView({ padding: 0.08, duration: 0 });
+      // The documentation under the shapes reaches below their boxes: leave room for it.
+      await flow.fitView({ padding: useUi.getState().showDocs ? 0.16 : 0.08, duration: 0 });
       await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
       const options = {
         backgroundColor:

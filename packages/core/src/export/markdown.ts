@@ -1,3 +1,4 @@
+import { docsLang, hasDocs } from '../docs';
 import type { Element, Relation } from '../schema';
 import { conceptsUsed, glossary, invariants, knownIssues, ownership, patterns } from './facts';
 import type { Facts } from './facts';
@@ -110,6 +111,46 @@ function knownIssuesTable(f: Facts): string {
   );
 }
 
+/** The repository's own documentation, as the agent wrote it (§7.2); never translated. */
+function documentationSection(f: Facts): string {
+  const p = f.project;
+  const documented = f.elements.filter(hasDocs);
+  if (!p.docs && documented.length === 0) return '';
+  const about = p.docs
+    ? [
+        `Language: \`${p.docs.lang}\``,
+        p.docs.author ? `written by ${p.docs.author}` : '',
+        p.docs.sources?.length ? `from ${p.docs.sources.join(', ')}` : '',
+      ]
+        .filter(Boolean)
+        .join(', ')
+    : '';
+  const items = documented.map((e) => {
+    const d = e.docs!;
+    const lang = docsLang(p, e);
+    const meta = [
+      lang && lang !== p.docs?.lang ? `\`${lang}\`` : '',
+      d.basis ?? '',
+      d.sources?.length ? `from ${d.sources.join(', ')}` : '',
+    ]
+      .filter(Boolean)
+      .join(', ');
+    const one = (text: string) => text.trim().replace(/\s*\n+\s*/g, ' ');
+    return [
+      `- \`${e.id}\` **${one(d.name ?? e.name)}**${meta ? ` (${meta})` : ''}`,
+      ...(d.description ? [`  - Description: ${one(d.description)}`] : []),
+      ...(d.function ? [`  - Function: ${one(d.function)}`] : []),
+    ].join('\n');
+  });
+  return [
+    about ? `${about}. The texts are shown as written.` : '',
+    p.docs?.summary?.trim() ?? '',
+    items.join('\n'),
+  ]
+    .filter(Boolean)
+    .join('\n\n');
+}
+
 function decisionsList(f: Facts): string {
   return f.project.decisions
     .filter((d) => d.status === 'accepted' || d.status === 'proposed')
@@ -200,6 +241,7 @@ export function agentMarkdown(f: Facts, options: ExportOptions): string {
     `# Architecture: ${p.name}`,
     intro,
     section('Elements', elementsTable(f)),
+    section('Documentation', documentationSection(f)),
     section('Relations', f.relations.length ? relationsTable(f) : ''),
     section('Data ownership', ownershipTable(f)),
     section('Invariants', invariantsList(f)),

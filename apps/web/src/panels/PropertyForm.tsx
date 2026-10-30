@@ -185,6 +185,8 @@ export function CommitInput({
   type = 'text',
   multiline = false,
   placeholder,
+  lang,
+  dir,
 }: {
   id: string;
   value: string;
@@ -192,6 +194,9 @@ export function CommitInput({
   type?: string;
   multiline?: boolean;
   placeholder?: string;
+  /** Language and direction of the text, for texts written in another language than the UI. */
+  lang?: string;
+  dir?: 'ltr' | 'rtl' | 'auto';
 }) {
   const [text, setText] = useState(value);
   useEffect(() => setText(value), [value]);
@@ -203,6 +208,8 @@ export function CommitInput({
         className={`${inputClass} min-h-16 font-mono text-xs`}
         value={text}
         placeholder={placeholder}
+        lang={lang}
+        dir={dir}
         onChange={(e) => setText(e.target.value)}
         onBlur={commit}
       />
@@ -215,6 +222,8 @@ export function CommitInput({
       className={inputClass}
       value={text}
       placeholder={placeholder}
+      lang={lang}
+      dir={dir}
       onChange={(e) => setText(e.target.value)}
       onBlur={commit}
       onKeyDown={(e) => e.key === 'Enter' && commit()}

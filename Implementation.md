@@ -413,6 +413,7 @@ interface Project {
   profile: string;           // "react-node-postgres"
   createdAt: Iso; updatedAt: Iso;
   derivedFrom?: { templateId: string; templateVersion: string; rootIds: Id[] }[];
+  docs?: ProjectDocs;        // the analyzed repository's documentation (see ElementDocs)
   model: Model;
   views: View[];
   notes: Note[];
@@ -448,7 +449,29 @@ interface Element {
   properties?: Record<string, unknown>;  // validated by the concept's propertySchema
   codePaths?: string[];      // globs relative to repo root: "services/orders/src/domain/**"
   notes?: string;            // Markdown
+  docs?: ElementDocs;        // the repository's own documentation of the element
   source?: Provenance;
+}
+
+// Documentation of the analyzed repository, written by an AI agent (MCP write_documentation) or
+// a person: read in the repository's README, docs and comments, or deduced from its code. Kept
+// and shown in the language it was written in (a BCP 47 tag), never translated. The canvas shows
+// the name on the shape and the description and function under it (toggle "Docs").
+interface ProjectDocs {
+  lang: string;              // "en", "de", "sr-Latn"; the default for every ElementDocs
+  summary?: string;
+  author?: string;           // "claude-code"
+  sources?: string[];        // "README.md", "docs/architecture.md"
+  updatedAt?: Iso;
+}
+
+interface ElementDocs {
+  lang?: string;             // only when it differs from ProjectDocs.lang
+  name?: string;             // the name the documentation uses; replaces `name` on the canvas
+  description?: string;      // what it is
+  function?: string;         // what it does
+  basis?: 'read' | 'deduced';
+  sources?: string[];
 }
 
 interface Relation {
@@ -2593,6 +2616,7 @@ type ToolResult =
 | `upsert_relations` | `projectId`, `relations: { id?: Id; type?: string; sourceId: Id; targetId: Id; ... }[]` (max 400), `changeSetId?`. Missing `type` → smart default; ambiguous → error listing the valid types | IDs |
 | `remove_items` | `projectId`, `ids: Id[]`, `cascade?: boolean`, `changeSetId?` | removed IDs |
 | `rename_id` | `projectId`, `from`, `to` | – |
+| `write_documentation` | `projectId`, `project?: { lang, summary?, author?, sources? }`, `elements?: { id, name?, description?, function?, basis?, sources?, lang? }[]` (max 400), `changeSetId?`. Left out: kept; `null`: removed | documented IDs |
 | `add_note` | `projectId`, `title`, `body`, `linkedIds?` | note ID |
 | `add_annotation` | `projectId`, `viewId?`, `kind`, `text`, `anchorId?` | annotation ID |
 | `add_decision` | `projectId`, `title`, `status`, `context`, `decision`, `consequences`, `linkedIds?` | decision ID |
@@ -2632,7 +2656,7 @@ Write tools take `changeSetId` to record into a change set instead of the baseli
 
 | Prompt | Arguments | Steps it gives the agent |
 |---|---|---|
-| `map-repository` | `projectName?` | 1. `analyze_repository`. 2. Read the top evidence files to confirm the deployables and layers. 3. `create_project` if needed. 4. `apply_analysis` with `minConfidence 0.6`, then `upsert_*` for corrections (responsibilities, names). 5. `validate_project`; fix or `suppress_finding` with reasons. 6. `export` agent-md with `write: true`. 7. Report what is inferred and needs human review. |
+| `map-repository` | `projectName?` | 1. `analyze_repository`. 2. Read the top evidence files to confirm the deployables and layers. 3. `create_project` if needed. 4. `apply_analysis` with `minConfidence 0.6`, then `upsert_*` for corrections (responsibilities, names). 5. `write_documentation`: name, description and function of each block, read or deduced, in the language of the repository's documentation (not translated), with `project.lang`. 6. `validate_project`; fix or `suppress_finding` with reasons. 7. `export` agent-md with `write: true`. 8. Report what is inferred and needs human review. |
 | `plan-feature` | `feature` | 1. `get_architecture` (focus on the affected area). 2. `create_change_set`. 3. `upsert_*` / `apply_template` with `changeSetId`. 4. `validate_project` with `changeSetId` until no new errors. 5. `generate_tasks`. 6. `export` `plan-md` (and `speckit`/`kiro` if the repo uses them). |
 | `review-change` | `baseRef?` | 1. `diff_with_repository`. 2. Report invariant violations with file and line. 3. Propose model updates or code fixes. |
 

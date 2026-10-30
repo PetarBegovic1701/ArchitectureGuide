@@ -30,7 +30,14 @@ import { Inspector } from '../panels/Inspector';
 import { CommandPalette, Legend, OwnershipLegend, RelationPicker } from '../panels/Overlays';
 import { AnalysisDialog } from '../panels/Analysis';
 import { ChangeSetBanner, ChangeSetsDialog } from '../panels/ChangeSets';
-import { ApiDialog, CanvasChips, FiltersButton, ScenarioBar } from '../panels/Views';
+import {
+  ApiDialog,
+  CanvasChips,
+  DocsButton,
+  FiltersButton,
+  ScenarioBar,
+  projectHasDocs,
+} from '../panels/Views';
 import { Palette } from '../panels/Palette';
 import { ProblemsButton, ProblemsPanel, SuppressDialog } from '../panels/Problems';
 import { SaveTemplateDialog, TemplatePicker } from '../panels/Templates';
@@ -462,6 +469,14 @@ function overflowItems(): MenuItem[] {
     { label: 'Add a callout on the selection', run: () => addAnchored('callout') },
     { label: 'Add a comment', run: () => addAnchored('comment') },
     { label: 'Tidy up the layout', run: () => void tidyUp() },
+    ...(projectHasDocs(useProject.getState().project)
+      ? [
+          {
+            label: ui.showDocs ? 'Hide the documentation' : 'Show the documentation',
+            run: () => ui.set({ showDocs: !ui.showDocs }),
+          },
+        ]
+      : []),
     { label: 'Command palette…', run: () => ui.set({ commandOpen: true }) },
     {
       label: ui.theme === 'dark' ? 'Light mode' : 'Dark mode',
@@ -478,7 +493,7 @@ function overflowItems(): MenuItem[] {
 function CompactTopBar({ status, screen }: { status: SaveStatus; screen: Screen }) {
   const panel = useUi((s) => s.panel);
   // Re-read the menu items when what they show changes.
-  useUi((s) => `${s.theme}|${s.level}`);
+  useUi((s) => `${s.theme}|${s.level}|${s.showDocs}`);
   useProject((s) => s.project?.tours);
   const toggle = (p: 'palette' | 'inspector') =>
     useUi.getState().set({ panel: panel === p ? null : p });
@@ -566,6 +581,7 @@ function TopBar({ status, screen }: { status: SaveStatus; screen: Screen }) {
       )}
       <ViewsMenu />
       <FiltersButton />
+      <DocsButton />
       <button
         type="button"
         className="flex shrink-0 items-center gap-1 whitespace-nowrap rounded px-2 py-1 text-xs hover:bg-[var(--ag-panel-2)]"

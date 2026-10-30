@@ -1,5 +1,5 @@
-import { IdSchema, validRelationTypes } from '@archguide/core';
-import type { Element, Id, Layer, Qualities, Relation, Status } from '@archguide/core';
+import { IdSchema, LangSchema, docsLang, textDirection, validRelationTypes } from '@archguide/core';
+import type { Element, ElementDocs, Id, Layer, Qualities, Relation, Status } from '@archguide/core';
 import { catalog, conceptOf } from '../lib/catalog';
 import { LAYERS, elementById, takenIds } from '../lib/model';
 import {
@@ -88,6 +88,7 @@ function PropertiesTab() {
     return (
       <>
         <SelectionProblems id={element.id} />
+        <DocsForm key={`docs-${element.id}`} element={element} />
         <GuideCard element={element} />
         <ElementForm key={element.id} element={element} />
       </>
@@ -227,6 +228,76 @@ function QualitiesForm({ element: el }: { element: Element }) {
         Slow (seconds, not milliseconds)
       </label>
     </fieldset>
+  );
+}
+
+/**
+ * The repository's documentation of the element (§7.2): name, description and function as an
+ * agent read or deduced them, edited and shown in the language they were written in.
+ */
+function DocsForm({ element: el }: { element: Element }) {
+  const project = useProject((s) => s.project)!;
+  const docs: ElementDocs = el.docs ?? {};
+  const lang = docsLang(project, el);
+  const dir = textDirection(lang) ?? 'auto';
+  const set = (key: keyof ElementDocs, value: string) => {
+    const text = value.trim();
+    if (key === 'lang' && text && !LangSchema.safeParse(text).success) {
+      useUi.getState().toast({
+        tone: 'error',
+        message: `"${text}" is not a language tag: use one like "en", "de" or "sr-Latn".`,
+      });
+      return;
+    }
+    const next: Record<string, unknown> = { ...docs, [key]: text || undefined };
+    for (const k of Object.keys(next)) if (next[k] === undefined) delete next[k];
+    patchElement(el.id, { docs: Object.keys(next).length ? next : null }, 'Edit documentation');
+  };
+  const text = (key: 'name' | 'description' | 'function', label: string, multiline = false) => (
+    <Row label={label} htmlFor={`el-docs-${key}`}>
+      <CommitInput
+        id={`el-docs-${key}`}
+        multiline={multiline}
+        value={docs[key] ?? ''}
+        {...(lang ? { lang } : {})}
+        dir={dir}
+        onCommit={(t) => set(key, t)}
+      />
+    </Row>
+  );
+  return (
+    <details
+      className="mb-3 space-y-2 rounded border border-[var(--ag-border)] p-2 [&[open]>summary]:mb-2"
+      open={el.docs !== undefined}
+      data-testid="docs-form"
+    >
+      <summary className="cursor-pointer text-xs font-semibold">
+        Documentation{lang ? ` (${lang})` : ''}
+      </summary>
+      <p className="text-xs text-[var(--ag-muted)]">
+        From the repository, as written
+        {docs.basis
+          ? ` (${docs.basis === 'read' ? 'read in its docs' : 'deduced from its code'})`
+          : ''}
+        . Shown on the diagram, never translated.
+      </p>
+      {text('name', 'Name in the docs')}
+      {text('description', 'Description: what it is', true)}
+      {text('function', 'Function: what it does', true)}
+      <Row label="Language (BCP 47)" htmlFor="el-docs-lang">
+        <CommitInput
+          id="el-docs-lang"
+          value={docs.lang ?? ''}
+          placeholder={project.docs?.lang ?? 'e.g. en, de, sr-Latn'}
+          onCommit={(t) => set('lang', t)}
+        />
+      </Row>
+      {docs.sources?.length ? (
+        <p className="break-words text-xs text-[var(--ag-muted)]">
+          Sources: {docs.sources.join(', ')}
+        </p>
+      ) : null}
+    </details>
   );
 }
 

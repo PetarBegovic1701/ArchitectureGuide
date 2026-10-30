@@ -11,6 +11,7 @@ import {
   catalogLessons,
   catalogSummary,
   checkStep,
+  documentationOps,
   draftTour,
   explainText,
   exportProject,
@@ -77,6 +78,38 @@ const projectIdArg = z
   .optional()
   .describe('Project ID. Defaults to the workspace default project, or the only project.');
 
+const langArg = z
+  .string()
+  .describe(
+    'BCP 47 tag of the language you write the texts in ("en", "de", "sr-Latn", "ja"). Write in the language of the repository\'s own documentation; the editor shows the texts as written and never translates them.',
+  );
+
+/** Documentation fields; write_documentation also takes null, which removes a field. */
+const docsFields = {
+  name: z.string().describe('The name the documentation uses for the block; shown on the canvas.'),
+  description: z.string().describe('What the block is.'),
+  function: z.string().describe('What the block does: its function in the system.'),
+  basis: z
+    .enum(['read', 'deduced'])
+    .describe('read: taken from the repository documentation; deduced: inferred from the code.'),
+  sources: z
+    .array(z.string())
+    .describe('Files you read or deduced it from, relative to the repository root.'),
+};
+
+const docsInput = z
+  .object({
+    lang: langArg.optional(),
+    name: docsFields.name.optional(),
+    description: docsFields.description.optional(),
+    function: docsFields.function.optional(),
+    basis: docsFields.basis.optional(),
+    sources: docsFields.sources.optional(),
+  })
+  .describe(
+    "Documentation of the block in the repository's own words and language (see write_documentation).",
+  );
+
 const elementInput = z.looseObject({
   id: z
     .string()
@@ -96,6 +129,7 @@ const elementInput = z.looseObject({
   status: z.enum(['planned', 'existing', 'deprecated']).optional(),
   properties: z.record(z.string(), z.unknown()).optional(),
   codePaths: z.array(z.string()).optional(),
+  docs: docsInput.optional(),
 });
 
 const relationInput = z.looseObject({
@@ -377,6 +411,59 @@ export function registerTools(server: McpServer, ctx: McpContext): void {
     },
     ({ projectId, from, to }) =>
       run(() => change(ctx, projectId, () => ({ ops: [{ op: 'renameId', from, to }], ids: [to] }))),
+  );
+
+  server.registerTool(
+    'write_documentation',
+    {
+      title: 'Write the documentation',
+      description:
+        "Stores the documentation of the analyzed repository: for the project (its language, a summary) and per element (name, description, function), as you read it in the repository (README, docs, comments) or deduced it from the code. Write in the language of the repository's documentation and set lang; the editor shows the name, description and function on the diagram as written, never translated. A field left out stays; null removes it.",
+      inputSchema: {
+        projectId: projectIdArg,
+        project: z
+          .object({
+            lang: langArg.optional().describe('Required the first time. ' + langArg.description),
+            summary: z.string().nullable().optional().describe('What the system is and does.'),
+            author: z.string().nullable().optional().describe('Who wrote it, e.g. "claude-code".'),
+            sources: z.array(z.string()).nullable().optional(),
+          })
+          .optional(),
+        elements: z
+          .array(
+            z.object({
+              id: z.string().describe('Element ID (get_architecture lists them).'),
+              lang: langArg
+                .nullable()
+                .optional()
+                .describe('Only when it differs from the project language.'),
+              name: docsFields.name.nullable().optional(),
+              description: docsFields.description.nullable().optional(),
+              function: docsFields.function.nullable().optional(),
+              basis: docsFields.basis.nullable().optional(),
+              sources: docsFields.sources.nullable().optional(),
+            }),
+          )
+          .max(400)
+          .optional(),
+        changeSetId: changeSetIdArg,
+      },
+    },
+    ({ projectId, project, elements, changeSetId }) =>
+      run(() =>
+        change(
+          ctx,
+          projectId,
+          (p) => {
+            const r = documentationOps(p, {
+              ...(project ? { project } : {}),
+              ...(elements ? { elements } : {}),
+            });
+            return { ...r, data: { documented: r.ids.length } };
+          },
+          { changeSetId },
+        ),
+      ),
   );
 
   server.registerTool(

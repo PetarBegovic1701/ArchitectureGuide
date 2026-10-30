@@ -1,5 +1,6 @@
 import { Document } from 'yaml';
 import { shapeOf } from '../catalog';
+import { hasDocs } from '../docs';
 import type { ShapeId } from '../catalog';
 import type { Element, Id, Relation } from '../schema';
 import { invariants, knownIssues, ownership, patterns } from './facts';
@@ -20,6 +21,7 @@ export function agentYaml(f: Facts): string {
       ...(e.responsibilities?.length ? { does: e.responsibilities } : {}),
       ...(e.codePaths?.length ? { code: e.codePaths } : {}),
       ...(owner?.owners.length === 1 ? { ownedBy: owner.owners[0] } : {}),
+      ...(e.docs && hasDocs(e) ? { docs: e.docs } : {}),
     };
   };
   const relation = (r: Relation) => {
@@ -41,6 +43,7 @@ export function agentYaml(f: Facts): string {
     profile: f.project.profile,
     ...(patterns(f.project).length ? { patterns: patterns(f.project) } : {}),
     revision: f.project.revision,
+    ...(f.project.docs ? { docs: f.project.docs } : {}),
     elements: f.elements.map(element),
     relations: f.relations.map(relation),
     invariants: invariants(f).map((i) => `${i.text} (${i.source})`),

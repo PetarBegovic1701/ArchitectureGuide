@@ -1,6 +1,16 @@
 import { useMemo, useState } from 'react';
-import { ChevronRight, Filter, Pause, Play, SkipBack, SkipForward, Trash2, X } from 'lucide-react';
-import { endpointsOf, viewBreadcrumbs } from '@archguide/core';
+import {
+  BookText,
+  ChevronRight,
+  Filter,
+  Pause,
+  Play,
+  SkipBack,
+  SkipForward,
+  Trash2,
+  X,
+} from 'lucide-react';
+import { endpointsOf, hasDocs, viewBreadcrumbs } from '@archguide/core';
 import type { Id, Project, View } from '@archguide/core';
 import { catalog } from '../lib/catalog';
 import { activeView, elementById } from '../lib/model';
@@ -194,6 +204,33 @@ export function FiltersButton() {
         </div>
       )}
     </div>
+  );
+}
+
+/** True when the project carries documentation of the analyzed repository (§7.2). */
+export function projectHasDocs(p: Project | undefined | null): boolean {
+  return Boolean(p && (p.docs || p.model.elements.some(hasDocs)));
+}
+
+/**
+ * Top-bar "Docs" toggle: the repository's documentation (description and function) under the
+ * shapes. Only shown when the project has some.
+ */
+export function DocsButton() {
+  const project = useProject((s) => s.project);
+  const showDocs = useUi((s) => s.showDocs);
+  if (!projectHasDocs(project)) return null;
+  const lang = project?.docs?.lang;
+  return (
+    <button
+      type="button"
+      className={`flex shrink-0 items-center gap-1 whitespace-nowrap rounded px-2 py-1 text-xs hover:bg-[var(--ag-panel-2)] ${showDocs ? 'bg-[var(--ag-panel-2)]' : ''}`}
+      aria-pressed={showDocs}
+      onClick={() => useUi.getState().set({ showDocs: !showDocs })}
+      title={`Documentation: show the repository's description and function of each shape${lang ? ` (written in ${lang})` : ''}`}
+    >
+      <BookText size={14} aria-hidden /> <span className="max-2xl:sr-only">Docs</span>
+    </button>
   );
 }
 

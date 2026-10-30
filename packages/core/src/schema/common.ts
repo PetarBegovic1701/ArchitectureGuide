@@ -10,6 +10,19 @@ export type Id = z.infer<typeof IdSchema>;
 export const IsoSchema = z.union([z.iso.datetime({ offset: true }), z.iso.date()]);
 export type Iso = z.infer<typeof IsoSchema>;
 
+/**
+ * BCP 47 language tag of a text: "en", "de", "sr-Latn", "pt-BR", "zh-Hans". Texts are shown in
+ * the language they were written in, with this tag, and never translated.
+ */
+export const LangSchema = z
+  .string()
+  .regex(
+    /^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$/,
+    'Use a BCP 47 language tag, like "en", "de", "sr-Latn" or "pt-BR"',
+  )
+  .max(35);
+export type Lang = z.infer<typeof LangSchema>;
+
 export const StatusSchema = z.enum(['existing', 'planned', 'deprecated']);
 export type Status = z.infer<typeof StatusSchema>;
 

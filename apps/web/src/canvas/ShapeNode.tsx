@@ -1,5 +1,6 @@
 import { memo, useEffect, useRef, useState } from 'react';
 import { Handle, NodeResizer, Position } from '@xyflow/react';
+import { Cog } from 'lucide-react';
 import type { NodeProps } from '@xyflow/react';
 import type { ShapeFlowNode } from '../lib/flow';
 import { CONTAINER_HEADER } from '../lib/model';
@@ -48,7 +49,7 @@ function ShapeNodeImpl({ data, selected }: NodeProps<ShapeFlowNode>) {
       className="relative"
       style={{ width: w, height: h }}
       data-testid={`node-${data.elementId}`}
-      title={`${data.name} — ${data.conceptName}`}
+      title={tooltip(data)}
       onDoubleClick={(e) => {
         e.stopPropagation();
         // On the name: rename. Elsewhere on a deployable or a database: drill down (§13.3).
@@ -92,10 +93,22 @@ function ShapeNodeImpl({ data, selected }: NodeProps<ShapeFlowNode>) {
           style={{ height: CONTAINER_HEADER }}
         >
           <Icon size={14} style={{ color: data.color }} aria-hidden />
-          <Label data={data} className="truncate text-xs font-semibold" />
-          <span className="ml-auto truncate text-[10px] text-[var(--ag-muted)]">
-            {data.conceptName}
-          </span>
+          <Label data={data} className="min-w-0 truncate text-xs font-semibold" />
+          {data.showDocs && data.docs?.description && !data.ghost ? (
+            // Children start right under the header: a container's documentation goes in it.
+            <span
+              className="ml-auto min-w-0 shrink-[4] truncate text-[10px] text-[var(--ag-muted)]"
+              lang={data.docs.lang}
+              dir={data.docs.dir ?? 'auto'}
+              data-testid={`docs-${data.elementId}`}
+            >
+              {data.docs.description}
+            </span>
+          ) : (
+            <span className="ml-auto truncate text-[10px] text-[var(--ag-muted)]">
+              {data.conceptName}
+            </span>
+          )}
         </div>
       ) : (
         <>
@@ -129,6 +142,9 @@ function ShapeNodeImpl({ data, selected }: NodeProps<ShapeFlowNode>) {
             </span>
           </div>
         </>
+      )}
+      {data.showDocs && data.docs && !data.ghost && !data.container && (
+        <DocsCard docs={data.docs} id={data.elementId} below={below} />
       )}
       {data.issue && <IssueBadge id={data.elementId} issue={data.issue} />}
       {data.decisionIds && (
@@ -198,11 +214,65 @@ function IssueBadge({
   );
 }
 
-function Label({ data, className }: { data: ShapeFlowNode['data']; className: string }) {
-  if (data.editing) return <NameInput id={data.elementId} initial={data.name} />;
+/** Name, concept, and the documentation's description and function, for the hover text. */
+function tooltip(data: ShapeFlowNode['data']): string {
+  const d = data.docs;
+  const head = `${d?.name ?? data.name} — ${data.conceptName}`;
+  if (!d) return head;
+  return [
+    d.name && d.name !== data.name ? `${head} (${data.name})` : head,
+    d.description,
+    d.function ? `⚙ ${d.function}` : undefined,
+    d.lang ? `[${d.lang}]` : undefined,
+  ]
+    .filter(Boolean)
+    .join('\n');
+}
+
+/**
+ * The repository's documentation under a shape: the description and the function, in the
+ * language they were written in. The function's label is an icon, so no other language is
+ * mixed into the text.
+ */
+function DocsCard({
+  docs,
+  id,
+  below,
+}: {
+  docs: NonNullable<ShapeFlowNode['data']['docs']>;
+  id: string;
+  below: boolean;
+}) {
+  if (!docs.description && !docs.function) return null;
   return (
-    <span className={className} data-role="label">
-      {data.name}
+    <div
+      className="ag-docs pointer-events-none absolute left-1/2 z-10 w-full min-w-44 -translate-x-1/2 space-y-0.5 rounded border border-[var(--ag-border)] bg-[var(--ag-panel)] px-1.5 py-1 text-[10px] leading-tight shadow-sm"
+      style={{ top: below ? 'calc(100% + 2.75rem)' : 'calc(100% + 6px)' }}
+      lang={docs.lang}
+      dir={docs.dir ?? 'auto'}
+      data-testid={`docs-${id}`}
+    >
+      {docs.description && <p className="line-clamp-3">{docs.description}</p>}
+      {docs.function && (
+        <p className="flex items-start gap-1">
+          <Cog size={10} className="mt-px shrink-0 text-[var(--ag-muted)]" aria-label="Function" />
+          <span className="line-clamp-2">{docs.function}</span>
+        </p>
+      )}
+    </div>
+  );
+}
+
+function Label({ data, className }: { data: ShapeFlowNode['data']; className: string }) {
+  const name = data.docs?.name ?? data.name;
+  if (data.editing) return <NameInput id={data.elementId} initial={name} />;
+  return (
+    <span
+      className={className}
+      data-role="label"
+      {...(data.docs?.name ? { lang: data.docs.lang, dir: data.docs.dir ?? 'auto' } : {})}
+    >
+      {name}
     </span>
   );
 }

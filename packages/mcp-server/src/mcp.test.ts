@@ -90,6 +90,7 @@ describe('MCP tools', () => {
         'upsert_relations',
         'upsert_tour',
         'validate_project',
+        'write_documentation',
       ].sort(),
     );
     for (const t of tools) expect(t.description?.length).toBeGreaterThan(10);
@@ -147,6 +148,65 @@ describe('MCP tools', () => {
         [...(els.changed as string[])].sort(),
       );
       expect(p.views[0]!.edges).toHaveLength(1);
+    });
+
+    it('writes the repository documentation in its own language', async () => {
+      await call('upsert_elements', {
+        elements: [
+          { id: 'svc.orders', kind: 'node.service', name: 'Orders' },
+          {
+            id: 'db.main',
+            kind: 'pg.database',
+            name: 'Main',
+            docs: { description: 'Hauptdatenbank', basis: 'deduced' },
+          },
+        ],
+      });
+      const r = await call('write_documentation', {
+        project: {
+          lang: 'de',
+          summary: 'Ein Shop.',
+          author: 'claude-code',
+          sources: ['README.md'],
+        },
+        elements: [
+          {
+            id: 'svc.orders',
+            name: 'Bestelldienst',
+            description: 'Nimmt Bestellungen an.',
+            function: 'Prüft den Warenkorb und speichert die Bestellung.',
+            basis: 'read',
+            sources: ['services/orders/README.md'],
+          },
+        ],
+      });
+      expect(r).toMatchObject({ ok: true, changed: ['svc.orders'], data: { documented: 1 } });
+      const p = await onDisk();
+      expect(p.docs).toMatchObject({ lang: 'de', summary: 'Ein Shop.', sources: ['README.md'] });
+      expect(p.model.elements.find((e) => e.id === 'svc.orders')!.docs).toEqual({
+        name: 'Bestelldienst',
+        description: 'Nimmt Bestellungen an.',
+        function: 'Prüft den Warenkorb und speichert die Bestellung.',
+        basis: 'read',
+        sources: ['services/orders/README.md'],
+      });
+      expect(p.model.elements.find((e) => e.id === 'db.main')!.docs).toEqual({
+        description: 'Hauptdatenbank',
+        basis: 'deduced',
+      });
+      const md = await call('get_architecture');
+      expect(md.data).toContain('## Documentation');
+      expect(md.data).toContain('**Bestelldienst**');
+      expect(md.data).toContain('Function: Prüft den Warenkorb und speichert die Bestellung.');
+
+      const unknown = await call('write_documentation', {
+        elements: [{ id: 'svc.nope', description: 'x' }],
+      });
+      expect(unknown).toMatchObject({ ok: false, errors: [{ code: 'ID_NOT_FOUND' }] });
+      const badLang = await call('write_documentation', {
+        elements: [{ id: 'svc.orders', lang: 'German' }],
+      });
+      expect(badLang.ok).toBe(false);
     });
 
     it('explains mistakes: unknown kinds, ambiguous types and refused pairs', async () => {

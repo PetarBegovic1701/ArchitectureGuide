@@ -218,7 +218,16 @@ export function renameElement(id: Id, name: string): void {
   const el = p && elementById(p, id);
   ui().set({ editingId: null });
   const trimmed = name.trim();
-  if (!p || !el || !trimmed || trimmed === el.name) return;
+  if (!p || !el || !trimmed) return;
+  // The label shows the documentation's name when there is one: that is the name edited.
+  if (el.docs?.name) {
+    if (trimmed !== el.docs.name)
+      dispatch([{ op: 'updateElement', id, patch: { docs: { ...el.docs, name: trimmed } } }], {
+        label: 'Rename',
+      });
+    return;
+  }
+  if (trimmed === el.name) return;
   const ops: Op[] = [{ op: 'updateElement', id, patch: { name: trimmed } }];
   const fresh = ui().freshIds.includes(id);
   const concept = conceptOf(el.kind);

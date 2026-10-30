@@ -39,6 +39,7 @@ export function canonicalize(project: Project): Project {
   p.snapshots.sort(byId);
   for (const cs of p.changeSets) dropEmpty(cs, ['tasks']);
   dropEmpty(p, ['derivedFrom']);
+  if (p.docs) dropEmpty(p.docs, ['sources']);
   for (const s of p.settings.suppressions) s.targetIds.sort(compare);
   p.settings.suppressions.sort((a, b) => compare(suppressionKey(a), suppressionKey(b)));
   p.settings.ruleOverrides = sortKeys(p.settings.ruleOverrides);
@@ -55,6 +56,8 @@ function pruneElement(e: Element): Element {
   dropEmpty(e, ['responsibilities', 'tags', 'codePaths', 'properties', 'qualities']);
   if (e.properties) e.properties = sortKeys(e.properties);
   if (e.source) dropEmpty(e.source, ['evidence']);
+  if (e.docs) dropEmpty(e.docs, ['sources']);
+  dropEmpty(e, ['docs']);
   return e;
 }
 

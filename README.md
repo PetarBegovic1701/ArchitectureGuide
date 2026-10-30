@@ -83,7 +83,7 @@ The packages are not on npm yet: in this repository, use `pnpm archguide …` in
 While `archguide serve` runs, every change an agent makes through MCP (or the CLI) shows up
 live in the open browser tab, and changes in the browser are saved to the files. When a file
 changes outside the app while you have unsaved changes, the editor asks: reapply or discard.
-The MCP server has 35 tools (read and edit the model, change sets, templates, rules and quick fixes,
+The MCP server has 36 tools (read and edit the model, document it, change sets, templates, rules and quick fixes,
 exports, learning texts, lessons, onboarding and tours), resources and the `plan-feature`
 prompt; every write returns only the findings it introduced. The CLI also validates
 (`archguide validate --fail-on warning`), exports, explains concepts in the terminal and
@@ -106,8 +106,18 @@ index, import cycles between modules and more ([docs/RULES.md](docs/RULES.md#ana
 `--db` also reads a live database catalog, read-only. In the editor, the **Analysis** dialog
 lists the suggestions with their evidence (accept, edit or reject), and **Views → Create
 database view** colors the data by the service that owns it. MCP agents get
-`analyze_repository`, `apply_analysis`, `diff_with_repository`, `generate_enforcement` and the
-`map-repository` and `review-change` prompts. CI: [docs/examples/architecture.yml](docs/examples/architecture.yml).
+`analyze_repository`, `apply_analysis`, `diff_with_repository`, `generate_enforcement`,
+`write_documentation` and the `map-repository` and `review-change` prompts.
+
+**The repository's own documentation on the diagram.** An agent that maps a repository through MCP
+stores what it read in the repository's README, docs and comments, or deduced from the code, with
+`write_documentation`: per element a name, a description (what it is) and a function (what it does),
+whether it was read or deduced, and the source files; per project the language (a BCP 47 tag such as
+`en`, `de` or `sr-Latn`) and a summary. The texts are kept in the language the agent wrote them in
+and never translated. Open or import the project JSON and each shape shows the documentation's name,
+with its description and function under it (**Docs** in the top bar hides them); the inspector edits
+them, right-to-left languages are shown right to left, and `ARCHITECTURE.md` and the YAML export
+carry them for other agents. CI: [docs/examples/architecture.yml](docs/examples/architecture.yml).
 
 **Plan features as change sets** (Phase 9): **Change sets → Start change set** puts the
 editor in change-set mode. Your edits go into the change set, not the model; the canvas shows
